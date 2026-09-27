@@ -1,0 +1,29 @@
+# --- Web app (portal: submissions, rubrics, manual grading) ---
+fastapi>=0.110
+uvicorn[standard]>=0.29
+sqlalchemy>=2.0
+python-multipart>=0.0.9
+pydantic>=2.6
+
+# --- Evaluator core (report/code analysis, cross-modal, heuristic grading) ---
+pymupdf>=1.24
+python-docx>=1.1
+opencv-python-headless>=4.9
+numpy>=1.26
+pillow>=10
+
+# --- Testing ---
+pytest>=7
+httpx>=0.27
+
+# --- Optional: real speech-to-text for the video pipeline
+# (app/evaluator/video_analysis.py's WhisperTranscriber). Needs network
+# access to download model weights on first use. Without it, the app
+# falls back to NullTranscriber (empty transcript) automatically.
+faster-whisper>=1.0
+
+# --- Optional: real LLM rubric grading
+# (app/evaluator/rubric_grading.py's LLMRubricGrader). Needs
+# ANTHROPIC_API_KEY set. Without it, the app falls back to
+# HeuristicRubricGrader automatically.
+anthropic>=0.34
