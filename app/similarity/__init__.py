@@ -17,6 +17,14 @@ from .core import (
     winnow,
 )
 from .ai_heuristics import HeuristicScore, score_source
+from .semantic import (
+    SemanticSimilarityService,
+    SubmissionEmbedding,
+    apply_semantic_signal,
+    get_semantic_service,
+    normalize_code,
+    semantic_similarity,
+)
 
 __all__ = [
     "Fingerprint",
@@ -29,4 +37,10 @@ __all__ = [
     "winnow",
     "HeuristicScore",
     "score_source",
+    "SemanticSimilarityService",
+    "SubmissionEmbedding",
+    "apply_semantic_signal",
+    "get_semantic_service",
+    "normalize_code",
+    "semantic_similarity",
 ]

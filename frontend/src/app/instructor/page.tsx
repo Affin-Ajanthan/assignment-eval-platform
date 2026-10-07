@@ -1,23 +1,21 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   apiFetch,
+  Assignment,
   AutoEvaluation,
-  Criterion,
   Rubric,
   SimilarityCheckResult,
   Submission,
 } from "@/lib/api";
 import { useRequireRole } from "@/lib/useRequireRole";
 import AccountBar from "@/components/AccountBar";
+import CrossModalConsistencyPanel from "@/components/CrossModalConsistencyPanel";
+import AssignmentsSection from "@/components/instructor/AssignmentsSection";
+import RubricsSection from "@/components/instructor/RubricsSection";
+import { formatDateTime, formatMark } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
-
-type CriterionRow = { name: string; description: string; maxPoints: string };
-
-function emptyCriterionRow(): CriterionRow {
-  return { name: "", description: "", maxPoints: "" };
-}
 
 export default function InstructorPage() {
   const { user, ready } = useRequireRole("instructor");
@@ -26,10 +24,7 @@ export default function InstructorPage() {
   const [rubrics, setRubrics] = useState<Rubric[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
 
-  // Rubric creation
-  const [rubricName, setRubricName] = useState("");
-  const [criteriaRows, setCriteriaRows] = useState<CriterionRow[]>([emptyCriterionRow()]);
-  const [rubricMsg, setRubricMsg] = useState<MessageState>(null);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
 
   // Similarity check
   const [similarityAssignment, setSimilarityAssignment] = useState("");
@@ -54,6 +49,15 @@ export default function InstructorPage() {
     setRubrics(await apiFetch<Rubric[]>(`/rubrics?subject_id=${forSubject}`));
   }, []);
 
+  const loadAssignments = useCallback(async (forSubject: number) => {
+    setAssignments(await apiFetch<Assignment[]>(`/assignments?subject_id=${forSubject}`));
+  }, []);
+
+  const reloadCourseSetup = useCallback(async () => {
+    if (subjectId === null) return;
+    await Promise.all([loadAssignments(subjectId), loadRubrics(subjectId)]);
+  }, [subjectId, loadAssignments, loadRubrics]);
+
   const loadSubmissions = useCallback(async (forSubject: number) => {
     setSubmissions(await apiFetch<Submission[]>(`/submissions?subject_id=${forSubject}`));
   }, []);
@@ -69,8 +73,9 @@ export default function InstructorPage() {
     setGradingSubmissionId(null);
     setAutoevalSubmissionId(null);
     loadRubrics(subjectId);
+    loadAssignments(subjectId);
     loadSubmissions(subjectId);
-  }, [subjectId, loadRubrics, loadSubmissions]);
+  }, [subjectId, loadRubrics, loadAssignments, loadSubmissions]);
 
   const assignmentNames = useMemo(
     () => Array.from(new Set(submissions.map((s) => s.assignment_name))),
@@ -86,46 +91,6 @@ export default function InstructorPage() {
   function studentLabel(submissionId: number): string {
     const s = submissions.find((s) => s.id === submissionId);
     return s ? `${s.student_name} (#${submissionId})` : `#${submissionId}`;
-  }
-
-  // ---- Rubric creation ----
-
-  function updateCriterionRow(index: number, patch: Partial<CriterionRow>) {
-    setCriteriaRows((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
-  }
-  function removeCriterionRow(index: number) {
-    setCriteriaRows((rows) => rows.filter((_, i) => i !== index));
-  }
-
-  async function handleSaveRubric(e: FormEvent) {
-    e.preventDefault();
-    setRubricMsg(null);
-    if (subjectId === null) {
-      setRubricMsg({ text: "Pick a subject first.", kind: "error" });
-      return;
-    }
-    const criteria: Criterion[] = criteriaRows
-      .map((row) => ({
-        name: row.name.trim(),
-        description: row.description.trim(),
-        max_points: parseFloat(row.maxPoints),
-      }))
-      .filter((c) => c.name && !Number.isNaN(c.max_points));
-
-    if (criteria.length === 0) {
-      setRubricMsg({ text: "Add at least one named criterion with a max point value.", kind: "error" });
-      return;
-    }
-
-    try {
-      await apiFetch("/rubrics", { method: "POST", json: { name: rubricName, subject_id: subjectId, criteria } });
-      setRubricMsg({ text: "Rubric saved.", kind: "success" });
-      setRubricName("");
-      setCriteriaRows([emptyCriterionRow()]);
-      await loadRubrics(subjectId);
-    } catch (err) {
-      setRubricMsg({ text: `Failed to save rubric: ${err instanceof Error ? err.message : err}`, kind: "error" });
-    }
   }
 
   // ---- Similarity check ----
@@ -149,7 +114,9 @@ export default function InstructorPage() {
       setSimilarityResult(result);
       const flaggedCount = result.pairs.filter((p) => p.flagged).length;
       setSimilarityMsg({
-        text: `Compared ${result.compared} submissions -- ${flaggedCount} pair(s) flagged for review.`,
+        text: flaggedCount
+          ? `Compared ${result.compared} submissions -- potential similarity detected in ${flaggedCount} pair(s); lecturer review recommended.`
+          : `Compared ${result.compared} submissions -- no pairs flagged.`,
         kind: flaggedCount ? "error" : "success",
       });
     } catch (err) {
@@ -198,7 +165,9 @@ export default function InstructorPage() {
     setGradingSubmissionId(submissionId);
     setGradingMsg(null);
     setGradingComments("");
-    setGradingRubricId(rubricId ?? rubrics[0]?.id ?? null);
+    const submission = submissions.find((s) => s.id === submissionId);
+    const assignmentRubric = assignments.find((a) => a.id === submission?.assignment_id)?.rubric_id ?? null;
+    setGradingRubricId(rubricId ?? assignmentRubric ?? rubrics[0]?.id ?? null);
     setCriterionScores(prefill);
   }
 
@@ -231,8 +200,8 @@ export default function InstructorPage() {
 
       <h1 className="text-2xl font-bold">Instructor dashboard</h1>
       <p className="mt-1 text-sm text-gray-600">
-        Upload a rubric, run the automated evaluator, then grade manually or accept its scores as a starting
-        point -- you always have the final say.
+        Set up assignments and rubrics, run the automated evaluator, then grade manually or accept its scores as a
+        starting point -- you always have the final say.
       </p>
 
       <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
@@ -261,94 +230,17 @@ export default function InstructorPage() {
 
       {user.subjects.length > 0 && (
         <>
-          {/* Rubrics */}
-          <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-bold">Rubrics</h2>
-            <form onSubmit={handleSaveRubric} className="mt-3">
-              <label className="block text-sm font-semibold" htmlFor="rubric_name">
-                Rubric name
-              </label>
-              <input
-                id="rubric_name"
-                required
-                value={rubricName}
-                onChange={(e) => setRubricName(e.target.value)}
-                placeholder="Assignment 2 rubric"
-                className="mt-1 mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          {subjectId !== null && (
+            <>
+              <AssignmentsSection
+                subjectId={subjectId}
+                assignments={assignments}
+                rubrics={rubrics}
+                onChanged={reloadCourseSetup}
               />
-
-              <label className="block text-sm font-semibold">Criteria</label>
-              <div className="mt-1 space-y-2">
-                {criteriaRows.map((row, i) => (
-                  <div key={i} data-testid="criterion-row" className="flex items-center gap-2">
-                    <input
-                      placeholder="Criterion name"
-                      value={row.name}
-                      onChange={(e) => updateCriterionRow(i, { name: e.target.value })}
-                      className="w-1/3 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-                    />
-                    <input
-                      placeholder="Description"
-                      value={row.description}
-                      onChange={(e) => updateCriterionRow(i, { description: e.target.value })}
-                      className="flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-                    />
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.5}
-                      placeholder="Max pts"
-                      value={row.maxPoints}
-                      onChange={(e) => updateCriterionRow(i, { maxPoints: e.target.value })}
-                      className="w-24 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeCriterionRow(i)}
-                      className="rounded-md bg-gray-600 px-2 py-1.5 text-xs font-semibold text-white hover:bg-gray-700"
-                    >
-                      x
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={() => setCriteriaRows((rows) => [...rows, emptyCriterionRow()])}
-                className="mt-2 rounded-md bg-gray-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700"
-              >
-                + Add criterion
-              </button>
-              <div>
-                <button className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
-                  Save rubric
-                </button>
-              </div>
-              <Message state={rubricMsg} />
-            </form>
-
-            <h3 className="mt-5 text-sm font-bold uppercase tracking-wide text-gray-500">
-              Existing rubrics for this subject
-            </h3>
-            <table className="mt-2 w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 text-left">
-                  <th className="border border-gray-200 px-3 py-1.5">Name</th>
-                  <th className="border border-gray-200 px-3 py-1.5">Criteria</th>
-                  <th className="border border-gray-200 px-3 py-1.5">Max total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rubrics.map((r) => (
-                  <tr key={r.id}>
-                    <td className="border border-gray-200 px-3 py-1.5">{r.name}</td>
-                    <td className="border border-gray-200 px-3 py-1.5">{r.criteria.map((c) => c.name).join(", ")}</td>
-                    <td className="border border-gray-200 px-3 py-1.5">{r.max_total}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
+              <RubricsSection subjectId={subjectId} rubrics={rubrics} onChanged={reloadCourseSetup} />
+            </>
+          )}
 
           {/* Similarity check */}
           <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
@@ -380,29 +272,99 @@ export default function InstructorPage() {
             </button>
             <Message state={similarityMsg} />
 
+            {similarityResult && similarityResult.semantic.status !== "ok" && similarityResult.semantic.warning && (
+              <div className="mt-3 rounded-md bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
+                ⚠ {similarityResult.semantic.warning}
+              </div>
+            )}
+
             {similarityResult && similarityResult.pairs.length > 0 && (
-              <table className="mt-4 w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50 text-left">
-                    <th className="border border-gray-200 px-3 py-1.5">Student A</th>
-                    <th className="border border-gray-200 px-3 py-1.5">Student B</th>
-                    <th className="border border-gray-200 px-3 py-1.5">Jaccard</th>
-                    <th className="border border-gray-200 px-3 py-1.5">Containment</th>
-                    <th className="border border-gray-200 px-3 py-1.5">Flag</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {similarityResult.pairs.map((p, i) => (
-                    <tr key={i} className={p.flagged ? "bg-red-50" : undefined}>
-                      <td className="border border-gray-200 px-3 py-1.5">{studentLabel(p.submission_a_id)}</td>
-                      <td className="border border-gray-200 px-3 py-1.5">{studentLabel(p.submission_b_id)}</td>
-                      <td className="border border-gray-200 px-3 py-1.5">{(p.jaccard * 100).toFixed(0)}%</td>
-                      <td className="border border-gray-200 px-3 py-1.5">{(p.containment * 100).toFixed(0)}%</td>
-                      <td className="border border-gray-200 px-3 py-1.5">{p.flagged ? "⚑ review" : ""}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <>
+                <dl className="mt-4 grid gap-x-4 gap-y-1 text-xs text-gray-600 sm:grid-cols-[max-content_1fr]">
+                  <dt className="font-semibold">Shared fingerprints</dt>
+                  <dd>Identical code fragments found in both (after normalizing names and literals).</dd>
+                  <dt className="font-semibold">Jaccard</dt>
+                  <dd>Share of all fingerprints that the two submissions have in common.</dd>
+                  <dt className="font-semibold">Containment</dt>
+                  <dd>Share of the smaller submission&apos;s fingerprints found in the other.</dd>
+                  <dt className="font-semibold">Semantic</dt>
+                  <dd>
+                    UniXcoder similarity. A high value indicates that the submissions may implement similar logic even
+                    though limited identical code fragments were detected. Students solving the same task naturally
+                    score fairly high, so this is evidence for review, not proof.
+                  </dd>
+                </dl>
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 text-left">
+                        <th rowSpan={2} className="border border-gray-200 px-3 py-1.5">Student A</th>
+                        <th rowSpan={2} className="border border-gray-200 px-3 py-1.5">Student B</th>
+                        <th colSpan={3} className="border border-gray-200 px-3 py-1.5 text-center">
+                          Token / fingerprint
+                        </th>
+                        <th rowSpan={2} className="border border-gray-200 px-3 py-1.5">Semantic</th>
+                        <th rowSpan={2} className="border border-gray-200 px-3 py-1.5">Final flag</th>
+                      </tr>
+                      <tr className="bg-gray-50 text-left">
+                        <th className="border border-gray-200 px-3 py-1.5">Shared</th>
+                        <th className="border border-gray-200 px-3 py-1.5">Jaccard</th>
+                        <th className="border border-gray-200 px-3 py-1.5">Containment</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {similarityResult.pairs.map((p) => (
+                        <tr
+                          key={`${p.submission_a_id}-${p.submission_b_id}`}
+                          className={
+                            p.flag_level === "high" ? "bg-red-50" : p.flag_level === "review" ? "bg-yellow-50" : undefined
+                          }
+                        >
+                          <td className="border border-gray-200 px-3 py-1.5">{studentLabel(p.submission_a_id)}</td>
+                          <td className="border border-gray-200 px-3 py-1.5">{studentLabel(p.submission_b_id)}</td>
+                          <td className="border border-gray-200 px-3 py-1.5">{p.shared_fingerprints}</td>
+                          <td className="border border-gray-200 px-3 py-1.5">{(p.jaccard * 100).toFixed(0)}%</td>
+                          <td className="border border-gray-200 px-3 py-1.5">{(p.containment * 100).toFixed(0)}%</td>
+                          <td className="border border-gray-200 px-3 py-1.5">
+                            {p.semantic_similarity === null ? (
+                              <span className="text-gray-400" title="Semantic analysis not available for this pair">
+                                —
+                              </span>
+                            ) : (
+                              `${(p.semantic_similarity * 100).toFixed(0)}%`
+                            )}
+                          </td>
+                          <td className="border border-gray-200 px-3 py-1.5">
+                            {p.flag_level === "high" && <span className="font-semibold text-red-700">⚑ Review</span>}
+                            {p.flag_level === "review" && (
+                              <span className="font-semibold text-yellow-800">⚑ Review (semantic)</span>
+                            )}
+                            {p.flag_reason && <div className="text-xs text-gray-600">{p.flag_reason}</div>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {similarityResult.pairs.some((p) => p.flagged) && (
+                  <p className="mt-2 text-xs text-gray-600">
+                    Flagged pairs show potential similarity — lecturer review recommended. No flag is an automatic
+                    finding of misconduct.
+                  </p>
+                )}
+                {similarityResult.semantic.status === "ok" && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Semantic model: {similarityResult.semantic.model} · {similarityResult.semantic.submissions_encoded}{" "}
+                    encoded, {similarityResult.semantic.cache_hits} reused from cache
+                    {similarityResult.semantic.cohort_median !== null &&
+                      ` · cohort median ${(similarityResult.semantic.cohort_median * 100).toFixed(0)}%`}
+                    {similarityResult.semantic.review_threshold !== null &&
+                      ` · semantic review threshold ${(similarityResult.semantic.review_threshold * 100).toFixed(0)}%`}
+                    {similarityResult.semantic.skipped_too_small.length > 0 &&
+                      ` · ${similarityResult.semantic.skipped_too_small.length} submission(s) too small to compare semantically`}
+                  </p>
+                )}
+              </>
             )}
           </section>
 
@@ -416,6 +378,7 @@ export default function InstructorPage() {
                   <th className="border border-gray-200 px-3 py-1.5">Assignment</th>
                   <th className="border border-gray-200 px-3 py-1.5">Submitted</th>
                   <th className="border border-gray-200 px-3 py-1.5">Status</th>
+                  <th className="border border-gray-200 px-3 py-1.5">Mark</th>
                   <th className="border border-gray-200 px-3 py-1.5"></th>
                 </tr>
               </thead>
@@ -428,7 +391,7 @@ export default function InstructorPage() {
                       <small className="text-gray-500">{s.student_email}</small>
                     </td>
                     <td className="border border-gray-200 px-3 py-1.5">{s.assignment_name}</td>
-                    <td className="border border-gray-200 px-3 py-1.5">{new Date(s.submitted_at).toLocaleString()}</td>
+                    <td className="border border-gray-200 px-3 py-1.5">{formatDateTime(s.submitted_at)}</td>
                     <td className="border border-gray-200 px-3 py-1.5">
                       <span
                         className={`rounded px-2 py-0.5 text-xs ${
@@ -438,6 +401,7 @@ export default function InstructorPage() {
                         {s.status}
                       </span>
                     </td>
+                    <td className="border border-gray-200 px-3 py-1.5">{formatMark(s.final_mark, s.max_mark)}</td>
                     <td className="space-x-1 border border-gray-200 px-3 py-1.5">
                       <button
                         type="button"
@@ -520,6 +484,7 @@ export default function InstructorPage() {
                       )}
                     </ul>
                   </div>
+                  <CrossModalConsistencyPanel result={autoevalResult.cross_modal_consistency} />
                   <table className="mt-3 w-full text-sm">
                     <thead>
                       <tr className="bg-gray-50 text-left">
@@ -567,7 +532,7 @@ export default function InstructorPage() {
               >
                 {rubrics.map((r) => (
                   <option key={r.id} value={r.id}>
-                    {r.name}
+                    {r.name} ({r.max_total} pts)
                   </option>
                 ))}
               </select>
@@ -594,14 +559,23 @@ export default function InstructorPage() {
                 ))}
               </div>
 
+              <p className="mt-3 text-sm font-semibold">
+                Final mark:{" "}
+                {(gradingRubric?.criteria ?? []).reduce((sum, c) => sum + (parseFloat(criterionScores[c.name]) || 0), 0)} /{" "}
+                {gradingRubric?.max_total ?? 0}
+                <span className="ml-2 text-xs font-normal text-gray-500">
+                  Students see only this final mark, not the per-criterion scores or comments.
+                </span>
+              </p>
+
               <label className="mt-3 block text-sm font-semibold" htmlFor="grading-comments">
-                Comments
+                Comments (internal)
               </label>
               <textarea
                 id="grading-comments"
                 value={gradingComments}
                 onChange={(e) => setGradingComments(e.target.value)}
-                placeholder="Feedback for the student"
+                placeholder="Grading notes (visible to instructors only)"
                 className="mt-1 mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                 rows={3}
               />

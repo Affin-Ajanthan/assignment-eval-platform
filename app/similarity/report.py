@@ -16,6 +16,7 @@ table { border-collapse: collapse; width: 100%; margin-bottom: 2rem; background:
 th, td { border: 1px solid #ddd; padding: 0.5rem 0.75rem; text-align: left; font-size: 0.9rem; }
 th { background: #f0f0f0; }
 .flag-high { background: #fdecea; }
+.flag-review { background: #fff8e1; }
 .badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
 .badge-high { background: #fdecea; color: #b3261e; }
 .badge-medium { background: #fff8e1; color: #8a6100; }
@@ -28,18 +29,20 @@ def _pct(x: float) -> str:
 
 
 def render_html(pairs: list[PairResult], scores: list[HeuristicScore],
-                 threshold: float = 0.6) -> str:
+                 threshold: float = 0.6, semantic_note: str = "not run") -> str:
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     pair_rows = []
     for p in pairs:
-        cls = "flag-high" if p.flagged else ""
+        cls = "flag-high" if p.token_flagged else "flag-review" if p.flagged else ""
+        semantic = "&mdash;" if p.semantic_similarity is None else _pct(p.semantic_similarity)
+        flag = f"&#9873; review<br><small>{escape(p.flag_reason or '')}</small>" if p.flagged else ""
         pair_rows.append(
             f"<tr class='{cls}'><td>{escape(p.submission_a)}</td>"
             f"<td>{escape(p.submission_b)}</td>"
-            f"<td>{_pct(p.jaccard)}</td><td>{_pct(p.containment)}</td>"
             f"<td>{p.shared_fingerprints}</td>"
-            f"<td>{'&#9873; review' if p.flagged else ''}</td></tr>"
+            f"<td>{_pct(p.jaccard)}</td><td>{_pct(p.containment)}</td>"
+            f"<td>{semantic}</td><td>{flag}</td></tr>"
         )
 
     score_rows = []
@@ -56,13 +59,17 @@ def render_html(pairs: list[PairResult], scores: list[HeuristicScore],
 <style>{_STYLE}</style></head><body>
 <h1>Pre-submission self-check report</h1>
 <p class="meta">Generated {generated} &middot; similarity flag threshold: Jaccard &ge; {_pct(threshold)}
-or containment &ge; 75% &middot; this is a self-check signal, not a final grade.</p>
+or containment &ge; 75% &middot; semantic analysis: {escape(semantic_note)}
+&middot; this is a self-check signal, not a final grade.</p>
+<p class="meta">Semantic similarity (UniXcoder) indicates that submissions may implement similar
+logic even though limited identical code fragments were detected. Flags mean potential similarity
+&mdash; lecturer review recommended.</p>
 
 <h2>Code similarity (pairwise)</h2>
 <table>
-<tr><th>Submission A</th><th>Submission B</th><th>Jaccard</th><th>Containment</th>
-<th>Shared fingerprints</th><th>Flag</th></tr>
-{''.join(pair_rows) if pair_rows else '<tr><td colspan="6">No pairs to compare.</td></tr>'}
+<tr><th>Submission A</th><th>Submission B</th><th>Shared fingerprints</th><th>Jaccard</th>
+<th>Containment</th><th>Semantic</th><th>Final flag</th></tr>
+{''.join(pair_rows) if pair_rows else '<tr><td colspan="7">No pairs to compare.</td></tr>'}
 </table>
 
 <h2>AI-content heuristic (experimental)</h2>

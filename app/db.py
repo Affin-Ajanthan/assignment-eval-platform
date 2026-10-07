@@ -25,6 +25,19 @@ class Base(DeclarativeBase):
     pass
 
 
+def add_missing_columns(table: str, columns: dict[str, str]) -> None:
+    """Minimal forward-only migration: `create_all` creates new tables
+    but never alters existing ones, so columns added to a model later
+    are added here (as nullable) on an existing portal.db."""
+    with engine.begin() as conn:
+        existing = {row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})")}
+        if not existing:
+            return
+        for name, sql_type in columns.items():
+            if name not in existing:
+                conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}")
+
+
 def get_db():
     """FastAPI dependency: one session per request, always closed."""
     db = SessionLocal()

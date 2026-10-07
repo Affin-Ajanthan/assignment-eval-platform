@@ -12,6 +12,27 @@ opencv-python-headless>=4.9
 numpy>=1.26
 pillow>=10
 
+# --- Semantic code similarity (app/similarity/semantic.py, model
+# microsoft/unixcoder-base, ~500 MB, downloaded once on first use and
+# cached by Hugging Face). CPU-only torch is enough:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+# Without these (or with SEMANTIC_SIMILARITY=0) the similarity check
+# still runs on fingerprints/Jaccard/containment alone.
+transformers>=4.40
+torch>=2.1
+
+# --- Cross-modal semantic consistency (app/evaluator/semantic_consistency.py,
+# model sentence-transformers/all-MiniLM-L6-v2, ~90 MB, downloaded once and
+# cached). Without it (or with CROSS_MODAL_SEMANTIC=0) the evaluation runs
+# normally and reports this analysis as unavailable/disabled.
+sentence-transformers>=3.0
+
+# --- Report text extraction for cross-modal consistency
+# (app/evaluator/document_extraction.py): Microsoft MarkItDown,
+# https://github.com/microsoft/markitdown, PDF + DOCX converters only.
+# Runs locally; no plugins, LLM or cloud service is used.
+markitdown[pdf,docx]>=0.1.8,<0.2
+
 # --- Testing ---
 pytest>=7
 httpx>=0.27
