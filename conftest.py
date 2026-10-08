@@ -18,6 +18,8 @@ sys.path.insert(0, str(ROOT))
 os.environ["SEMANTIC_SIMILARITY"] = "0"
 # Same for the sentence-embedding model behind cross-modal consistency.
 os.environ["CROSS_MODAL_SEMANTIC"] = "0"
+# And the Fast-DetectGPT scoring model (reports fall back to the style heuristic).
+os.environ["AI_TEXT_DETECTION"] = "0"
 
 _portal_db = ROOT / "portal.db"
 if _portal_db.exists():

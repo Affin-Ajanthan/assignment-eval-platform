@@ -43,3 +43,11 @@ npm start
   data comes from a bearer-token-authenticated API, so "fetch on mount,
   setState with the result" `useEffect`s are the correct pattern, not a
   bug the rule should flag.
+
+
+Role	      Email	                  Password
+Admin	      admin@school.local	    Admin@123
+Instructor	instructor@school.local	Instructor@123
+Student 1	  student1@school.local	  Student1@123
+Student 2	  student2@school.local	  Student2@123
+Student 3	  student3@school.local	  Student3@123

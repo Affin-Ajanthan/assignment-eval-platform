@@ -155,6 +155,19 @@ def test_unparsable_python_still_yields_comments():
     assert "explains the sorting strategy here" in docs
 
 
+def test_readme_counts_as_code_documentation(tmp_path):
+    # Real case: plain code with no comments, described only in a README.
+    (tmp_path / "proj").mkdir()
+    (tmp_path / "proj" / "calculator.py").write_text("def add(x, y):\n    return x + y\n")
+    (tmp_path / "proj" / "README.txt").write_text("Calculator\n\nThis program reads two integers and displays their sum.")
+    (tmp_path / "README.md").write_text("# Usage\n\nRun **main.py** to start.")
+    (tmp_path / "notes.txt").write_text("not a readme, not documentation")
+    docs = extract_code_documentation(tmp_path)
+    assert "reads two integers and displays their sum" in docs
+    assert "Run main.py to start." in docs and "**" not in docs and "#" not in docs
+    assert "not a readme" not in docs
+
+
 def test_code_directory_documentation_spans_all_files(tmp_path):
     (tmp_path / "pkg").mkdir()
     (tmp_path / "pkg" / "a.py").write_text('"""Parses the uploaded timetable file."""\n')
@@ -236,7 +249,7 @@ def test_code_without_documentation_is_unavailable_not_zero():
     r = _check(_service(), code=docs)
     assert docs == ""
     assert r.code_report is None and r.code_transcript is None
-    assert r.components["code"].note == "No code documentation found"
+    assert r.components["code"].note == "No code documentation found (no comments, docstrings or README)"
     assert r.report_transcript is not None and r.overall == r.report_transcript
 
 

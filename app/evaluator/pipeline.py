@@ -110,7 +110,6 @@ def evaluate_submission(
     )
 
     report_ai_flagged = bool(report_analysis and report_analysis.ai_text.signal == "high")
-    ai_content_flagged = report_ai_flagged or code_ai_flagged
 
     grader = grader or build_default_grader()
     evidence = Evidence(
@@ -118,7 +117,10 @@ def evaluate_submission(
         report=report_analysis,
         video_transcript=video_transcript,
         similarity_flagged=similarity_flagged,
-        ai_content_flagged=ai_content_flagged,
+        # AI-content signals (report and code) are review flags only: they
+        # never lower the suggested score. AI detectors misfire, notably on
+        # formal or non-native English writing.
+        ai_content_flagged=False,
     )
     grading = grader.grade(criteria, evidence)
 
@@ -136,12 +138,15 @@ def evaluate_submission(
         review_flags.append("code AI-content heuristic signaled high likelihood")
     if report_ai_flagged:
         review_flags.append(
-            f"report AI-text heuristic signaled high likelihood ({'; '.join(report_analysis.ai_text.reasons)})"
+            f"report AI-text signal is high -- review recommended, not proof "
+            f"({'; '.join(report_analysis.ai_text.reasons)})"
         )
     if report_analysis and report_analysis.image_check.flagged:
         review_flags.append(report_analysis.image_check.reason)
-    if consistency.flagged:
-        review_flags.extend(consistency.reasons)
+    # The keyword-overlap check (cross_modal.py) still runs and its score is
+    # stored, but it no longer adds review flags: it only matches function
+    # names word-for-word, so it contradicts the meaning-based cross-modal
+    # check (semantic_consistency.py), which is the consistency signal shown.
     if video_analysis and video_analysis.frames.screen_recording_score >= 80:
         review_flags.append(
             f"video looks like a static screen recording (avg frame diff {video_analysis.frames.avg_frame_diff})"

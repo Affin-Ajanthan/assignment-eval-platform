@@ -297,4 +297,6 @@ class AutoEvaluation(Base):
     # {"code_report", "code_transcript", "report_transcript", "overall",
     #  "status", "reason", ...}; scores are null when not evaluated.
     cross_modal_consistency = Column(JSON, nullable=True)
+    # {"report": {signal, score, method, reasons} | null, "code": {...} | null}
+    ai_signals = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=_utcnow)

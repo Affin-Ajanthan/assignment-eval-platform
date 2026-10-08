@@ -175,15 +175,33 @@ def extract_documentation(source: str, filename: str) -> str:
     return " ".join(p for p in cleaned if p)
 
 
+README_SUFFIXES = {"", ".txt", ".md", ".markdown", ".rst"}
+README_MAX_CHARS = 50_000
+
+
+def _is_readme(path: Path) -> bool:
+    return path.stem.lower() == "readme" and path.suffix.lower() in README_SUFFIXES
+
+
 def extract_code_documentation(code_dir: Path) -> str:
-    """Documentation across every source file in a submission's code
-    directory (recursive), in a stable order."""
+    """Documentation across a submission's code directory (recursive), in a
+    stable order: docstrings and comments from every source file, plus any
+    README file -- often the only place a student describes what the code
+    does."""
+    from .document_extraction import markdown_to_text
+
     texts = []
     for path in sorted(Path(code_dir).rglob("*")):
-        if path.is_file() and path.suffix.lower() in CODE_EXTENSIONS:
+        if not path.is_file():
+            continue
+        if path.suffix.lower() in CODE_EXTENSIONS:
             doc = extract_documentation(path.read_text(encoding="utf-8", errors="ignore"), path.name)
-            if doc:
-                texts.append(doc)
+        elif _is_readme(path):
+            doc = markdown_to_text(path.read_text(encoding="utf-8", errors="ignore")[:README_MAX_CHARS])
+        else:
+            continue
+        if doc:
+            texts.append(doc)
     return "\n".join(texts)
 
 
@@ -508,7 +526,7 @@ def _check(
             components[name] = ComponentInfo(available=True, words=words)
             continue
         if name == "code":
-            note = "No code submitted" if not code_submitted else "No code documentation found"
+            note = "No code submitted" if not code_submitted else "No code documentation found (no comments, docstrings or README)"
         elif name == "report":
             note = ("Report not submitted" if not report_submitted
                     else report_unavailable_note or "Report unavailable (no extractable text)")

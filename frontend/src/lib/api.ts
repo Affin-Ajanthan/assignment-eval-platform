@@ -176,7 +176,17 @@ export interface AutoEvaluation {
   consistency_score: number | null;
   /** Null on evaluations stored before this feature existed. */
   cross_modal_consistency: CrossModalConsistency | null;
+  /** Null on evaluations stored before AI-signal details were kept. */
+  ai_signals?: { report: AISignal | null; code: AISignal | null } | null;
   created_at: string;
+}
+
+/** An AI-content estimate: a review signal only, never a score change. */
+export interface AISignal {
+  signal: "low" | "medium" | "high";
+  score: number;
+  method: string;
+  reasons: string[];
 }
 
 export type ConsistencyComponent = "code" | "report" | "transcript";
@@ -303,6 +313,44 @@ export async function apiFetch<T = unknown>(path: string, options: ApiFetchOptio
   if (res.status === 204) return null as T;
   const text = await res.text();
   return (text ? JSON.parse(text) : null) as T;
+}
+
+/** A file that belongs to a submission (see GET /submissions/{id}/files). */
+export interface SubmissionFile {
+  kind: "code" | "report" | "video";
+  path: string;
+  name: string;
+  size: number;
+}
+
+/** Download a protected file as a Blob (a plain link can't send the bearer token). */
+export async function apiFetchBlob(path: string): Promise<Blob> {
+  const headers = new Headers();
+  const token = getToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const res = await fetch(`${API_BASE}${path}`, { headers });
+  if (res.status === 401) {
+    clearSession();
+    // Same as apiFetch: a plain utility can't use useRouter().
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    if (typeof window !== "undefined") window.location.href = "/login";
+    throw new Error("Session expired -- please log in again");
+  }
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      detail = (await res.json()).detail || detail;
+    } catch {
+      /* not JSON */
+    }
+    throw new Error(detail);
+  }
+  return res.blob();
+}
+
+export function submissionFileUrl(submissionId: number, file: SubmissionFile): string {
+  const encoded = file.path.split("/").map(encodeURIComponent).join("/");
+  return `/submissions/${submissionId}/files/${file.kind}/${encoded}`;
 }
 
 export async function logout(): Promise<void> {
