@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from fastapi.testclient import TestClient
 
 from app.main import app as fastapi_app
-from tests.auth_helpers import auth_headers, setup_subject_with_users
+from tests.auth_helpers import auth_headers, ensure_assignment, setup_subject_with_users, submit
 
 client = TestClient(fastapi_app)
 
@@ -60,7 +60,7 @@ def test_submit_and_grade_flow():
     code_file = io.BytesIO(b"print('hello world')")
     submission = client.post(
         "/submissions",
-        data={"subject_id": subject["id"], "assignment_name": "Assignment 2"},
+        data={"subject_id": subject["id"], "assignment_id": ensure_assignment(client, subject["id"], "Assignment 2")["id"]},
         files={"code": ("solution.py", code_file, "text/x-python")},
         headers=auth_headers(student_tok),
     ).json()
@@ -85,9 +85,11 @@ def test_submit_and_grade_flow():
     fetched_submission = client.get(f"/submissions/{submission['id']}", headers=auth_headers(instructor_tok)).json()
     assert fetched_submission["status"] == "graded"
 
-    # The owning student can see their own grade too.
-    fetched_grade = client.get(f"/submissions/{submission['id']}/grade", headers=auth_headers(student_tok)).json()
-    assert fetched_grade["total_score"] == 90
+    # The owning student sees only the final mark -- not the criterion-level
+    # breakdown or comments, which stay instructor-only.
+    mine = client.get("/submissions", headers=auth_headers(student_tok)).json()
+    assert [(s["id"], s["final_mark"], s["max_mark"]) for s in mine] == [(submission["id"], 90, 100)]
+    assert client.get(f"/submissions/{submission['id']}/grade", headers=auth_headers(student_tok)).status_code == 403
 
 
 def test_grade_rejects_unknown_criterion():
@@ -99,7 +101,8 @@ def test_grade_rejects_unknown_criterion():
     ).json()
     submission = client.post(
         "/submissions",
-        data={"subject_id": subject["id"], "assignment_name": "Assignment X"},
+        data={"subject_id": subject["id"], "assignment_id": ensure_assignment(client, subject["id"], "Assignment X")["id"]},
+        files={"code": ("solution.py", io.BytesIO(b"x = 1"), "text/x-python")},
         headers=auth_headers(student_tok),
     ).json()
     r = client.post(
@@ -119,7 +122,8 @@ def test_grade_rejects_out_of_range_score():
     ).json()
     submission = client.post(
         "/submissions",
-        data={"subject_id": subject["id"], "assignment_name": "Assignment Y"},
+        data={"subject_id": subject["id"], "assignment_id": ensure_assignment(client, subject["id"], "Assignment Y")["id"]},
+        files={"code": ("solution.py", io.BytesIO(b"x = 1"), "text/x-python")},
         headers=auth_headers(student_tok),
     ).json()
     r = client.post(

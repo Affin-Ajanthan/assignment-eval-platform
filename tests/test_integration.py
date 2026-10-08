@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from fastapi.testclient import TestClient
 
 from app.main import app as fastapi_app
-from tests.auth_helpers import auth_headers, setup_subject_with_users
+from tests.auth_helpers import auth_headers, ensure_assignment, setup_subject_with_users, submit
 
 client = TestClient(fastapi_app)
 
@@ -54,20 +54,20 @@ def fibonacci(n):
 
 
 def _submit(student_tok, subject_id, assignment, code_bytes, filename="solution.py"):
-    return client.post(
-        "/submissions",
-        data={"subject_id": subject_id, "assignment_name": assignment},
-        files={"code": (filename, io.BytesIO(code_bytes), "text/x-python")},
-        headers=auth_headers(student_tok),
-    ).json()
+    """Submit as student_tok, or as a fresh student when None (a student can
+    submit an assignment only once)."""
+    r = submit(client, subject_id, assignment, {"code": (filename, io.BytesIO(code_bytes), "text/x-python")},
+               student_tok=student_tok)
+    assert r.status_code == 200, r.text
+    return r.json()
 
 
 def test_check_similarity_flags_renamed_copy():
     subject, instructor_tok, student_tok = setup_subject_with_users(client)
     assignment = "Similarity Test Assignment"
-    s1 = _submit(student_tok, subject["id"], assignment, BUBBLE_SORT)
-    s2 = _submit(student_tok, subject["id"], assignment, BUBBLE_SORT_RENAMED)
-    s3 = _submit(student_tok, subject["id"], assignment, UNRELATED_CODE)
+    s1 = _submit(None, subject["id"], assignment, BUBBLE_SORT)
+    s2 = _submit(None, subject["id"], assignment, BUBBLE_SORT_RENAMED)
+    s3 = _submit(None, subject["id"], assignment, UNRELATED_CODE)
 
     r = client.post(
         f"/subjects/{subject['id']}/assignments/{assignment}/check-similarity",
@@ -141,10 +141,11 @@ def test_auto_evaluate_runs_full_pipeline_and_stores_result():
     ).json()
     assert fetched["id"] == body["id"]
 
-    # The owning student can see it too; an unrelated instructor cannot.
+    # Automated evaluation is instructor-only: not even the owning student
+    # sees it, and neither does an unrelated instructor.
     assert client.get(
         f"/submissions/{submission['id']}/auto-evaluate", headers=auth_headers(student_tok)
-    ).status_code == 200
+    ).status_code == 403
     _, other_instructor_tok, _ = setup_subject_with_users(client)
     assert client.get(
         f"/submissions/{submission['id']}/auto-evaluate", headers=auth_headers(other_instructor_tok)
@@ -163,8 +164,8 @@ def test_auto_evaluate_reflects_similarity_flag():
         },
         headers=auth_headers(instructor_tok),
     ).json()
-    s1 = _submit(student_tok, subject["id"], assignment, BUBBLE_SORT)
-    _submit(student_tok, subject["id"], assignment, BUBBLE_SORT_RENAMED)
+    s1 = _submit(None, subject["id"], assignment, BUBBLE_SORT)
+    _submit(None, subject["id"], assignment, BUBBLE_SORT_RENAMED)
     client.post(
         f"/subjects/{subject['id']}/assignments/{assignment}/check-similarity",
         headers=auth_headers(instructor_tok),

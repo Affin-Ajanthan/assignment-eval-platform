@@ -11,6 +11,8 @@ same admin-driven setup, which is exactly what these helpers do.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 DEFAULT_ADMIN_EMAIL = "admin@school.local"
 DEFAULT_ADMIN_PASSWORD = "admin123"
 
@@ -68,6 +70,9 @@ def create_student(client, admin_tok, subject_ids, email=None, full_name="Test S
     return user, login(client, email, password)
 
 
+_subject_instructor_tokens: dict[int, str] = {}
+
+
 def setup_subject_with_users(client, name=None, code=None):
     """Convenience: one subject + one instructor assigned to it + one
     student enrolled in it. Returns (subject, instructor_token, student_token)."""
@@ -75,4 +80,55 @@ def setup_subject_with_users(client, name=None, code=None):
     subject = create_subject(client, admin_tok, name, code)
     _, instructor_tok = create_instructor(client, admin_tok, [subject["id"]])
     _, student_tok = create_student(client, admin_tok, [subject["id"]])
+    _subject_instructor_tokens[subject["id"]] = instructor_tok
     return subject, instructor_tok, student_tok
+
+
+def create_assignment(client, instructor_tok, subject_id, name=None, *, opens_in=timedelta(hours=-1),
+                      closes_in=timedelta(days=7), rubric_id=None, description=""):
+    """An assignment whose window is relative to now (open by default)."""
+    now = datetime.now(timezone.utc)
+    r = client.post(
+        "/assignments",
+        json={
+            "subject_id": subject_id,
+            "name": name or _unique("Assignment "),
+            "description": description,
+            "available_from": (now + opens_in).isoformat(),
+            "deadline": (now + closes_in).isoformat(),
+            "rubric_id": rubric_id,
+        },
+        headers=auth_headers(instructor_tok),
+    )
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def ensure_assignment(client, subject_id, name):
+    """The subject's assignment called `name`, created (open now) if it
+    doesn't exist yet. The subject must come from setup_subject_with_users."""
+    instructor_tok = _subject_instructor_tokens[subject_id]
+    listed = client.get(f"/assignments?subject_id={subject_id}", headers=auth_headers(instructor_tok)).json()
+    for a in listed:
+        if a["name"].casefold() == name.casefold():
+            return a
+    return create_assignment(client, instructor_tok, subject_id, name)
+
+
+def new_student(client, subject_id):
+    """Token for a fresh student enrolled in the subject (one student can
+    submit an assignment only once, so multi-submission tests need several)."""
+    _, tok = create_student(client, admin_token(client), [subject_id])
+    return tok
+
+
+def submit(client, subject_id, assignment_name, files, student_tok=None):
+    """Submit `files` to the named assignment (created open if needed), as
+    `student_tok` or as a fresh student. Returns the raw response."""
+    assignment = ensure_assignment(client, subject_id, assignment_name)
+    return client.post(
+        "/submissions",
+        data={"subject_id": subject_id, "assignment_id": assignment["id"]},
+        files=files,
+        headers=auth_headers(student_tok or new_student(client, subject_id)),
+    )

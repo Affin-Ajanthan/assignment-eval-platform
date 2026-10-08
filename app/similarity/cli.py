@@ -3,7 +3,7 @@ Command-line entry point for the pre-submission similarity checker.
 
 Usage:
     python -m app.similarity.cli check <submissions_dir> \\
-        [--threshold 0.6] [--out report.html] [--json report.json]
+        [--threshold 0.6] [--out report.html] [--json report.json] [--no-semantic]
 
 <submissions_dir> layout -- one subfolder per student, containing their
 source files (any nesting), e.g.:
@@ -12,6 +12,10 @@ source files (any nesting), e.g.:
       alice/solution.py
       bob/src/main.py
       carol/app.js
+
+Semantic (UniXcoder) similarity is added as an extra signal when
+torch/transformers are installed and the model can be loaded; pass
+--no-semantic to skip it.
 """
 
 from __future__ import annotations
@@ -23,6 +27,12 @@ from pathlib import Path
 
 from .ai_heuristics import score_source
 from .core import Fingerprint, compare_all, fingerprint_source
+from .semantic import (
+    apply_semantic_signal,
+    get_semantic_service,
+    normalize_code,
+    submissions_needing_semantic,
+)
 
 CODE_EXTENSIONS = {".py", ".java", ".js", ".ts", ".c", ".cpp", ".h", ".hpp", ".cs", ".go", ".rb"}
 
@@ -52,6 +62,16 @@ def build_fingerprints(submissions_dir: Path) -> dict[str, Fingerprint]:
     return fingerprints
 
 
+def build_semantic_sources(submissions_dir: Path) -> dict[str, str]:
+    return {
+        student_dir.name: "\n".join(
+            normalize_code(path.read_text(encoding="utf-8", errors="ignore"), path.name)
+            for path in _iter_code_files(student_dir)
+        )
+        for student_dir in _iter_student_dirs(submissions_dir)
+    }
+
+
 def build_ai_scores(submissions_dir: Path):
     scores = []
     for student_dir in _iter_student_dirs(submissions_dir):
@@ -73,6 +93,8 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("--threshold", type=float, default=0.6)
     check.add_argument("--out", type=Path, default=Path("report.html"))
     check.add_argument("--json", type=Path, default=None)
+    check.add_argument("--no-semantic", action="store_true",
+                       help="skip the UniXcoder semantic-similarity signal")
 
     args = parser.parse_args(argv)
 
@@ -87,13 +109,26 @@ def main(argv: list[str] | None = None) -> int:
     pairs = compare_all(fingerprints)
     scores = build_ai_scores(args.submissions_dir)
 
+    semantic_note = "disabled (--no-semantic)"
+    if not args.no_semantic:
+        needed = submissions_needing_semantic(pairs)
+        sources = {k: v for k, v in build_semantic_sources(args.submissions_dir).items() if k in needed}
+        batch = get_semantic_service().embed_submissions(sources)
+        if batch.status == "ok":
+            apply_semantic_signal(pairs, batch.embeddings)
+            semantic_note = f"{batch.encoded} submission(s) encoded with UniXcoder"
+        else:
+            semantic_note = batch.warning or batch.status
+            print(f"Warning: {semantic_note}", file=sys.stderr)
+
     from .report import render_html
-    args.out.write_text(render_html(pairs, scores, args.threshold), encoding="utf-8")
+    args.out.write_text(render_html(pairs, scores, args.threshold, semantic_note), encoding="utf-8")
     print(f"Wrote {args.out}")
 
     if args.json:
         payload = {
-            "pairs": [{**p.__dict__, "flagged": p.flagged} for p in pairs],
+            "pairs": [{**p.__dict__, "token_flagged": p.token_flagged, "flagged": p.flagged} for p in pairs],
+            "semantic": semantic_note,
             "ai_scores": [s.__dict__ for s in scores],
         }
         args.json.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -101,10 +136,12 @@ def main(argv: list[str] | None = None) -> int:
 
     flagged = [p for p in pairs if p.flagged]
     if flagged:
-        print(f"\n{len(flagged)} pair(s) flagged for review:")
+        print(f"\n{len(flagged)} pair(s) with potential similarity -- review recommended:")
         for p in flagged:
+            semantic = "n/a" if p.semantic_similarity is None else f"{p.semantic_similarity:.2f}"
             print(f"  {p.submission_a} <-> {p.submission_b}: "
-                  f"jaccard={p.jaccard:.2f} containment={p.containment:.2f}")
+                  f"jaccard={p.jaccard:.2f} containment={p.containment:.2f} semantic={semantic}"
+                  f"{' -- ' + p.flag_reason if p.flag_reason else ''}")
 
     return 0
 
