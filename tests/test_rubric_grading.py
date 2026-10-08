@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
 
+import json
+
 import pytest
 
 from app.evaluator.code_analysis import analyze_python
@@ -8,8 +10,10 @@ from app.evaluator.rubric_grading import (
     Evidence,
     HeuristicRubricGrader,
     LLMRubricGrader,
+    OllamaRubricGrader,
     build_default_grader,
 )
+from app.evaluator import rubric_grading
 
 GOOD_CODE = """
 def bubble_sort(items):
@@ -143,6 +147,77 @@ def test_llm_grader_without_client_raises_helpful_error():
 
 
 def test_build_default_grader_falls_back_to_heuristic_without_api_key(monkeypatch):
+    monkeypatch.setenv("GRADER_BACKEND", "auto")
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(rubric_grading, "_ollama_available", lambda *a, **k: False)
     grader = build_default_grader()
     assert isinstance(grader, HeuristicRubricGrader)
+
+
+# --------------------------------------------------------------------------
+# Local Ollama grader -- tested with a fake `post`, no Ollama server needed.
+# --------------------------------------------------------------------------
+
+
+class _FakePost:
+    def __init__(self, criteria_payload):
+        self.reply = {"message": {"content": json.dumps({"criteria": criteria_payload})}}
+        self.calls = []
+
+    def __call__(self, url, payload, timeout):
+        self.calls.append((url, payload))
+        return self.reply
+
+
+def test_ollama_grader_parses_json_reply_and_requests_qwen3():
+    post = _FakePost([
+        {"name": "Correctness", "score": 50, "justification": "Correct."},
+        {"name": "Code quality", "score": 35, "justification": "Clean."},
+    ])
+    grader = OllamaRubricGrader(post=post)
+    criteria = [
+        Criterion(name="Correctness", max_points=60),
+        Criterion(name="Code quality", max_points=40),
+    ]
+    result = grader.grade(criteria, _evidence())
+
+    assert result.grader == "ollama"
+    assert [c.score for c in result.criteria] == [50, 35]
+    url, payload = post.calls[0]
+    assert url.endswith("/api/chat")
+    assert payload["model"] == "qwen3:4b"
+    assert payload["options"]["temperature"] == 0
+    assert payload["think"] is False
+
+
+def test_ollama_grader_clamps_scores_and_falls_back_to_order_for_reworded_names():
+    post = _FakePost([{"name": "Correct solution", "score": 999, "justification": "x"}])
+    result = OllamaRubricGrader(post=post).grade(
+        [Criterion(name="Correctness", max_points=10)], _evidence())
+    assert result.criteria[0].score == 10
+
+
+def test_ollama_grader_missing_criterion_scores_zero():
+    post = _FakePost([])
+    result = OllamaRubricGrader(post=post).grade(
+        [Criterion(name="Missing", max_points=10)], _evidence())
+    assert result.criteria[0].score == 0.0
+    assert "did not return" in result.criteria[0].justification
+
+
+def test_ollama_grader_bad_json_raises_runtime_error():
+    grader = OllamaRubricGrader(post=lambda *a: {"message": {"content": "not json"}})
+    with pytest.raises(RuntimeError, match="expected JSON"):
+        grader.grade([Criterion(name="X", max_points=10)], _evidence())
+
+
+def test_build_default_grader_prefers_ollama_when_available(monkeypatch):
+    monkeypatch.setenv("GRADER_BACKEND", "auto")
+    monkeypatch.setattr(rubric_grading, "_ollama_available", lambda *a, **k: True)
+    assert isinstance(build_default_grader(), OllamaRubricGrader)
+
+
+def test_grader_backend_heuristic_overrides_ollama(monkeypatch):
+    monkeypatch.setenv("GRADER_BACKEND", "heuristic")
+    monkeypatch.setattr(rubric_grading, "_ollama_available", lambda *a, **k: True)
+    assert isinstance(build_default_grader(), HeuristicRubricGrader)

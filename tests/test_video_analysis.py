@@ -55,6 +55,25 @@ def test_analyze_video_combines_transcript_and_frames(tmp_path):
     assert result.frames.frames_sampled > 0
 
 
+def test_analyze_video_survives_transcriber_failure(tmp_path, monkeypatch):
+    """A failing speech-to-text stage must not abort the video analysis."""
+    from app.evaluator import video_analysis as va
+
+    class _BrokenTranscriber(Transcriber):
+        def transcribe(self, video_path):
+            raise OSError("Cannot reach huggingface.co to download the Whisper model")
+
+    sentinel = object()
+    monkeypatch.setattr(va, "analyze_frames", lambda path: sentinel)
+    result = analyze_video(tmp_path / "v.mp4", transcriber=_BrokenTranscriber())
+
+    assert result.transcript.text == ""
+    assert result.transcript.segments == []
+    assert result.transcript.backend == "null"
+    assert "OSError" in result.transcript.error and "huggingface" in result.transcript.error
+    assert result.frames is sentinel  # frame analysis still ran
+
+
 @pytest.mark.slow
 def test_whisper_transcriber_real_model_if_network_available(tmp_path):
     """Exercises the real faster-whisper path end-to-end. Skipped (not

@@ -17,10 +17,16 @@ Two interchangeable graders behind one interface:
   Takes an injected client so it can be unit-tested without a real API
   key or network call (see tests/test_rubric_grading.py).
 
-``build_default_grader()`` picks the LLM grader automatically when
-``ANTHROPIC_API_KEY`` is set and the ``anthropic`` package is
-installed, and falls back to the heuristic grader otherwise -- so the
-rest of the pipeline never has to know which one is in use.
+- ``OllamaRubricGrader``: the same rubric prompt sent to a local model
+  served by Ollama (default ``qwen3:4b``) with a JSON-schema constrained
+  reply. Free, offline, and nothing leaves the machine.
+
+``build_default_grader()`` prefers the local Ollama model when the server
+is reachable and the model is installed, then the Claude grader when
+``ANTHROPIC_API_KEY`` is set and the ``anthropic`` package is installed,
+and falls back to the heuristic grader otherwise -- so the rest of the
+pipeline never has to know which one is in use. Set ``GRADER_BACKEND`` to
+``ollama``, ``claude`` or ``heuristic`` to force one.
 """
 
 from __future__ import annotations
@@ -28,6 +34,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import urllib.request
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
@@ -288,14 +295,117 @@ class LLMRubricGrader(RubricGrader):
         return GradingResult(criteria=results, grader=self.name)
 
 
-def build_default_grader() -> RubricGrader:
-    """LLM grader when ANTHROPIC_API_KEY is set and the anthropic
-    package is importable; heuristic grader otherwise."""
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if api_key:
+# --------------------------------------------------------------------------
+# Local LLM grader (Ollama, default qwen3:4b)
+# --------------------------------------------------------------------------
+
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3:4b")
+
+
+def _ollama_post(url: str, payload: dict, timeout: float) -> dict:
+    request = urllib.request.Request(
+        url, data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _ollama_response_schema() -> dict:
+    return _build_grading_tool()["input_schema"]
+
+
+class OllamaRubricGrader(RubricGrader):
+    """Grades with a local Ollama model (qwen3:4b by default), asking for
+    JSON that matches the same {criteria: [{name, score, justification}]}
+    shape the Claude grader uses.
+
+    `post` is any callable ``(url, payload, timeout) -> dict``; inject a
+    fake in tests so no Ollama server is needed.
+    """
+
+    name = "ollama"
+
+    def __init__(self, model: str = OLLAMA_MODEL, url: str = OLLAMA_URL,
+                 post=_ollama_post, timeout: float = 300.0):
+        self.model = model
+        self.url = url.rstrip("/")
+        self.post = post
+        self.timeout = timeout
+
+    def grade(self, criteria: list[Criterion], evidence: Evidence) -> GradingResult:
+        prompt = _build_prompt(criteria, evidence).replace(
+            "Call submit_grades with one entry per criterion, in the same order.",
+            'Reply with JSON {"criteria": [{"name", "score", "justification"}]} '
+            "with one entry per criterion, in the same order, using the exact "
+            "criterion names.",
+        )
+        response = self.post(f"{self.url}/api/chat", {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+            "think": False,
+            "format": _ollama_response_schema(),
+            "options": {"temperature": 0},
+        }, self.timeout)
         try:
-            import anthropic
-        except ImportError:
-            return HeuristicRubricGrader()
-        return LLMRubricGrader(client=anthropic.Anthropic(api_key=api_key))
+            entries = json.loads(response["message"]["content"])["criteria"]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RuntimeError(f"Ollama response was not the expected JSON: {exc}") from exc
+
+        by_name = {e.get("name"): e for e in entries if isinstance(e, dict)}
+        results = []
+        for index, criterion in enumerate(criteria):
+            entry = by_name.get(criterion.name)
+            if entry is None and len(entries) == len(criteria) and isinstance(entries[index], dict):
+                entry = entries[index]  # model reworded the name; trust the order
+            if entry is None:
+                results.append(CriterionResult(
+                    name=criterion.name, score=0.0, max_points=criterion.max_points,
+                    justification="LLM did not return a score for this criterion",
+                ))
+                continue
+            try:
+                score = float(entry["score"])
+            except (KeyError, TypeError, ValueError):
+                score = 0.0
+            results.append(CriterionResult(
+                name=criterion.name,
+                score=max(0.0, min(score, criterion.max_points)),
+                max_points=criterion.max_points,
+                justification=str(entry.get("justification", "")),
+            ))
+        return GradingResult(criteria=results, grader=self.name)
+
+
+def _ollama_available(url: str = OLLAMA_URL, model: str = OLLAMA_MODEL) -> bool:
+    """True when the Ollama server answers and `model` is installed."""
+    try:
+        with urllib.request.urlopen(f"{url.rstrip('/')}/api/tags", timeout=2) as response:
+            installed = {m.get("name") for m in json.loads(response.read())["models"]}
+    except Exception:
+        return False
+    return model in installed or f"{model}:latest" in installed
+
+
+def build_default_grader() -> RubricGrader:
+    """Local Ollama model if reachable, else Claude if ANTHROPIC_API_KEY is
+    set and the anthropic package is importable, else the heuristic grader.
+    ``GRADER_BACKEND`` (ollama | claude | heuristic) forces one."""
+    backend = os.environ.get("GRADER_BACKEND", "auto").lower()
+    if backend == "heuristic":
+        return HeuristicRubricGrader()
+
+    if backend in ("auto", "ollama") and _ollama_available():
+        return OllamaRubricGrader()
+
+    if backend in ("auto", "claude"):
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if api_key:
+            try:
+                import anthropic
+            except ImportError:
+                return HeuristicRubricGrader()
+            return LLMRubricGrader(client=anthropic.Anthropic(api_key=api_key))
     return HeuristicRubricGrader()

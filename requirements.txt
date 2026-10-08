@@ -39,12 +39,15 @@ httpx>=0.27
 
 # --- Optional: real speech-to-text for the video pipeline
 # (app/evaluator/video_analysis.py's WhisperTranscriber). Needs network
-# access to download model weights on first use. Without it, the app
-# falls back to NullTranscriber (empty transcript) automatically.
+# access to download model weights on first use. Uses Whisper "small" on
+# CUDA when an NVIDIA GPU is available (needs the CUDA 12 cuBLAS/cuDNN
+# runtime), else CPU. Without it, the app falls back to NullTranscriber
+# (empty transcript) automatically.
 faster-whisper>=1.0
 
-# --- Optional: real LLM rubric grading
-# (app/evaluator/rubric_grading.py's LLMRubricGrader). Needs
-# ANTHROPIC_API_KEY set. Without it, the app falls back to
-# HeuristicRubricGrader automatically.
+# --- Optional: real LLM rubric grading (app/evaluator/rubric_grading.py).
+# Local: OllamaRubricGrader uses qwen3:4b via a running Ollama server
+# (install Ollama, then `ollama pull qwen3:4b`) -- no extra Python package.
+# Cloud: LLMRubricGrader needs ANTHROPIC_API_KEY set. With neither, the app
+# falls back to HeuristicRubricGrader automatically.
 anthropic>=0.34

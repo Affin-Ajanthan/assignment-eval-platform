@@ -18,6 +18,9 @@ sys.path.insert(0, str(ROOT))
 os.environ["SEMANTIC_SIMILARITY"] = "0"
 # Same for the sentence-embedding model behind cross-modal consistency.
 os.environ["CROSS_MODAL_SEMANTIC"] = "0"
+# Keep grading deterministic and offline: never call a local Ollama model
+# or the Claude API from the ordinary tests.
+os.environ["GRADER_BACKEND"] = "heuristic"
 # And the Fast-DetectGPT scoring model (reports fall back to the style heuristic).
 os.environ["AI_TEXT_DETECTION"] = "0"
 
