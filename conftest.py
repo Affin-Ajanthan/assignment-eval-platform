@@ -21,6 +21,8 @@ os.environ["CROSS_MODAL_SEMANTIC"] = "0"
 # Keep grading deterministic and offline: never call a local Ollama model
 # or the Claude API from the ordinary tests.
 os.environ["GRADER_BACKEND"] = "heuristic"
+# And the Fast-DetectGPT scoring model (reports fall back to the style heuristic).
+os.environ["AI_TEXT_DETECTION"] = "0"
 
 _portal_db = ROOT / "portal.db"
 if _portal_db.exists():

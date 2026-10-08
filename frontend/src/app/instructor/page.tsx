@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
   apiFetch,
   Assignment,
@@ -12,6 +12,8 @@ import {
 import { useRequireRole } from "@/lib/useRequireRole";
 import AccountBar from "@/components/AccountBar";
 import CrossModalConsistencyPanel from "@/components/CrossModalConsistencyPanel";
+import SubmissionFiles from "@/components/SubmissionFiles";
+import AISignalsPanel from "@/components/AISignalsPanel";
 import AssignmentsSection from "@/components/instructor/AssignmentsSection";
 import RubricsSection from "@/components/instructor/RubricsSection";
 import { formatDateTime, formatMark } from "@/lib/datetime";
@@ -40,6 +42,8 @@ export default function InstructorPage() {
 
   // Grading panel
   const [gradingSubmissionId, setGradingSubmissionId] = useState<number | null>(null);
+  // Which submission's uploaded files are expanded in the submissions table.
+  const [filesOpenFor, setFilesOpenFor] = useState<number | null>(null);
   const [gradingRubricId, setGradingRubricId] = useState<number | null>(null);
   const [criterionScores, setCriterionScores] = useState<Record<string, string>>({});
   const [gradingComments, setGradingComments] = useState("");
@@ -384,7 +388,8 @@ export default function InstructorPage() {
               </thead>
               <tbody>
                 {submissions.map((s) => (
-                  <tr key={s.id}>
+                  <Fragment key={s.id}>
+                  <tr>
                     <td className="border border-gray-200 px-3 py-1.5">
                       {s.student_name}
                       <br />
@@ -417,8 +422,25 @@ export default function InstructorPage() {
                       >
                         Auto-evaluate
                       </button>
+                      <button
+                        type="button"
+                        aria-expanded={filesOpenFor === s.id}
+                        onClick={() => setFilesOpenFor(filesOpenFor === s.id ? null : s.id)}
+                        className="rounded-md bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700"
+                      >
+                        {filesOpenFor === s.id ? "Hide files" : "Files"}
+                      </button>
                     </td>
                   </tr>
+                  {filesOpenFor === s.id && (
+                    <tr>
+                      <td colSpan={6} className="border border-gray-200 bg-white px-3 py-3">
+                        <p className="mb-2 text-sm font-semibold">Files submitted by {s.student_name}</p>
+                        <SubmissionFiles submissionId={s.id} />
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -485,6 +507,7 @@ export default function InstructorPage() {
                     </ul>
                   </div>
                   <CrossModalConsistencyPanel result={autoevalResult.cross_modal_consistency} />
+                  <AISignalsPanel result={autoevalResult} />
                   <table className="mt-3 w-full text-sm">
                     <thead>
                       <tr className="bg-gray-50 text-left">

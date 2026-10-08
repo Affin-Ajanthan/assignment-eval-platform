@@ -40,6 +40,7 @@ from typing import Annotated, Optional
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
@@ -69,6 +70,7 @@ from .evaluator.document_extraction import (
 )
 from .evaluator.pipeline import evaluate_submission as _run_pipeline
 from .evaluator.semantic_consistency import get_consistency_service
+from .evaluator.ai_text_detection import get_ai_text_detector
 from .evaluator.rubric_grading import Criterion as _EvalCriterion
 from .models import (
     Assignment,
@@ -98,7 +100,7 @@ Base.metadata.create_all(bind=engine)
 add_missing_columns("similarity_flags", {
     "semantic_similarity": "FLOAT", "flag_level": "VARCHAR", "flag_reason": "VARCHAR",
 })
-add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON"})
+add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON", "ai_signals": "JSON"})
 # Submissions made before assignments existed keep assignment_id NULL (and
 # their free-text assignment_name); nothing else about them changes.
 add_missing_columns("submissions", {"assignment_id": "INTEGER REFERENCES assignments(id)"})
@@ -357,6 +359,21 @@ class CrossModalConsistencyOut(BaseModel):
     report_extraction: Optional[ReportExtractionOut] = None
 
 
+class AISignalOut(BaseModel):
+    signal: str  # low | medium | high
+    score: int  # 0-100, higher = more AI-like
+    method: str  # e.g. "style-heuristic", "fast-detectgpt:Qwen2.5-0.5B"
+    reasons: list[str]
+
+
+class AISignalsOut(BaseModel):
+    """AI-content estimates for the report and the code. Review signals
+    only: they never change the suggested score. None = not assessed."""
+
+    report: Optional[AISignalOut] = None
+    code: Optional[AISignalOut] = None
+
+
 class AutoEvaluationOut(BaseModel):
     id: int
     submission_id: int
@@ -371,6 +388,7 @@ class AutoEvaluationOut(BaseModel):
     report_ai_signal: Optional[str]
     consistency_score: Optional[int]
     cross_modal_consistency: Optional[CrossModalConsistencyOut] = None
+    ai_signals: Optional[AISignalsOut] = None
     created_at: UTCDateTime
 
     model_config = ConfigDict(from_attributes=True)
@@ -430,6 +448,8 @@ async def _lifespan(_app: FastAPI):
     get_semantic_service().preload_in_background()
     # Same for the sentence-embedding model behind cross-modal consistency.
     get_consistency_service().preload_in_background()
+    # And the small language model behind the report AI-text signal.
+    get_ai_text_detector().preload_in_background()
     yield
 
 
@@ -1355,6 +1375,90 @@ def get_submission(submission_id: int, user: User = Depends(get_current_user), d
     return submission
 
 
+# ---- Submitted files (owning student, the subject's instructors, admins) ----
+#
+# Uploaded files are untrusted: they're only ever sent as downloads
+# (Content-Disposition: attachment, nosniff), and anything that a browser
+# could execute or render (HTML, SVG, JS, ...) is sent as text/plain.
+
+_SUBMISSION_KINDS = ("code", "report", "video")
+_SAFE_MEDIA_TYPES = {
+    ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".zip": "application/zip",
+    ".mp4": "video/mp4", ".m4v": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm",
+    ".mkv": "video/x-matroska", ".avi": "video/x-msvideo",
+}
+
+
+class SubmissionFileOut(BaseModel):
+    kind: str  # code | report | video
+    path: str  # relative to that part of the submission, "/"-separated
+    name: str
+    size: int
+
+
+def _viewable_submission(db: Session, user: User, submission_id: int) -> Submission:
+    submission = db.get(Submission, submission_id)
+    if not submission:
+        raise HTTPException(404, "Submission not found")
+    if not _can_view_submission(user, submission, db):
+        raise HTTPException(403, "You cannot view this submission")
+    return submission
+
+
+def _kind_root(submission: Submission, kind: str) -> Optional[Path]:
+    """The folder holding one part of a submission (code dir, or the folder
+    containing the single report/video file), or None if it wasn't submitted."""
+    rel = {"code": submission.code_path, "report": submission.report_path, "video": submission.video_path}.get(kind)
+    if not rel:
+        return None
+    path = BASE_DIR / rel
+    return path if kind == "code" else path.parent
+
+
+def _kind_files(submission: Submission, kind: str) -> list[Path]:
+    root = _kind_root(submission, kind)
+    if root is None or not root.is_dir():
+        return []
+    if kind == "code":
+        return sorted(p for p in root.rglob("*") if p.is_file())
+    stored = BASE_DIR / (submission.report_path if kind == "report" else submission.video_path)
+    return [stored] if stored.is_file() else []
+
+
+@app.get("/submissions/{submission_id}/files", response_model=list[SubmissionFileOut])
+def list_submission_files(submission_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    submission = _viewable_submission(db, user, submission_id)
+    out = []
+    for kind in _SUBMISSION_KINDS:
+        root = _kind_root(submission, kind)
+        for path in _kind_files(submission, kind):
+            out.append(SubmissionFileOut(kind=kind, path=path.relative_to(root).as_posix(), name=path.name,
+                                         size=path.stat().st_size))
+    return out
+
+
+@app.get("/submissions/{submission_id}/files/{kind}/{file_path:path}")
+def download_submission_file(
+    submission_id: int, kind: str, file_path: str,
+    user: User = Depends(get_current_user), db: Session = Depends(get_db),
+):
+    submission = _viewable_submission(db, user, submission_id)
+    if kind not in _SUBMISSION_KINDS:
+        raise HTTPException(404, "File not found")
+    root = _kind_root(submission, kind)
+    if root is None:
+        raise HTTPException(404, "File not found")
+    target = (root / file_path).resolve()
+    # Only files that belong to this part of this submission; never a path outside it.
+    if target not in {p.resolve() for p in _kind_files(submission, kind)}:
+        raise HTTPException(404, "File not found")
+    media_type = _SAFE_MEDIA_TYPES.get(target.suffix.lower(), "text/plain; charset=utf-8")
+    return FileResponse(target, media_type=media_type, filename=target.name,
+                        headers={"X-Content-Type-Options": "nosniff"})
+
+
 # ---- Manual grading ---------------------------------------------------------
 
 @app.post("/submissions/{submission_id}/grade", response_model=GradeOut)
@@ -1527,6 +1631,11 @@ def check_similarity(
 
 # ---- Automated multi-modal evaluation --------------------------
 
+def _ai_signal_dict(result, method: Optional[str] = None) -> dict:
+    return {"signal": result.signal, "score": result.score,
+            "method": method or getattr(result, "method", "style-heuristic"), "reasons": list(result.reasons)}
+
+
 @app.post("/submissions/{submission_id}/auto-evaluate", response_model=AutoEvaluationOut)
 def auto_evaluate(
     submission_id: int, payload: AutoEvaluateIn, instructor: User = Depends(require_instructor), db: Session = Depends(get_db)
@@ -1550,6 +1659,7 @@ def auto_evaluate(
     video_path = video_path if video_path and video_path.is_file() else None
 
     code_ai_flagged = False
+    code_ai = None
     if code_dir:
         combined_source = "\n".join(
             p.read_text(encoding="utf-8", errors="ignore")
@@ -1557,7 +1667,8 @@ def auto_evaluate(
             if p.is_file() and p.suffix.lower() in _CODE_EXTENSIONS
         )
         if combined_source.strip():
-            code_ai_flagged = _score_ai_code(str(submission_id), combined_source).signal == "high"
+            code_ai = _score_ai_code(str(submission_id), combined_source)
+            code_ai_flagged = code_ai.signal == "high"
 
     flags = (
         db.query(SimilarityFlag)
@@ -1613,6 +1724,10 @@ def auto_evaluate(
         cross_modal_consistency=(
             result.semantic_consistency.to_dict() if result.semantic_consistency else None
         ),
+        ai_signals={
+            "report": _ai_signal_dict(result.report_analysis.ai_text) if result.report_analysis else None,
+            "code": _ai_signal_dict(code_ai, method="style-heuristic") if code_ai else None,
+        },
     )
     db.add(auto_eval)
     db.commit()

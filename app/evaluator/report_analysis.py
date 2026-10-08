@@ -114,6 +114,9 @@ class TextHeuristicScore:
     score: int  # 0-100, higher = more AI-like signal
     signal: str  # "low" | "medium" | "high"
     reasons: list[str] = field(default_factory=list)
+    # "style-heuristic" (score_text below) or "fast-detectgpt:<model>"
+    # (ai_text_detection.py, used when its model is available).
+    method: str = "style-heuristic"
 
 
 def score_text(text: str) -> TextHeuristicScore:
@@ -221,10 +224,19 @@ class ReportAnalysis:
     image_check: ImageCheckResult
 
 
+def ai_text_signal(text: str) -> TextHeuristicScore:
+    """Fast-DetectGPT (ai_text_detection.py) when its local model is
+    available; the style heuristic above otherwise."""
+    from .ai_text_detection import get_ai_text_detector, to_score
+
+    result = get_ai_text_detector().detect(text)
+    return to_score(result) if result is not None else score_text(text)
+
+
 def analyze_report(path: Path) -> ReportAnalysis:
     content = extract_report(path)
     return ReportAnalysis(
         content=content,
-        ai_text=score_text(content.text),
+        ai_text=ai_text_signal(content.text),
         image_check=check_images(content),
     )

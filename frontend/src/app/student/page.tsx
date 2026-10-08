@@ -7,6 +7,7 @@ import { formatDateTime, formatMark } from "@/lib/datetime";
 import AccountBar from "@/components/AccountBar";
 import Message, { MessageState } from "@/components/Message";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
+import SubmissionFiles from "@/components/SubmissionFiles";
 
 const fileInput = "mt-1 mb-3 block w-full text-sm";
 const CODE_ACCEPT = ".zip,.py,.java,.js,.ts,.jsx,.tsx,.c,.cpp,.h,.hpp,.cs,.go,.rb,.kt,.swift,.php,.rs";
@@ -63,8 +64,12 @@ function UploadForm({
 
   return (
     <form onSubmit={handleSubmit} className="mt-4 rounded-md border border-gray-200 p-4">
-      {mode === "edit" && (
-        <p className="mb-3 text-sm text-gray-600">Choose only the files you want to replace; the others are kept.</p>
+      {mode === "edit" && assignment.my_submission && (
+        <div className="mb-4">
+          <p className="mb-2 text-sm font-semibold">Currently submitted files</p>
+          <SubmissionFiles submissionId={assignment.my_submission.id} />
+          <p className="mt-3 text-sm text-gray-600">Choose only the files you want to replace; the others are kept.</p>
+        </div>
       )}
       <label className="block text-sm font-semibold" htmlFor={id("code")}>
         Code (zip or single file)

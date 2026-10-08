@@ -271,6 +271,35 @@ MKV, WEBM or M4V (1 GB). Filenames are reduced to a safe
 base name, so nothing can be written outside `uploads/<id>/`, and a
 rejected upload leaves no files behind.
 
+### Report AI-text signal (Fast-DetectGPT)
+
+`app/evaluator/ai_text_detection.py` can estimate whether report text looks
+machine-generated using Fast-DetectGPT (Bao et al., ICLR 2024) with a
+small local language model, `Qwen/Qwen2.5-0.5B` by default (about 1 GB,
+downloaded once, CPU-only). **It is off by default**: on a small
+calibration sample it did no better than the style heuristic (AI and
+human scores overlapped heavily), so the heuristic remains the default.
+Set `AI_TEXT_DETECTION=1` to try it, ideally against real student reports.
+
+- A language model scores how "expected" each word is. AI-written text
+  keeps choosing the model's most likely words; human text is spikier.
+  The resulting "curvature" is about 0 for human-like text and higher for
+  machine-like text.
+- The report is scored in 256-token chunks (at most 8, spread across the
+  whole report) and averaged, so long reports aren't penalised for length.
+  Reports under ~120 tokens are reported as too short to judge.
+- Bands: below `AI_TEXT_MEDIUM` (1.0) is low, below `AI_TEXT_HIGH` (2.0)
+  medium, above that high. **These are prototype values and haven't been
+  validated on real student reports.**
+- If the model is off or can't be loaded, the style heuristic is used.
+  `AI_TEXT_DETECTOR_MODEL` selects a different (ideally base, not
+  instruction-tuned) model.
+
+**This is a review signal, never proof.** AI-text detectors misfire,
+notably on formal, template-like and non-native English writing, and are
+easily defeated by light editing. AI-content signals (for reports and
+code) only add review flags: they never lower the suggested score.
+
 ## Design principle: pluggable, honest defaults
 
 Two stages in the plan assume a paid API or a downloaded ML model:
