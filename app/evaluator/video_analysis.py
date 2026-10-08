@@ -7,10 +7,17 @@ Transcription is pluggable behind the ``Transcriber`` interface:
 - ``NullTranscriber`` (default fallback): returns an empty transcript.
   Keeps the rest of the pipeline runnable with zero setup.
 - ``WhisperTranscriber``: real speech-to-text via ``faster-whisper``
-  (CTranslate2, CPU-friendly, no torch required). Downloads its model
+  (CTranslate2, no torch required). Uses the Whisper ``small`` model on
+  CUDA (float16) when an NVIDIA GPU is available, and falls back to CPU
+  (int8) otherwise or if the GPU fails to load. Downloads its model
   from Hugging Face on first use, so it needs outbound network access
   to huggingface.co -- not available in every sandboxed environment,
   but this is real, working code for a normal deployment.
+
+If transcription fails for any reason (model download blocked, GPU error),
+``analyze_video`` keeps going with an empty transcript (backend ``null``,
+reason in ``TranscriptionResult.error``) so the pipeline never crashes on
+the speech-to-text stage.
 
 Frame analysis (scene changes + a screen-recording likelihood score)
 uses OpenCV frame-differencing and needs no network access or model
@@ -35,6 +42,7 @@ class TranscriptionResult:
     text: str
     segments: list[dict]
     backend: str
+    error: str = ""  # set when transcription failed and the text is empty
 
 
 class Transcriber(ABC):
@@ -52,15 +60,30 @@ class NullTranscriber(Transcriber):
         return TranscriptionResult(text="", segments=[], backend="null")
 
 
+def _cuda_available() -> bool:
+    try:
+        import ctranslate2
+        return ctranslate2.get_cuda_device_count() > 0
+    except Exception:
+        return False
+
+
 class WhisperTranscriber(Transcriber):
     """Real speech-to-text via faster-whisper. Requires the
     `faster-whisper` package and, on first use, network access to
-    download the model weights from Hugging Face."""
+    download the model weights from Hugging Face.
 
-    def __init__(self, model_size: str = "tiny", device: str = "cpu", compute_type: str = "int8"):
+    Defaults to the `small` model. ``device="auto"`` runs on CUDA
+    (float16) when a GPU is available and on CPU (int8) otherwise; if
+    the GPU run fails (e.g. missing CUDA libraries), it retries once on
+    CPU instead of failing the transcription."""
+
+    def __init__(self, model_size: str = "small", device: str = "auto", compute_type: str | None = None):
+        if device == "auto":
+            device = "cuda" if _cuda_available() else "cpu"
         self.model_size = model_size
         self.device = device
-        self.compute_type = compute_type
+        self.compute_type = compute_type or ("float16" if device == "cuda" else "int8")
         self._model = None
 
     def _load(self):
@@ -69,12 +92,24 @@ class WhisperTranscriber(Transcriber):
             self._model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
         return self._model
 
+    def _fall_back_to_cpu(self) -> None:
+        self.device, self.compute_type, self._model = "cpu", "int8", None
+
     def transcribe(self, video_path: Path) -> TranscriptionResult:
-        model = self._load()
-        segments, _info = model.transcribe(str(video_path))
-        segs = [{"start": s.start, "end": s.end, "text": s.text.strip()} for s in segments]
+        try:
+            segments, _info = self._load().transcribe(str(video_path))
+            segs = [{"start": s.start, "end": s.end, "text": s.text.strip()} for s in segments]
+        except Exception:
+            if self.device != "cuda":
+                raise
+            self._fall_back_to_cpu()
+            segments, _info = self._load().transcribe(str(video_path))
+            segs = [{"start": s.start, "end": s.end, "text": s.text.strip()} for s in segments]
         text = " ".join(s["text"] for s in segs)
-        return TranscriptionResult(text=text, segments=segs, backend=f"faster-whisper-{self.model_size}")
+        return TranscriptionResult(
+            text=text, segments=segs,
+            backend=f"faster-whisper-{self.model_size}-{self.device}",
+        )
 
 
 def build_default_transcriber() -> Transcriber:
@@ -183,7 +218,13 @@ class VideoAnalysis:
 
 def analyze_video(video_path: Path, transcriber: Transcriber | None = None) -> VideoAnalysis:
     transcriber = transcriber or build_default_transcriber()
-    return VideoAnalysis(
-        transcript=transcriber.transcribe(video_path),
-        frames=analyze_frames(video_path),
-    )
+    try:
+        transcript = transcriber.transcribe(video_path)
+    except Exception as exc:  # e.g. model download failed offline, GPU/driver error
+        # Never let speech-to-text take down the evaluation: carry on with an
+        # empty transcript and the frame analysis, and keep the reason.
+        transcript = TranscriptionResult(
+            text="", segments=[], backend="null",
+            error=f"{exc.__class__.__name__}: {exc}"[:200],
+        )
+    return VideoAnalysis(transcript=transcript, frames=analyze_frames(video_path))

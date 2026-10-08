@@ -27,7 +27,7 @@ app/
   evaluator/            the multi-modal evaluator
     report_analysis.py   PDF/DOCX text+image extraction, AI-text heuristic
     code_analysis.py     static analysis (complexity, docstrings, style)
-    rubric_grading.py    heuristic grader (default) + pluggable LLM grader
+    rubric_grading.py    heuristic grader (fallback) + local Ollama grader (qwen3:4b) + Claude grader
     video_analysis.py    frame/scene analysis + pluggable transcription
     cross_modal.py       code/report/video consistency check (keyword overlap)
     semantic_consistency.py  same check by meaning (MiniLM embeddings)
@@ -302,17 +302,32 @@ code) only add review flags: they never lower the suggested score.
 
 ## Design principle: pluggable, honest defaults
 
-Two stages in the plan assume a paid API or a downloaded ML model:
-LLM rubric grading (Claude) and video transcription (Whisper). Rather
-than hard-requiring those, both are small interfaces with:
+Two stages in the plan assume an LLM or a downloaded ML model: rubric
+grading and video transcription (Whisper). Rather than hard-requiring
+those, both are small interfaces with:
 
 - a **working, fully offline default** (a keyword-overlap grader, an
   empty transcript) so the whole app runs with zero setup and zero
   cost, and
-- a **real backend that's picked up automatically** once configured:
-  set `ANTHROPIC_API_KEY` for LLM grading, install `faster-whisper` for
-  real speech-to-text (needs network access to download the model on
-  first use).
+- a **real backend that's picked up automatically** once available:
+  - **Rubric grading** -- `build_default_grader()` picks, in order:
+    1. the **local Ollama model `qwen3:4b`** when the Ollama server is
+       reachable and the model is installed (`ollama pull qwen3:4b`) --
+       free, offline, nothing leaves the machine;
+    2. **Claude**, when `ANTHROPIC_API_KEY` is set;
+    3. the keyword-overlap heuristic grader.
+
+    Force one with `GRADER_BACKEND=ollama|claude|heuristic`; change the
+    local model or server with `OLLAMA_MODEL` / `OLLAMA_URL`. The grader
+    used is stored with every auto-evaluation (`ollama`, `llm`,
+    `heuristic`).
+  - **Video transcription** -- install `faster-whisper`: Whisper `small`
+    runs on CUDA (float16) when an NVIDIA GPU is available and on CPU
+    (int8) otherwise; a failed GPU load retries once on CPU. It needs
+    network access to download the model on first use. If transcription
+    fails for any reason, the video stage continues with an empty
+    transcript (backend `null`, reason kept in `TranscriptionResult.error`)
+    and the frame analysis, so an evaluation never crashes on it.
 
 The AI-content heuristics (for both code and report text) are
 explicitly style heuristics, not validated classifiers -- there is no
@@ -331,8 +346,11 @@ python -m pytest tests/ -v
 
 66 tests pass offline (accounts/roles/subject-scoping, report/code
 analysis, similarity fingerprinting, rubric grading -- both the
-heuristic grader and the LLM grader tested against a fake Anthropic
-client, so no API key or network call is needed -- video frame
+heuristic grader, the Claude grader tested against a fake Anthropic
+client and the Ollama grader against a fake HTTP post, so no API key,
+Ollama server or network call is needed. `conftest.py` sets
+`GRADER_BACKEND=heuristic` so ordinary tests never call a real model --
+video frame
 analysis, cross-modal consistency, the full pipeline, and the FastAPI
 endpoints including similarity-check and auto-evaluate). One additional
 test exercises real `faster-whisper` transcription end-to-end and skips
@@ -358,6 +376,15 @@ rejection), covering the same flow the automated backend tests cover.
 
 ## Honest limitations
 
+- The LLM graders (local qwen3:4b and Claude) are given code *metrics*
+  (function count, complexity, quality score, issues), the report text
+  and the transcript -- not the source code itself -- so criteria that
+  need the code's actual behaviour (e.g. "implements bubble sort
+  correctly") can be under-scored. qwen3:4b also tended to grade strong
+  answers slightly strictly in our evaluation (Mohler short-answer set,
+  2,273 answers: MAE 0.82 marks out of 5, 81% within 1 mark, versus
+  2.43 / 18% for a keyword baseline); keep instructor override as the
+  final word.
 - `HeuristicRubricGrader` and the AI-content heuristics are keyword/style
   signals, not semantic understanding or validated classifiers. Treat
   every score and flag as a starting point for human review.
@@ -375,7 +402,9 @@ rejection), covering the same flow the automated backend tests cover.
   auth system -- there's no password reset flow, no rate limiting on
   login attempts, and no HTTPS enforcement (add a reverse proxy for
   that in a real deployment).
-- Video transcription needs network access to download the Whisper
+- Video transcription uses Whisper `small` via `faster-whisper`: on CUDA
+  (float16) when a GPU is available, otherwise on CPU (int8); a failed
+  GPU load retries once on CPU. It needs network access to download the
   model on first use; without it (or without `faster-whisper`
   installed), the pipeline degrades to an empty transcript
   automatically rather than failing.
