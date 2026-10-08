@@ -4,3 +4,6 @@ uploads/*
 __pycache__/
 .pytest_cache/
 *.pyc
+
+
+eval/
