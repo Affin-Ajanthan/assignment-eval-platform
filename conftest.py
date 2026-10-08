@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -10,6 +11,16 @@ sys.path.insert(0, str(ROOT))
 # live UI walkthrough) would otherwise make account-creation tests
 # fail with "already exists" errors that have nothing to do with the
 # code under test.
+# Keep the default UniXcoder service off for the test session so the
+# ordinary API tests never download or load a ~500 MB model. Tests that
+# exercise semantic similarity inject their own service (a fake encoder,
+# or the real model in tests marked `slow`).
+os.environ["SEMANTIC_SIMILARITY"] = "0"
+# Same for the sentence-embedding model behind cross-modal consistency.
+os.environ["CROSS_MODAL_SEMANTIC"] = "0"
+# And the Fast-DetectGPT scoring model (reports fall back to the style heuristic).
+os.environ["AI_TEXT_DETECTION"] = "0"
+
 _portal_db = ROOT / "portal.db"
 if _portal_db.exists():
     _portal_db.unlink()
@@ -19,6 +30,12 @@ if _portal_db.exists():
 # `TestClient(app)` (the pattern every test module uses) does not run
 # FastAPI's startup lifecycle unless used as a context manager, so the
 # tests bootstrap explicitly here instead of depending on that.
+import app.auth  # noqa: E402
+
+# Password hashing is deliberately slow (260k PBKDF2 rounds); tests create
+# hundreds of throwaway accounts, so use a cheap setting for this session only.
+app.auth.PBKDF2_ITERATIONS = 1_000
+
 import app.main  # noqa: E402  (import after sys.path setup above; also creates the tables)
 from app.auth import bootstrap_admin  # noqa: E402
 from app.db import SessionLocal  # noqa: E402

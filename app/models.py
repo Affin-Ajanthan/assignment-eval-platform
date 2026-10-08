@@ -123,13 +123,49 @@ class AuthSession(Base):
 # Assignments + grading
 # --------------------------------------------------------------------------
 
+class Assignment(Base):
+    """One piece of coursework in a subject: what students see and submit to.
+
+    Times are stored as naive UTC (like every other timestamp here) and the
+    submission window -- ``available_from <= now <= deadline`` -- is enforced
+    by the API, not just the UI. Deleting an assignment never deletes
+    submissions: they keep their ``assignment_name`` and are detached."""
+
+    __tablename__ = "assignments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=False, default="")
+    available_from = Column(DateTime, nullable=False)
+    deadline = Column(DateTime, nullable=False)
+    rubric_id = Column(Integer, ForeignKey("rubrics.id"), nullable=True)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    subject = relationship("Subject")
+    rubric = relationship("Rubric")
+
+    def status_at(self, now: datetime) -> str:
+        """'upcoming' | 'open' | 'closed' for a naive-UTC ``now``."""
+        if now < self.available_from:
+            return "upcoming"
+        if now > self.deadline:
+            return "closed"
+        return "open"
+
+
 class Rubric(Base):
     __tablename__ = "rubrics"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=False)
-    # criteria: [{"name": str, "description": str, "max_points": float}, ...]
+    # One rubric holds ALL its criteria:
+    # [{"id": int, "name": str, "description": str, "max_points": float}, ...]
+    # `id` is stable within the rubric (used by the per-criterion endpoints);
+    # grades key their scores by criterion `name`.
     criteria = Column(JSON, nullable=False)
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=_utcnow)
@@ -152,16 +188,36 @@ class Submission(Base):
     id = Column(Integer, primary_key=True, index=True)
     student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=False)
+    # Kept on every submission (and kept in sync on rename) so legacy
+    # submissions made before assignments existed, and submissions to a
+    # deleted assignment, still show which assignment they were for.
     assignment_name = Column(String, nullable=False)
+    assignment_id = Column(Integer, ForeignKey("assignments.id"), nullable=True, index=True)
     code_path = Column(String, nullable=True)
     report_path = Column(String, nullable=True)
     video_path = Column(String, nullable=True)
     submitted_at = Column(DateTime, default=_utcnow)
     status = Column(String, default="submitted")  # submitted | graded
 
-    grades = relationship("Grade", back_populates="submission")
+    # Oldest first; re-grading adds a row, so the last one is the current grade.
+    grades = relationship("Grade", back_populates="submission", order_by="Grade.id")
     student = relationship("User")
     subject = relationship("Subject")
+    assignment = relationship("Assignment")
+
+    @property
+    def latest_grade(self) -> "Grade | None":
+        return self.grades[-1] if self.grades else None
+
+    @property
+    def final_mark(self) -> float | None:
+        grade = self.latest_grade
+        return grade.total_score if grade else None
+
+    @property
+    def max_mark(self) -> float | None:
+        grade = self.latest_grade
+        return grade.rubric.max_total if grade and grade.rubric else None
 
     @property
     def student_name(self) -> str:
@@ -208,6 +264,12 @@ class SimilarityFlag(Base):
     submission_b_id = Column(Integer, ForeignKey("submissions.id"), nullable=False)
     jaccard = Column(Float, nullable=False)
     containment = Column(Float, nullable=False)
+    # UniXcoder score; NULL when semantic analysis didn't run for this pair.
+    semantic_similarity = Column(Float, nullable=True)
+    # "high" = token/fingerprint overlap, "review" = semantic signal only.
+    # NULL on rows written before semantic analysis existed (token-based).
+    flag_level = Column(String, nullable=True)
+    flag_reason = Column(String, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
 
 
@@ -231,4 +293,10 @@ class AutoEvaluation(Base):
     code_ai_flagged = Column(Boolean, default=False)
     report_ai_signal = Column(String, nullable=True)  # "low" | "medium" | "high"
     consistency_score = Column(Integer, nullable=True)
+    # Cross-modal SEMANTIC consistency (app/evaluator/semantic_consistency.py):
+    # {"code_report", "code_transcript", "report_transcript", "overall",
+    #  "status", "reason", ...}; scores are null when not evaluated.
+    cross_modal_consistency = Column(JSON, nullable=True)
+    # {"report": {signal, score, method, reasons} | null, "code": {...} | null}
+    ai_signals = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=_utcnow)

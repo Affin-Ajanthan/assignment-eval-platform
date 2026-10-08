@@ -22,13 +22,15 @@ app/
   similarity/           offline code-similarity detection
     core.py             tokenize -> normalize -> k-gram winnowing fingerprints
     ai_heuristics.py     experimental AI-generated-code style heuristic
+    semantic.py          UniXcoder semantic similarity (extra review signal)
     cli.py               standalone CLI: python -m app.similarity.cli check <dir>
   evaluator/            the multi-modal evaluator
     report_analysis.py   PDF/DOCX text+image extraction, AI-text heuristic
     code_analysis.py     static analysis (complexity, docstrings, style)
     rubric_grading.py    heuristic grader (default) + pluggable LLM grader
     video_analysis.py    frame/scene analysis + pluggable transcription
-    cross_modal.py       code/report/video consistency check
+    cross_modal.py       code/report/video consistency check (keyword overlap)
+    semantic_consistency.py  same check by meaning (MiniLM embeddings)
     pipeline.py           aggregates every stage into one graded result
 frontend/               Next.js 16 / React 19 / TypeScript / Tailwind app
   src/app/login/          single login page, redirects by role
@@ -124,7 +126,8 @@ logged in.
    `POST /subjects/{id}/assignments/{name}/check-similarity`, which
    fingerprints every code submission for that assignment within that
    subject and flags likely copies (stored in the `similarity_flags`
-   table).
+   table). It also adds a semantic-similarity signal -- see
+   "Semantic code similarity" below.
 5. **Auto-evaluate**: for one submission, `POST
    /submissions/{id}/auto-evaluate` runs the full pipeline --
    static analysis, AI-text/AI-code heuristics, video frame analysis
@@ -142,6 +145,160 @@ logged in.
 Every one of these endpoints is scoped: an instructor can only act on
 subjects an admin assigned them to, and a student can only submit to
 and see their own work in subjects they're enrolled in.
+
+### Semantic code similarity (UniXcoder)
+
+Winnowing fingerprints (Jaccard + containment) catch literal and
+renamed copies, but a copy that's been rewritten -- functions
+reordered, loops restructured -- can share few k-grams with its
+source. `app/similarity/semantic.py` adds Microsoft's
+`microsoft/unixcoder-base` as an extra signal:
+
+- Each submission's code is normalized (comments stripped,
+  identifiers anonymized), split into overlapping 512-token chunks
+  (long files are covered in full, not truncated), and embedded
+  **once** -- not once per pair. Embeddings are cached by content, so
+  re-running a check never re-encodes an unchanged submission.
+- Model inference only runs for submissions that appear in at least
+  one pair the token check didn't already flag. Pair scores are
+  cosine similarities between stored chunk vectors (order-independent
+  best-match), so 50 students = at most 50 encodes for 1,225 pairs
+  (about 10 s on CPU after a ~12 s one-time model load).
+- A pair the token check didn't flag gets a **"review"** flag when its
+  semantic score is at least 0.80 *and* clearly above the rest of
+  the cohort (median + 2 robust standard deviations). Token-based flags stay
+  the only **"high"** ones, and a semantic-only flag never caps a score
+  in auto-evaluation -- it's shown as "potential similarity detected
+  -- lecturer review recommended".
+
+The model (~500 MB) downloads once on first use (it's preloaded in
+the background at startup) and is cached by Hugging Face afterwards.
+If it can't be loaded or inference fails, the check still returns the
+fingerprint/Jaccard/containment results with a warning. Set
+`SEMANTIC_SIMILARITY=0` to turn it off.
+
+Thresholds were calibrated by hand on a small sample (renamed or
+restructured copies scored 0.82-0.91; five independently written
+solutions to the same task scored up to 0.78), so check them against
+a real cohort before relying on them.
+
+### Cross-modal semantic consistency (MiniLM)
+
+Cross-modal semantic consistency uses a local sentence-embedding model
+to compare the meaning of the student's code documentation, written
+report, and video transcript. It helps identify whether the submitted
+components describe related content. The result is a review signal and
+is not evidence of plagiarism or academic misconduct by itself.
+
+Similar wording is not required for a high semantic score because the
+model compares semantic representations rather than simple keyword
+overlap.
+
+- **Model:** `sentence-transformers/all-MiniLM-L6-v2` (~90 MB, runs
+  locally on CPU, downloaded once and cached). Loaded once per process
+  -- preloaded in the background at startup -- and shared by every
+  evaluation (`app/evaluator/semantic_consistency.py`).
+- **Inputs:** code *documentation* only (docstrings and comments from
+  Python, Java, C/C++, JS/TS and similar; tool directives, licence
+  headers and commented-out code are dropped), the report text the
+  existing PDF/DOCX extractor already produced, and the transcript the
+  video stage already produced (nothing is transcribed twice).
+- **Long documents** are split into sentence-aligned chunks of about
+  120 words. Every chunk is embedded and averaged into one vector, so
+  the whole report or transcript counts, not just its beginning. Chunk
+  embeddings are cached by content hash.
+- **Scores:** cosine similarity for Code ↔ Report, Code ↔ Transcript
+  and Report ↔ Transcript; the overall score averages only the pairs
+  that could be computed. A missing component is reported as
+  unavailable (`null` in the API, "—" in the UI) -- never as 0% -- and
+  never causes a flag by itself.
+- **Status:** `consistent`, `review_recommended` (overall below the
+  threshold), `limited_data` (fewer than three components), or
+  `unavailable` / `disabled`. "Review recommended" adds a review flag
+  but never changes any score.
+- **Configuration:** `CROSS_MODAL_SEMANTIC=0` disables it;
+  `CROSS_MODAL_CONSISTENCY_THRESHOLD` (default `0.50`) sets the review
+  threshold. **The 0.50 default is a prototype value that has not been
+  validated on real student submissions.** On the hand-written samples
+  in `tests/consistency_samples.py`, matching components scored
+  0.66-0.89 and unrelated ones about 0.0, but a handful of samples is
+  not validation.
+- If the model can't be loaded or embedding fails, the evaluation
+  still completes; this section reports itself as unavailable with a
+  warning and produces no score.
+
+The older keyword-overlap check (`app/evaluator/cross_modal.py`,
+`consistency_score`) is unchanged and still runs alongside it.
+
+#### Report text: Microsoft MarkItDown
+
+The report text used for this comparison is extracted with
+[Microsoft MarkItDown](https://github.com/microsoft/markitdown)
+(`app/evaluator/document_extraction.py`):
+
+```
+PDF / DOCX -> MarkItDown -> Markdown -> plain text -> chunks -> all-MiniLM-L6-v2
+```
+
+- MarkItDown only converts documents. It doesn't grade, compare or
+  judge anything, and it doesn't replace MiniLM or UniXcoder.
+- Extraction runs automatically in the background right after a student
+  submits; the student sees nothing of it. The text is stored next to the
+  upload (`uploads/<id>/report_extracted.md` + `report_extraction.json`)
+  and reused by auto-evaluate, which extracts on demand for submissions
+  made before this existed.
+- Only MarkItDown's PDF and DOCX converters are enabled (no plugins, no
+  LLM, no cloud service), so conversion is local and offline. With
+  every built-in converter enabled, MarkItDown would fall back to its
+  plain-text converter for a corrupted PDF and return the raw bytes as
+  "text".
+- If extraction fails (corrupted, empty or scanned-only document, or
+  over the `REPORT_EXTRACTION_TIMEOUT` of 60 s), the report is marked
+  unavailable for this comparison and the instructor sees why. Everything else
+  -- grading, code similarity, video, the other comparisons -- still runs.
+- The existing report analysis (AI-text heuristic, figure/image check,
+  the text the rubric grader sees) keeps its own PyMuPDF/python-docx
+  extraction, so grading is unchanged.
+
+#### Upload validation
+
+Uploads are treated as untrusted. The code must be a `.zip` or a single
+source file (50 MB; a zip may unpack to at most 200 MB / 5,000 entries,
+and entries pointing outside the submission are skipped). The report
+must be a real PDF or DOCX (checked by content, not just extension;
+`REPORT_MAX_BYTES`, default 25 MB). The video must be MP4, MOV, AVI,
+MKV, WEBM or M4V (1 GB). Filenames are reduced to a safe
+base name, so nothing can be written outside `uploads/<id>/`, and a
+rejected upload leaves no files behind.
+
+### Report AI-text signal (Fast-DetectGPT)
+
+`app/evaluator/ai_text_detection.py` can estimate whether report text looks
+machine-generated using Fast-DetectGPT (Bao et al., ICLR 2024) with a
+small local language model, `Qwen/Qwen2.5-0.5B` by default (about 1 GB,
+downloaded once, CPU-only). **It is off by default**: on a small
+calibration sample it did no better than the style heuristic (AI and
+human scores overlapped heavily), so the heuristic remains the default.
+Set `AI_TEXT_DETECTION=1` to try it, ideally against real student reports.
+
+- A language model scores how "expected" each word is. AI-written text
+  keeps choosing the model's most likely words; human text is spikier.
+  The resulting "curvature" is about 0 for human-like text and higher for
+  machine-like text.
+- The report is scored in 256-token chunks (at most 8, spread across the
+  whole report) and averaged, so long reports aren't penalised for length.
+  Reports under ~120 tokens are reported as too short to judge.
+- Bands: below `AI_TEXT_MEDIUM` (1.0) is low, below `AI_TEXT_HIGH` (2.0)
+  medium, above that high. **These are prototype values and haven't been
+  validated on real student reports.**
+- If the model is off or can't be loaded, the style heuristic is used.
+  `AI_TEXT_DETECTOR_MODEL` selects a different (ideally base, not
+  instruction-tuned) model.
+
+**This is a review signal, never proof.** AI-text detectors misfire,
+notably on formal, template-like and non-native English writing, and are
+easily defeated by light editing. AI-content signals (for reports and
+code) only add review flags: they never lower the suggested score.
 
 ## Design principle: pluggable, honest defaults
 

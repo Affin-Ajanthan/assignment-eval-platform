@@ -202,10 +202,20 @@ class PairResult:
     jaccard: float
     containment: float
     shared_fingerprints: int
+    # Optional extra signal filled in by semantic.apply_semantic_signal;
+    # None means semantic analysis wasn't run (or was unavailable) for
+    # this pair, in which case the flag is the token-based one alone.
+    semantic_similarity: float | None = None
+    flag_level: str | None = None  # "high" (token overlap) | "review" (semantic only) | None
+    flag_reason: str | None = None
+
+    @property
+    def token_flagged(self) -> bool:
+        return self.jaccard >= 0.6 or self.containment >= 0.75
 
     @property
     def flagged(self) -> bool:
-        return self.jaccard >= 0.6 or self.containment >= 0.75
+        return self.token_flagged or self.flag_level is not None
 
 
 def compare_all(fingerprints: dict[str, Fingerprint]) -> list[PairResult]:

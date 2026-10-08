@@ -14,7 +14,10 @@ Implements the remaining pieces of the platform plan beyond Phase 1
 - ``video_analysis`` -- transcribe a presentation video and analyze its
   frames for scene changes / screen-recording likelihood (Phase 4).
 - ``cross_modal`` -- check whether the code, report and video all
-  describe the same actual application (Phase 5).
+  describe the same actual application (Phase 5), by vocabulary overlap.
+- ``semantic_consistency`` -- the same question by meaning: compares
+  code documentation, report and transcript with a local
+  sentence-embedding model (a review signal only).
 - ``pipeline`` -- ties every stage together into one aggregated grade
   with review flags, mirroring the plan's pipeline diagram.
 
