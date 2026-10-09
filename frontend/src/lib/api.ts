@@ -153,6 +153,28 @@ export interface SemanticSummary {
   review_threshold: number | null;
 }
 
+export interface BatchEvaluationItem {
+  submission_id: number;
+  student_name: string;
+  status: "evaluated" | "skipped" | "failed";
+  recommended_score: number | null;
+  recommended_max: number | null;
+  grader: string | null;
+  review_flags: string[];
+  error: string | null;
+}
+
+export interface BatchEvaluationResult {
+  subject_id: number;
+  assignment_name: string;
+  rubric_id: number;
+  total: number;
+  evaluated: number;
+  skipped: number;
+  failed: number;
+  results: BatchEvaluationItem[];
+}
+
 export interface SimilarityCheckResult {
   subject_id: number;
   assignment_name: string;
