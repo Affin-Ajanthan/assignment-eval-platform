@@ -15,6 +15,7 @@ import CrossModalConsistencyPanel from "@/components/CrossModalConsistencyPanel"
 import SubmissionFiles from "@/components/SubmissionFiles";
 import AISignalsPanel from "@/components/AISignalsPanel";
 import AssignmentsSection from "@/components/instructor/AssignmentsSection";
+import BatchEvaluateSection from "@/components/instructor/BatchEvaluateSection";
 import RubricsSection from "@/components/instructor/RubricsSection";
 import { formatDateTime, formatMark } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
@@ -371,6 +372,16 @@ export default function InstructorPage() {
               </>
             )}
           </section>
+
+          {/* Evaluate a whole assignment */}
+          {subjectId !== null && (
+            <BatchEvaluateSection
+              subjectId={subjectId}
+              assignmentNames={assignmentNames}
+              assignments={assignments}
+              rubrics={rubrics}
+            />
+          )}
 
           {/* Submissions */}
           <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
