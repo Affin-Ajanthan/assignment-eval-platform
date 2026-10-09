@@ -135,6 +135,15 @@ logged in.
    against the chosen rubric, folding in the similarity flag from step
    4. The result (recommended score, review flags, per-criterion
    breakdown) is stored and shown on the dashboard.
+   **Whole assignment at once**: `POST
+   /subjects/{id}/assignments/{name}/auto-evaluate` with `{"rubric_id": ...}`
+   evaluates every submission of that assignment one after another (run
+   the similarity check first so its flags feed the grading). It returns a
+   per-submission status (`evaluated` / `skipped` / `failed`) and scores;
+   each result is saved as it is produced and one failing submission never
+   stops the rest. Send `"skip_already_evaluated": true` to resume an
+   interrupted run. It runs synchronously, so a large class with a local
+   LLM can take minutes.
 6. **Manual grading**: the instructor reviews the auto-evaluation --
    they can accept its scores as a starting point (one click copies
    them into the grading form) or override them entirely -- and saves

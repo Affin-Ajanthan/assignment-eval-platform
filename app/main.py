@@ -432,6 +432,35 @@ class SimilarityCheckOut(BaseModel):
     semantic: SemanticSummaryOut
 
 
+class BatchAutoEvaluateIn(BaseModel):
+    rubric_id: int
+    # Resume after an interruption: leave submissions that already have an
+    # evaluation against this rubric untouched.
+    skip_already_evaluated: bool = False
+
+
+class BatchEvaluationItemOut(BaseModel):
+    submission_id: int
+    student_name: str
+    status: str  # evaluated | skipped | failed
+    recommended_score: Optional[float] = None
+    recommended_max: Optional[float] = None
+    grader: Optional[str] = None
+    review_flags: list[str] = []
+    error: Optional[str] = None
+
+
+class BatchAutoEvaluateOut(BaseModel):
+    subject_id: int
+    assignment_name: str
+    rubric_id: int
+    total: int
+    evaluated: int
+    skipped: int
+    failed: int
+    results: list[BatchEvaluationItemOut]
+
+
 # --------------------------------------------------------------------------
 # App
 # --------------------------------------------------------------------------
@@ -1650,7 +1679,14 @@ def auto_evaluate(
         raise HTTPException(403, "You are not assigned to this subject")
     if rubric.subject_id != submission.subject_id:
         raise HTTPException(400, "That rubric belongs to a different subject than this submission")
+    return _run_auto_evaluation(db, submission, rubric)
 
+
+def _run_auto_evaluation(db: Session, submission: Submission, rubric: Rubric) -> AutoEvaluation:
+    """Run the full pipeline for one submission against one rubric, store
+    and return the AutoEvaluation. Shared by the single and batch endpoints;
+    callers have already checked access and that the rubric matches."""
+    submission_id = submission.id
     code_dir = BASE_DIR / submission.code_path if submission.code_path else None
     report_path = BASE_DIR / submission.report_path if submission.report_path else None
     video_path = BASE_DIR / submission.video_path if submission.video_path else None
@@ -1708,7 +1744,7 @@ def auto_evaluate(
 
     auto_eval = AutoEvaluation(
         submission_id=submission_id,
-        rubric_id=payload.rubric_id,
+        rubric_id=rubric.id,
         recommended_score=result.recommended_score,
         recommended_max=result.recommended_max,
         review_flags=result.review_flags,
@@ -1749,4 +1785,80 @@ def get_auto_evaluation(submission_id: int, user: User = Depends(get_current_use
         .filter(AutoEvaluation.submission_id == submission_id)
         .order_by(AutoEvaluation.created_at.desc())
         .first()
+    )
+
+
+@app.post(
+    "/subjects/{subject_id}/assignments/{assignment_name}/auto-evaluate",
+    response_model=BatchAutoEvaluateOut,
+)
+def auto_evaluate_assignment(
+    subject_id: int, assignment_name: str, payload: BatchAutoEvaluateIn,
+    instructor: User = Depends(require_instructor), db: Session = Depends(get_db),
+):
+    """Auto-evaluate every submission of one assignment against one rubric.
+
+    Submissions are processed one after another (a local LLM and Whisper
+    share one GPU, so there is nothing to gain from running them in
+    parallel). Each result is saved as soon as it is produced and one
+    failing submission never aborts the rest, so after an interruption the
+    call can simply be repeated with ``skip_already_evaluated`` set.
+    Running the similarity check first lets its flags feed the grading.
+    """
+    if subject_id not in instructor_subject_ids(db, instructor):
+        raise HTTPException(403, "You are not assigned to this subject")
+    rubric = db.get(Rubric, payload.rubric_id)
+    if not rubric:
+        raise HTTPException(404, "Rubric not found")
+    if rubric.subject_id != subject_id:
+        raise HTTPException(400, "That rubric belongs to a different subject than this assignment")
+
+    submissions = (
+        db.query(Submission)
+        .filter(Submission.subject_id == subject_id, Submission.assignment_name == assignment_name)
+        .order_by(Submission.id)
+        .all()
+    )
+    if not submissions:
+        raise HTTPException(404, "No submissions found for this assignment")
+
+    already_done: set[int] = set()
+    if payload.skip_already_evaluated:
+        already_done = {
+            row[0]
+            for row in db.query(AutoEvaluation.submission_id)
+            .filter(
+                AutoEvaluation.rubric_id == rubric.id,
+                AutoEvaluation.submission_id.in_([s.id for s in submissions]),
+            )
+            .all()
+        }
+
+    results: list[BatchEvaluationItemOut] = []
+    for submission in submissions:
+        name = submission.student_name
+        if submission.id in already_done:
+            results.append(BatchEvaluationItemOut(
+                submission_id=submission.id, student_name=name, status="skipped"))
+            continue
+        try:
+            ev = _run_auto_evaluation(db, submission, rubric)
+        except Exception as exc:  # one bad submission must not stop the batch
+            db.rollback()
+            results.append(BatchEvaluationItemOut(
+                submission_id=submission.id, student_name=name, status="failed",
+                error=f"{exc.__class__.__name__}: {exc}"[:200]))
+            continue
+        results.append(BatchEvaluationItemOut(
+            submission_id=submission.id, student_name=name, status="evaluated",
+            recommended_score=ev.recommended_score, recommended_max=ev.recommended_max,
+            grader=ev.grader, review_flags=list(ev.review_flags or [])))
+
+    def _count(status: str) -> int:
+        return sum(1 for r in results if r.status == status)
+
+    return BatchAutoEvaluateOut(
+        subject_id=subject_id, assignment_name=assignment_name, rubric_id=rubric.id,
+        total=len(results), evaluated=_count("evaluated"), skipped=_count("skipped"),
+        failed=_count("failed"), results=results,
     )
