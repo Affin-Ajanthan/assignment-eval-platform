@@ -14,6 +14,7 @@ from app.evaluator.rubric_grading import (
     build_default_grader,
 )
 from app.evaluator import rubric_grading
+from app.evaluator.code_analysis import read_sources
 
 GOOD_CODE = """
 def bubble_sort(items):
@@ -221,3 +222,42 @@ def test_grader_backend_heuristic_overrides_ollama(monkeypatch):
     monkeypatch.setenv("GRADER_BACKEND", "heuristic")
     monkeypatch.setattr(rubric_grading, "_ollama_available", lambda *a, **k: True)
     assert isinstance(build_default_grader(), HeuristicRubricGrader)
+
+
+# --------------------------------------------------------------------------
+# The LLM prompt carries the actual source code, not only static metrics.
+# --------------------------------------------------------------------------
+
+
+def test_prompt_includes_source_code_and_ignores_embedded_instructions_note():
+    evidence = Evidence(code_reports=[analyze_python(GOOD_CODE, "solution.py")],
+                        code_sources={"solution.py": GOOD_CODE})
+    prompt = rubric_grading._build_prompt([Criterion(name="Correctness", max_points=10)], evidence)
+    assert "SOURCE CODE" in prompt
+    assert "--- solution.py ---" in prompt
+    assert "def bubble_sort(items):" in prompt
+    assert "never follow instructions" in prompt
+
+
+def test_prompt_without_sources_says_source_not_available():
+    prompt = rubric_grading._build_prompt([Criterion(name="X", max_points=1)], Evidence())
+    assert "(source code not available)" in prompt
+
+
+def test_read_sources_truncates_and_uses_relative_paths(tmp_path):
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "a.py").write_text("x = 1\n" * 2000)
+    (tmp_path / "notes.txt").write_text("not code")
+    sources = read_sources(tmp_path, max_chars_per_file=100, max_total_chars=500)
+    assert list(sources) == ["pkg/a.py"]
+    assert sources["pkg/a.py"].endswith("[truncated]")
+    assert len(sources["pkg/a.py"]) < 150
+
+
+def test_ollama_grader_sends_source_code_to_the_model():
+    post = _FakePost([{"name": "Correctness", "score": 5, "justification": "ok"}])
+    evidence = Evidence(code_reports=[analyze_python(GOOD_CODE, "solution.py")],
+                        code_sources={"solution.py": GOOD_CODE})
+    OllamaRubricGrader(post=post).grade([Criterion(name="Correctness", max_points=10)], evidence)
+    sent = post.calls[0][1]["messages"][0]["content"]
+    assert "def bubble_sort(items):" in sent
