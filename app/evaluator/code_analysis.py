@@ -157,9 +157,34 @@ def analyze_file(path: Path) -> CodeReport:
     return analyze_generic(source, filename=path.name)
 
 
+_CODE_EXTENSIONS = {".py", ".java", ".js", ".ts", ".c", ".cpp", ".go", ".rb"}
+
+
+def read_sources(directory: Path, extensions: set[str] | None = None,
+                 max_chars_per_file: int = 4000, max_total_chars: int = 8000) -> dict[str, str]:
+    """Source text of every code file under a submission directory, as
+    {relative path: text}, truncated so it fits in an LLM prompt. Used to
+    show a grader the actual code, not only the metrics."""
+    extensions = extensions or _CODE_EXTENSIONS
+    directory = Path(directory)
+    sources: dict[str, str] = {}
+    remaining = max_total_chars
+    for path in sorted(directory.rglob("*")):
+        if remaining <= 0:
+            break
+        if path.is_file() and path.suffix.lower() in extensions:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            limit = min(max_chars_per_file, remaining)
+            if len(text) > limit:
+                text = text[:limit] + "\n... [truncated]"
+            sources[path.relative_to(directory).as_posix()] = text
+            remaining -= limit
+    return sources
+
+
 def analyze_directory(directory: Path, extensions: set[str] | None = None) -> list[CodeReport]:
     """Analyze every code file under a submission directory (recursive)."""
-    extensions = extensions or {".py", ".java", ".js", ".ts", ".c", ".cpp", ".go", ".rb"}
+    extensions = extensions or _CODE_EXTENSIONS
     directory = Path(directory)
     reports = []
     for path in sorted(directory.rglob("*")):

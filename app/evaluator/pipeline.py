@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .code_analysis import CodeReport, analyze_directory
+from .code_analysis import CodeReport, analyze_directory, read_sources
 from .cross_modal import ConsistencyResult, check_consistency
 from .document_extraction import ReportExtraction, extract_report_text
 from .report_analysis import ReportAnalysis, analyze_report
@@ -114,6 +114,7 @@ def evaluate_submission(
     grader = grader or build_default_grader()
     evidence = Evidence(
         code_reports=code_reports,
+        code_sources=read_sources(code_dir) if code_dir else {},
         report=report_analysis,
         video_transcript=video_transcript,
         similarity_flagged=similarity_flagged,
