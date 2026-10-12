@@ -256,6 +256,87 @@ def _few_shot_enabled() -> bool:
     return os.environ.get("GRADER_FEWSHOT", "off").strip().lower() == "on"
 
 
+def _submitted_evidence(evidence: Evidence) -> dict[str, int]:
+    """What the student actually submitted, counted in code (not by the model):
+    {kind: size}; kinds with nothing submitted are absent."""
+    found = {
+        "source code (files)": len(evidence.code_sources) or len(evidence.code_reports),
+        "report text (words)": len(evidence.report.content.text.split()) if evidence.report else 0,
+        "video transcript (words)": len(evidence.video_transcript.split()),
+        "video frame descriptions": len(evidence.video_frames),
+    }
+    return {kind: size for kind, size in found.items() if size > 0}
+
+
+def _evidence_summary(evidence: Evidence) -> str:
+    present = _submitted_evidence(evidence)
+    parts = [f"{kind}: {present[kind]}" if kind in present else f"{kind}: none"
+             for kind in ("source code (files)", "report text (words)",
+                          "video transcript (words)", "video frame descriptions")]
+    return (
+        "EVIDENCE SUBMITTED BY THE STUDENT (counted by the system, so it is reliable): "
+        + "; ".join(parts) + ".\n"
+        "Anything listed with a number IS real evidence in the sections below -- grade its "
+        "content, even when it is short or informal. Say that something is missing only when "
+        "it is listed as \"none\".\n\n"
+    )
+
+
+# Phrases by which the model wrongly claims the whole submission was not provided.
+# Each kind of evidence has its own nouns, so "no video transcript" is not flagged
+# when only a report was submitted.
+_NOUNS = {
+    "report text (words)": r"answer|report|text|submission|response|evidence|work",
+    "source code (files)": r"code|program|solution|answer|submission|response|evidence|work",
+    "video transcript (words)": r"transcript|video|answer|submission|response|evidence",
+    "video frame descriptions": r"frames?|video|answer|submission|response|evidence",
+}
+
+
+def claims_submitted_evidence_missing(justification: str, evidence: Evidence) -> bool:
+    """True when the justification says something was not provided / submitted
+    although the system knows it was (the false "no answer was provided" zeros
+    a small model produces)."""
+    for kind in _submitted_evidence(evidence):
+        nouns = _NOUNS[kind]
+        patterns = (
+            # "No answer was provided", "No student submission evidence was provided"
+            rf"\b(?:no|any)\s+(?:\w+\s+){{0,2}}(?:{nouns})\s+(?:was\s+|is\s+|were\s+)?"
+            r"(?:provided|submitted|given|included|available|present|supplied)\b",
+            # "The answer was not provided"
+            rf"\b(?:{nouns})\b(?:\s+\w+){{0,3}}\s+(?:was|is|were|has been|have been)?\s*"
+            r"(?:not|never)\s+(?:been\s+)?(?:provided|submitted|given|included)\b",
+            # "did not submit an answer", "does not include a source code, report text, or video transcript"
+            # -- the object must be made of evidence nouns only, so "does not include the key
+            # idea" (a real judgement about content) is not matched.
+            r"\b(?:did not|didn't|does not|doesn't|has not|hasn't|failed to)\s+"
+            r"(?:submit|provide|include|supply|contain)\s+(?:(?:an?|any|the|student|code analysis|source code|code|"
+            r"report text|report|video transcript|transcript|frame descriptions|video frames|frames|text|"
+            r"answer|response|submission|evidence|or|and|,)\s*)+(?=$|[.;:]|(?:that|which|so|to|for|in|as|with)\b)",
+            # "No evidence for the answer quality criterion was provided"
+            r"\bno\s+evidence\s+for\s+(?:the\s+)?[\w ]{0,40}\bcriterion\b[^.]{0,20}\b(?:was|is)\s+"
+            r"(?:provided|submitted|available)\b",
+        )
+        if any(re.search(p, justification, re.I) for p in patterns):
+            return True
+    return False
+
+
+def _correction_note(evidence: Evidence) -> str:
+    return (
+        "\n\nCORRECTION: your previous reply said that submitted evidence was missing, but it is "
+        "present. " + _evidence_summary(evidence).split("\n")[0] + "\n"
+        "Re-grade every criterion by reading the submitted content in the sections above, and do "
+        "not say that it was not provided."
+    )
+
+
+_STILL_WRONG_NOTE = (
+    " [automatic check: the grader said this work was not provided, but it was submitted "
+    "-- please review this mark]"
+)
+
+
 def _build_prompt(criteria: list[Criterion], evidence: Evidence) -> str:
     criteria_desc = "\n".join(
         f"- {c.name} (max {c.max_points} points): {c.description}" for c in criteria
@@ -298,7 +379,8 @@ def _build_prompt(criteria: list[Criterion], evidence: Evidence) -> str:
         "reading it, and word uncertain judgements as \"appears to\" or \"by inspection\".\n\n"
         + (f"{FEW_SHOT_EXAMPLES}\n" if _few_shot_enabled() else "")
         + f"RUBRIC:\n{criteria_desc}\n\n"
-        f"CODE ANALYSIS (static metrics):\n{code_summary}\n\n"
+        + _evidence_summary(evidence)
+        + f"CODE ANALYSIS (static metrics):\n{code_summary}\n\n"
         f"SOURCE CODE (truncated):\n{source_code}\n\n"
         f"{execution}"
         f"REPORT TEXT (truncated):\n{report_text}\n\n"
@@ -413,13 +495,7 @@ class OllamaRubricGrader(RubricGrader):
         self.post = post
         self.timeout = timeout
 
-    def grade(self, criteria: list[Criterion], evidence: Evidence) -> GradingResult:
-        prompt = _build_prompt(criteria, evidence).replace(
-            "Call submit_grades with one entry per criterion, in the same order.",
-            'Reply with JSON {"criteria": [{"name", "score", "justification"}]} '
-            "with one entry per criterion, in the same order, using the exact "
-            "criterion names.",
-        )
+    def _ask(self, prompt: str) -> list:
         response = self.post(f"{self.url}/api/chat", {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
@@ -429,10 +505,12 @@ class OllamaRubricGrader(RubricGrader):
             "options": {"temperature": 0},
         }, self.timeout)
         try:
-            entries = json.loads(response["message"]["content"])["criteria"]
+            return json.loads(response["message"]["content"])["criteria"]
         except (KeyError, TypeError, ValueError) as exc:
             raise RuntimeError(f"Ollama response was not the expected JSON: {exc}") from exc
 
+    @staticmethod
+    def _to_results(criteria: list[Criterion], entries: list) -> list[CriterionResult]:
         by_name = {e.get("name"): e for e in entries if isinstance(e, dict)}
         results = []
         for index, criterion in enumerate(criteria):
@@ -455,6 +533,32 @@ class OllamaRubricGrader(RubricGrader):
                 max_points=criterion.max_points,
                 justification=str(entry.get("justification", "")),
             ))
+        return results
+
+    def grade(self, criteria: list[Criterion], evidence: Evidence) -> GradingResult:
+        prompt = _build_prompt(criteria, evidence).replace(
+            "Call submit_grades with one entry per criterion, in the same order.",
+            'Reply with JSON {"criteria": [{"name", "score", "justification"}]} '
+            "with one entry per criterion, in the same order, using the exact "
+            "criterion names.",
+        )
+        results = self._to_results(criteria, self._ask(prompt))
+
+        # Safety net for a known small-model failure: claiming the submission was
+        # not provided (and scoring 0) although the system knows it was. Ask once
+        # more with a correction; if the claim persists, keep the model's mark
+        # but make the contradiction visible to the instructor.
+        wrong = [i for i, r in enumerate(results) if claims_submitted_evidence_missing(r.justification, evidence)]
+        if wrong:
+            try:
+                retried = self._to_results(criteria, self._ask(prompt + _correction_note(evidence)))
+            except Exception:
+                retried = None
+            for i in wrong:
+                if retried is not None and not claims_submitted_evidence_missing(retried[i].justification, evidence):
+                    results[i] = retried[i]
+                else:
+                    results[i].justification += _STILL_WRONG_NOTE
         return GradingResult(criteria=results, grader=self.name)
 
 

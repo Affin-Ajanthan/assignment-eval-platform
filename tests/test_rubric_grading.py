@@ -406,3 +406,117 @@ def test_calibration_examples_do_not_depend_on_review_flags(monkeypatch):
     criteria = [Criterion("Academic integrity", "Original work", 20)]
     assert rubric_grading._build_prompt(criteria, Evidence(similarity_flagged=True)) == \
         rubric_grading._build_prompt(criteria, Evidence())
+
+
+# --------------------------------------------------------------------------
+# False "no answer was provided" zeros: the model claims submitted work is
+# missing. The prompt states what was submitted, and a safety net re-asks once.
+# --------------------------------------------------------------------------
+
+from types import SimpleNamespace  # noqa: E402
+
+
+def _report_evidence(text="A prototype simulates parts of the finished product."):
+    return Evidence(report=SimpleNamespace(content=SimpleNamespace(text=text)))
+
+
+def test_prompt_states_exactly_what_was_submitted():
+    prompt = rubric_grading._build_prompt([Criterion("Answer", "d", 5)], _report_evidence("one two three"))
+    assert "EVIDENCE SUBMITTED BY THE STUDENT" in prompt
+    assert "report text (words): 3" in prompt
+    assert "source code (files): none" in prompt and "video transcript (words): none" in prompt
+    assert "even when it is short or informal" in prompt
+
+
+def test_summary_counts_code_transcript_and_frames():
+    evidence = Evidence(code_sources={"a.py": "x = 1", "b.py": "y = 2"}, video_transcript="hello there",
+                        video_frames=[(1.0, "a slide")])
+    summary = rubric_grading._evidence_summary(evidence)
+    assert "source code (files): 2" in summary and "video transcript (words): 2" in summary
+    assert "video frame descriptions: 1" in summary and "report text (words): none" in summary
+
+
+@pytest.mark.parametrize("claim", [
+    "No answer was provided for the question.",
+    "No student submission evidence was provided for the answer quality criterion.",
+    "No evidence for the answer quality criterion was provided.",
+    "The student did not submit any source code, report text, or video transcript that contains the answer.",
+    "The answer was not provided in the evidence.",
+])
+def test_detector_catches_false_not_provided_claims(claim):
+    assert rubric_grading.claims_submitted_evidence_missing(claim, _report_evidence())
+
+
+@pytest.mark.parametrize("fine", [
+    "The student's answer misses the key idea that a prototype simulates behaviour.",
+    "No evidence of testing is mentioned in the report.",
+    "No evidence of unit tests was provided in the report.",
+    "The report does not include any test cases.",
+    "The student does not include the key idea of LIFO in the answer.",
+    "The answer does not address the question about insertion sort.",
+    "There is no video transcript, so the video criterion cannot be assessed.",
+])
+def test_detector_leaves_real_judgements_alone(fine):
+    assert not rubric_grading.claims_submitted_evidence_missing(fine, _report_evidence())
+
+
+def test_detector_only_flags_kinds_that_were_actually_submitted():
+    report_only = _report_evidence()
+    assert not rubric_grading.claims_submitted_evidence_missing("No video transcript was provided.", report_only)
+    with_transcript = Evidence(video_transcript="a spoken explanation")
+    assert rubric_grading.claims_submitted_evidence_missing("No video transcript was provided.", with_transcript)
+    assert not rubric_grading.claims_submitted_evidence_missing("No answer was provided.", Evidence())  # truly nothing
+
+
+class _SeqPost:
+    """Returns each scripted reply in turn (a reply may be an Exception)."""
+
+    def __init__(self, *replies):
+        self.replies = list(replies)
+        self.calls = []
+
+    def __call__(self, url, payload, timeout):
+        self.calls.append(payload["messages"][0]["content"])
+        reply = self.replies.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return {"message": {"content": json.dumps({"criteria": [
+            {"name": "Answer", "score": reply[0], "justification": reply[1]}]})}}
+
+
+_CRITERION = [Criterion("Answer", "Matches the reference answer", 5)]
+_FALSE_CLAIM = (0, "No answer was provided for the question.")
+
+
+def test_false_zero_is_retried_once_and_the_corrected_mark_is_used():
+    post = _SeqPost(_FALSE_CLAIM, (4, "The answer captures the key idea of simulating the product."))
+    result = OllamaRubricGrader(post=post).grade(_CRITERION, _report_evidence())
+    assert len(post.calls) == 2
+    assert "CORRECTION" in post.calls[1] and "CORRECTION" not in post.calls[0]
+    assert "report text (words): 8" in post.calls[1]
+    assert result.criteria[0].score == 4
+    assert "automatic check" not in result.criteria[0].justification
+
+
+def test_persistent_false_claim_keeps_the_mark_but_warns_the_instructor():
+    post = _SeqPost(_FALSE_CLAIM, (0, "Still no answer was provided."))
+    result = OllamaRubricGrader(post=post).grade(_CRITERION, _report_evidence())
+    assert len(post.calls) == 2
+    assert result.criteria[0].score == 0
+    assert "automatic check" in result.criteria[0].justification and "please review" in result.criteria[0].justification
+
+
+def test_failing_retry_does_not_break_grading():
+    post = _SeqPost(_FALSE_CLAIM, RuntimeError("ollama hiccup"))
+    result = OllamaRubricGrader(post=post).grade(_CRITERION, _report_evidence())
+    assert result.criteria[0].score == 0 and "please review" in result.criteria[0].justification
+
+
+def test_honest_replies_are_not_retried():
+    post = _SeqPost((3, "The answer is partly right but omits that a prototype simulates behaviour."))
+    OllamaRubricGrader(post=post).grade(_CRITERION, _report_evidence())
+    assert len(post.calls) == 1
+    # a genuine absence is not retried either: nothing was submitted
+    post = _SeqPost((0, "No answer was provided."))
+    OllamaRubricGrader(post=post).grade(_CRITERION, Evidence())
+    assert len(post.calls) == 1
