@@ -22,14 +22,23 @@ the speech-to-text stage.
 Frame analysis (scene changes + a screen-recording likelihood score)
 uses OpenCV frame-differencing and needs no network access or model
 download at all, so it always runs for real.
+
+Vision: a few sampled frames are described by a small local vision model
+(Ollama, default ``qwen3-vl:4b``) so a video with no speech can still be
+graded from what is on screen. Auto-enabled when the model is installed;
+``VIDEO_VISION=off`` disables it. A failure never breaks the analysis.
 """
 
 from __future__ import annotations
 
+import base64
+import os
 import statistics
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from .rubric_grading import OLLAMA_URL, _ollama_available, _ollama_post
 
 
 # --------------------------------------------------------------------------
@@ -206,6 +215,117 @@ def analyze_frames(video_path: Path, sample_fps: float = 1.0) -> FrameAnalysis:
 
 
 # --------------------------------------------------------------------------
+# Vision: describe sampled frames (F4)
+# --------------------------------------------------------------------------
+#
+# A video with no speech has an empty transcript, so the grader would have
+# nothing to judge. A small local vision model (Ollama, default qwen3-vl:4b)
+# describes a few frames spread across the video and those descriptions are
+# given to the grader next to the transcript. Auto-enabled only when the
+# model is installed; ``VIDEO_VISION=off`` disables it. Any failure leaves the
+# rest of the analysis intact.
+
+VISION_MODEL = os.environ.get("VISION_MODEL", "qwen3-vl:4b")
+FRAMES_TO_DESCRIBE = 4
+FRAME_MAX_SIDE = 512  # pixels; keeps requests small and fast
+
+_DESCRIBE_PROMPT = (
+    "Describe what is visible in this video frame in one or two plain sentences. "
+    "Focus on on-screen text, code, terminals, slides, diagrams, application windows "
+    "and people. Describe only what you can actually see; do not guess or invent."
+)
+
+
+@dataclass
+class FrameDescription:
+    seconds: float
+    text: str
+
+
+def sample_frames(video_path: Path, count: int = FRAMES_TO_DESCRIBE,
+                  max_side: int = FRAME_MAX_SIDE) -> list[tuple[float, bytes]]:
+    """`count` JPEG frames, one from the middle of each of `count` equal slices
+    of the video, as (timestamp_seconds, jpeg_bytes), downscaled to `max_side`."""
+    import cv2
+
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        raise ValueError(f"Could not open video: {video_path}")
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    frames: list[tuple[float, bytes]] = []
+    for i in range(count if total > 0 else 0):
+        index = int(total * (i + 0.5) / count)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, index)
+        ok, frame = cap.read()
+        if not ok:
+            continue
+        height, width = frame.shape[:2]
+        scale = max_side / max(height, width)
+        if scale < 1:
+            frame = cv2.resize(frame, (int(width * scale), int(height * scale)))
+        ok, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        if ok:
+            frames.append((index / fps, buffer.tobytes()))
+    cap.release()
+    return frames
+
+
+class FrameDescriber(ABC):
+    model: str
+
+    @abstractmethod
+    def describe(self, frames: list[tuple[float, bytes]]) -> list[FrameDescription]: ...
+
+
+class OllamaFrameDescriber(FrameDescriber):
+    """One Ollama chat call per frame. `post` is any callable
+    ``(url, payload, timeout) -> dict``; inject a fake in tests."""
+
+    def __init__(self, model: str = VISION_MODEL, url: str = OLLAMA_URL, post=_ollama_post,
+                 timeout: float = 180.0):
+        self.model = model
+        self.url = url.rstrip("/")
+        self.post = post
+        self.timeout = timeout
+
+    def describe(self, frames: list[tuple[float, bytes]]) -> list[FrameDescription]:
+        results: list[FrameDescription] = []
+        errors: list[str] = []
+        for seconds, jpeg in frames:
+            payload = {
+                "model": self.model,
+                "messages": [{
+                    "role": "user",
+                    "content": _DESCRIBE_PROMPT,
+                    "images": [base64.b64encode(jpeg).decode("ascii")],
+                }],
+                "stream": False,
+                "think": False,
+                "options": {"temperature": 0, "num_predict": 160},
+            }
+            try:
+                reply = self.post(f"{self.url}/api/chat", payload, self.timeout)
+                text = str(reply["message"]["content"]).strip()
+            except Exception as exc:  # one bad frame should not lose the others
+                errors.append(f"{exc.__class__.__name__}: {exc}")
+                continue
+            if text:
+                results.append(FrameDescription(seconds=seconds, text=text))
+        if not results and errors:
+            raise RuntimeError(errors[0])
+        return results
+
+
+def build_default_describer() -> FrameDescriber | None:
+    """The Ollama vision describer when VIDEO_VISION is not 'off' and the
+    vision model is installed; None (no frame descriptions) otherwise."""
+    if os.environ.get("VIDEO_VISION", "auto").strip().lower() == "off":
+        return None
+    return OllamaFrameDescriber() if _ollama_available(OLLAMA_URL, VISION_MODEL) else None
+
+
+# --------------------------------------------------------------------------
 # Combined video analysis
 # --------------------------------------------------------------------------
 
@@ -214,10 +334,15 @@ def analyze_frames(video_path: Path, sample_fps: float = 1.0) -> FrameAnalysis:
 class VideoAnalysis:
     transcript: TranscriptionResult
     frames: FrameAnalysis
+    frame_descriptions: list[FrameDescription] = field(default_factory=list)
+    vision_model: str = ""
+    vision_error: str = ""  # set when frame description was attempted and failed
 
 
-def analyze_video(video_path: Path, transcriber: Transcriber | None = None) -> VideoAnalysis:
+def analyze_video(video_path: Path, transcriber: Transcriber | None = None,
+                  describer: FrameDescriber | None = None) -> VideoAnalysis:
     transcriber = transcriber or build_default_transcriber()
+    describer = describer or build_default_describer()
     try:
         transcript = transcriber.transcribe(video_path)
     except Exception as exc:  # e.g. model download failed offline, GPU/driver error
@@ -227,4 +352,15 @@ def analyze_video(video_path: Path, transcriber: Transcriber | None = None) -> V
             text="", segments=[], backend="null",
             error=f"{exc.__class__.__name__}: {exc}"[:200],
         )
-    return VideoAnalysis(transcript=transcript, frames=analyze_frames(video_path))
+    frames = analyze_frames(video_path)
+
+    descriptions: list[FrameDescription] = []
+    vision_model, vision_error = "", ""
+    if describer is not None:
+        vision_model = describer.model
+        try:
+            descriptions = describer.describe(sample_frames(video_path))
+        except Exception as exc:  # the vision step is optional; keep everything else
+            vision_error = f"{exc.__class__.__name__}: {exc}"[:200]
+    return VideoAnalysis(transcript=transcript, frames=frames, frame_descriptions=descriptions,
+                         vision_model=vision_model, vision_error=vision_error)

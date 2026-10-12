@@ -118,18 +118,19 @@ def test_at_most_three_files_are_run(tmp_path):
 
 def test_prompt_says_not_executed_when_no_run_exists():
     prompt = rubric_grading._build_prompt([Criterion("X", max_points=1)], Evidence())
-    assert "EXECUTION RESULT" in prompt
-    assert "no run available -- judge the code by reading it" in prompt
+    assert "EXECUTION RESULT (real run" not in prompt          # no empty heading to confuse the model
+    assert "No run of the code is available -- judge the code by reading it." in prompt
 
 
 def test_prompt_contains_the_real_run_and_lets_the_model_cite_only_that():
     evidence = Evidence(code_execution=[ExecutionResult("solution.py", "ok", 0, "[1, 2, 5]", "")])
     prompt = rubric_grading._build_prompt([Criterion("X", max_points=1)], evidence)
     assert "solution.py: ran without errors" in prompt and "[1, 2, 5]" in prompt
-    assert "no run available" not in prompt
+    assert "No run of the code is available" not in prompt
     # the "cannot run code" rule is still there, with the one allowed exception
     assert "you cannot run, execute or test any code" in prompt
-    assert "may only cite the EXECUTION RESULT section" in prompt
+    assert "EXECUTION RESULT (real run in an isolated sandbox)" in prompt
+    assert "may only cite an EXECUTION RESULT section" in prompt
 
 
 def test_format_for_prompt_describes_crashes():

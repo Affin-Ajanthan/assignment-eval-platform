@@ -338,6 +338,17 @@ those, both are small interfaces with:
     fails for any reason, the video stage continues with an empty
     transcript (backend `null`, reason kept in `TranscriptionResult.error`)
     and the frame analysis, so an evaluation never crashes on it.
+  - **Video frame descriptions (vision)** -- a video with no speech has an
+    empty transcript. When a local vision model is installed
+    (`ollama pull qwen3-vl:4b`, override with `VISION_MODEL`), 4 frames
+    spread across the video are downscaled and described by it, and the
+    descriptions go to the grader next to the transcript, so a silent
+    video can still be judged from what is on screen. It switches itself
+    on only when the model is installed; `VIDEO_VISION=off` disables it.
+    The descriptions are machine-generated and the grader is told they may
+    be wrong; if the step fails, a review flag says so and grading
+    continues on the transcript alone. It costs roughly one model call
+    per frame.
   - **Running the code (optional, off by default)** -- the LLM graders can
     only read code. Set `CODE_SANDBOX=docker` and each submission's `.py`
     files (at most 3) are run in a throw-away Docker container (no network,

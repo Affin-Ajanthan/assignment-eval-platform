@@ -132,6 +132,7 @@ def evaluate_submission(
         code_execution=code_execution,
         report=report_analysis,
         video_transcript=video_transcript,
+        video_frames=[(d.seconds, d.text) for d in video_analysis.frame_descriptions] if video_analysis else [],
         similarity_flagged=similarity_flagged,
         # AI-content signals (report and code) are review flags only: they
         # never lower the suggested score. AI detectors misfire, notably on
@@ -170,6 +171,11 @@ def evaluate_submission(
     # stored, but it no longer adds review flags: it only matches function
     # names word-for-word, so it contradicts the meaning-based cross-modal
     # check (semantic_consistency.py), which is the consistency signal shown.
+    if video_analysis and video_analysis.vision_error:
+        review_flags.append(
+            f"video frames could not be described by the vision model ({video_analysis.vision_error}); "
+            "the grader only had the transcript"
+        )
     if video_analysis and video_analysis.frames.screen_recording_score >= 80:
         review_flags.append(
             f"video looks like a static screen recording (avg frame diff {video_analysis.frames.avg_frame_diff})"
