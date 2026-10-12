@@ -68,6 +68,8 @@ class Evidence:
     code_sources: dict[str, str] = field(default_factory=dict)  # {path: source text}
     report: ReportAnalysis | None = None
     video_transcript: str = ""
+    # Review signals only: no grader changes marks because of them (the
+    # pipeline shows them to the instructor as review flags instead).
     similarity_flagged: bool = False
     ai_content_flagged: bool = False
 
@@ -161,12 +163,12 @@ class HeuristicRubricGrader(RubricGrader):
                 reasons.append(f"blended with code quality score {evidence.avg_code_quality:.0f}/100")
 
             if any(term in label for term in ("originality", "plagiarism", "academic integrity", "authentic")):
+                # Same rule as the LLM graders: flags never change marks. They are
+                # review prompts for the instructor, who decides what they mean.
                 if evidence.similarity_flagged:
-                    coverage = min(coverage, 0.3)
-                    reasons.append("similarity checker flagged this submission -- capped score")
+                    reasons.append("similarity checker flagged this submission -- for instructor review, score not changed")
                 if evidence.ai_content_flagged:
-                    coverage = min(coverage, 0.5)
-                    reasons.append("AI-content heuristic flagged this submission -- capped score")
+                    reasons.append("AI-content heuristic flagged this submission -- for instructor review, score not changed")
 
             coverage = max(0.0, min(1.0, coverage))
             score = round(coverage * criterion.max_points, 2)

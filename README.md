@@ -132,8 +132,9 @@ logged in.
    /submissions/{id}/auto-evaluate` runs the full pipeline --
    static analysis, AI-text/AI-code heuristics, video frame analysis
    and transcription, cross-modal consistency, and rubric grading --
-   against the chosen rubric, folding in the similarity flag from step
-   4. The result (recommended score, review flags, per-criterion
+   against the chosen rubric. The similarity flag from step 4 is shown
+   as a review flag; it never changes the marks (the same rule for every
+   grader). The result (recommended score, review flags, per-criterion
    breakdown) is stored and shown on the dashboard.
    **Whole assignment at once**: `POST
    /subjects/{id}/assignments/{name}/auto-evaluate` with `{"rubric_id": ...}`
@@ -176,9 +177,9 @@ source. `app/similarity/semantic.py` adds Microsoft's
 - A pair the token check didn't flag gets a **"review"** flag when its
   semantic score is at least 0.80 *and* clearly above the rest of
   the cohort (median + 2 robust standard deviations). Token-based flags stay
-  the only **"high"** ones, and a semantic-only flag never caps a score
-  in auto-evaluation -- it's shown as "potential similarity detected
-  -- lecturer review recommended".
+  the only **"high"** ones. No similarity flag changes marks in
+  auto-evaluation, for any grader -- they are shown as review flags
+  ("potential similarity detected -- lecturer review recommended").
 
 The model (~500 MB) downloads once on first use (it's preloaded in
 the background at startup) and is cached by Hugging Face afterwards.

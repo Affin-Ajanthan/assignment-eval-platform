@@ -55,12 +55,17 @@ def test_heuristic_grader_matches_keywords_present_in_code():
     assert result.criteria[0].score >= 4
 
 
-def test_heuristic_grader_caps_score_when_similarity_flagged():
+def test_heuristic_grader_does_not_change_marks_when_similarity_or_ai_flagged():
     grader = HeuristicRubricGrader()
     criteria = [Criterion(name="Academic integrity", description="Original, authentic work", max_points=20)]
-    evidence = Evidence(code_reports=[], similarity_flagged=True)
-    result = grader.grade(criteria, evidence)
-    assert result.criteria[0].score <= 6  # 0.3 * 20
+    text = "original authentic work academic integrity"  # every criterion keyword is present
+    plain = grader.grade(criteria, Evidence(video_transcript=text))
+    flagged = grader.grade(
+        criteria, Evidence(video_transcript=text, similarity_flagged=True, ai_content_flagged=True))
+    assert plain.criteria[0].score == 20  # full keyword coverage
+    assert flagged.criteria[0].score == plain.criteria[0].score  # flags used to cap this at 6 / 10
+    note = flagged.criteria[0].justification
+    assert "for instructor review, score not changed" in note
 
 
 def test_heuristic_grader_blends_code_quality_score():
@@ -324,3 +329,35 @@ def test_real_model_does_not_claim_to_have_run_the_code():
     )
     for c in result.criteria:
         assert not _RAN_CODE_CLAIM.search(c.justification), f"{c.name}: {c.justification}"
+
+
+# --------------------------------------------------------------------------
+# One rule for every grader: similarity / AI-content flags never change marks.
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("flags", [
+    {"similarity_flagged": True},
+    {"ai_content_flagged": True},
+    {"similarity_flagged": True, "ai_content_flagged": True},
+])
+def test_no_grader_changes_marks_because_of_review_flags(flags):
+    text = "original authentic work academic integrity"
+    criteria = [Criterion("Academic integrity", "Original, authentic work", 20)]
+    plain = Evidence(video_transcript=text)
+    flagged = Evidence(video_transcript=text, **flags)
+
+    # Keyword grader: identical marks with and without the flag.
+    keyword = HeuristicRubricGrader()
+    assert keyword.grade(criteria, flagged).total_score == keyword.grade(criteria, plain).total_score == 20
+
+    # LLM graders: the prompt must not depend on the flag at all, so whatever
+    # the model returns, the flag cannot move the marks.
+    assert rubric_grading._build_prompt(criteria, flagged) == rubric_grading._build_prompt(criteria, plain)
+
+    reply = [{"name": "Academic integrity", "score": 17, "justification": "ok"}]
+    ollama = OllamaRubricGrader(post=_FakePost(reply))
+    assert ollama.grade(criteria, flagged).total_score == ollama.grade(criteria, plain).total_score == 17
+
+    claude = LLMRubricGrader(client=_FakeAnthropicClient({"criteria": reply}))
+    assert claude.grade(criteria, flagged).total_score == claude.grade(criteria, plain).total_score == 17
