@@ -338,6 +338,16 @@ those, both are small interfaces with:
     fails for any reason, the video stage continues with an empty
     transcript (backend `null`, reason kept in `TranscriptionResult.error`)
     and the frame analysis, so an evaluation never crashes on it.
+  - **Running the code (optional, off by default)** -- the LLM graders can
+    only read code. Set `CODE_SANDBOX=docker` and each submission's `.py`
+    files (at most 3) are run in a throw-away Docker container (no network,
+    read-only filesystem, code mounted read-only, all capabilities dropped,
+    unprivileged user, 256 MB / 0.5 CPU / 64 processes, 10 s limit). The
+    real exit code, stdout and stderr go to the grader as an EXECUTION
+    RESULT it may cite, and a crash or timeout adds a review flag. If Docker
+    is not running nothing is executed -- there is no unsandboxed fallback --
+    and a review flag says so. Image: `CODE_SANDBOX_IMAGE`
+    (default `python:3.12-slim`).
 
 The AI-content heuristics (for both code and report text) are
 explicitly style heuristics, not validated classifiers -- there is no

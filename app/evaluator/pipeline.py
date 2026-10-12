@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .code_analysis import CodeReport, analyze_directory, read_sources
+from .code_execution import ExecutionResult, SandboxUnavailable, run_python_files, sandbox_enabled
 from .cross_modal import ConsistencyResult, check_consistency
 from .document_extraction import ReportExtraction, extract_report_text
 from .report_analysis import ReportAnalysis, analyze_report
@@ -111,10 +112,24 @@ def evaluate_submission(
 
     report_ai_flagged = bool(report_analysis and report_analysis.ai_text.signal == "high")
 
+    # Optional (CODE_SANDBOX=docker): run the student's code in an isolated
+    # container so the grader can cite a real result. A sandbox problem is
+    # reported as a review flag and never fails the evaluation.
+    code_execution: list[ExecutionResult] = []
+    sandbox_problem: str | None = None
+    if code_dir and sandbox_enabled():
+        try:
+            code_execution = run_python_files(code_dir)
+        except SandboxUnavailable as exc:
+            sandbox_problem = f"code execution is enabled but the sandbox is unavailable: {exc}"
+        except Exception as exc:
+            sandbox_problem = f"code execution failed ({exc.__class__.__name__}: {exc})"[:200]
+
     grader = grader or build_default_grader()
     evidence = Evidence(
         code_reports=code_reports,
         code_sources=read_sources(code_dir) if code_dir else {},
+        code_execution=code_execution,
         report=report_analysis,
         video_transcript=video_transcript,
         similarity_flagged=similarity_flagged,
@@ -126,6 +141,13 @@ def evaluate_submission(
     grading = grader.grade(criteria, evidence)
 
     review_flags: list[str] = []
+    if sandbox_problem:
+        review_flags.append(sandbox_problem)
+    for run in code_execution:
+        if run.status == "timeout":
+            review_flags.append(f"sandbox: {run.filename} did not finish within the time limit -- review recommended")
+        elif run.status == "error":
+            review_flags.append(f"sandbox: {run.filename} crashed (exit code {run.exit_code}) -- review recommended")
     if similarity_flagged:
         review_flags.append("code similarity checker flagged this submission against another student's")
     if semantic_review_flagged:
