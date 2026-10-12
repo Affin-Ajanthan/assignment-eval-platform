@@ -261,3 +261,66 @@ def test_ollama_grader_sends_source_code_to_the_model():
     OllamaRubricGrader(post=post).grade([Criterion(name="Correctness", max_points=10)], evidence)
     sent = post.calls[0][1]["messages"][0]["content"]
     assert "def bubble_sort(items):" in sent
+
+
+# --------------------------------------------------------------------------
+# The grader cannot run code, so it must not claim to have.
+# --------------------------------------------------------------------------
+
+import re  # noqa: E402
+
+# Phrases that claim the code was executed or its output observed.
+_RAN_CODE_CLAIM = re.compile(
+    r"\b(ran|executed|executing)\b|by running|when (run|executed)|after running|"
+    r"(tested|verified|confirmed)\b[^.]{0,40}\b(running|executing|execution)|test cases? (pass|passed)",
+    re.I,
+)
+
+DEMO_CODE = '''
+def bubble_sort(items):
+    """Sort a list of numbers in ascending order."""
+    n = len(items)
+    for i in range(n):
+        for j in range(0, n - i - 1):
+            if items[j] > items[j + 1]:
+                items[j], items[j + 1] = items[j + 1], items[j]
+    return items
+
+
+if __name__ == "__main__":
+    print(bubble_sort([5, 2, 9, 1, 5, 6]))
+'''
+
+
+def test_prompt_tells_the_model_it_cannot_run_code_and_must_not_claim_to():
+    prompt = rubric_grading._build_prompt([Criterion(name="Correctness", max_points=10)], Evidence())
+    assert "you cannot run, execute or test any code" in prompt
+    assert "Never say or imply that you ran, executed" in prompt
+    assert "by inspection" in prompt
+
+
+def test_ran_code_detector_catches_overclaims_and_allows_honest_wording():
+    # Real overclaims seen from the model before the prompt was tightened.
+    assert _RAN_CODE_CLAIM.search("The function correctly sorts the list, as verified by running the code.")
+    assert _RAN_CODE_CLAIM.search("I ran the function on [5, 2, 9] and it returned [2, 5, 9].")
+    assert _RAN_CODE_CLAIM.search("All test cases pass.")
+    # Honest wording must not be flagged.
+    assert not _RAN_CODE_CLAIM.search("By inspection, the nested loops correctly sort the list in place.")
+    assert not _RAN_CODE_CLAIM.search("The code appears to implement bubble sort with a correct swap condition.")
+
+
+@pytest.mark.slow
+def test_real_model_does_not_claim_to_have_run_the_code():
+    """Live check against the local qwen3:4b: code containing a demo call
+    (`print(bubble_sort([...]))`) used to make it write 'as verified by ...'."""
+    if not rubric_grading._ollama_available():
+        pytest.skip("Ollama / qwen3:4b not available")
+    evidence = Evidence(code_reports=[analyze_python(DEMO_CODE, "solution.py")],
+                        code_sources={"solution.py": DEMO_CODE})
+    result = OllamaRubricGrader().grade(
+        [Criterion("Correctness", "The function sorts any list of numbers correctly", 6),
+         Criterion("Code quality", "Clean, documented, readable code", 4)],
+        evidence,
+    )
+    for c in result.criteria:
+        assert not _RAN_CODE_CLAIM.search(c.justification), f"{c.name}: {c.justification}"
