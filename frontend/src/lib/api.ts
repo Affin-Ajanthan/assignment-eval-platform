@@ -67,6 +67,9 @@ export interface Assignment {
   graded_count: number;
   created_at: string;
   updated_at: string | null;
+  /** Instructor starter code ("" = none); excluded from the token similarity check. */
+  starter_code: string;
+  starter_code_filename: string;
 }
 
 /** A student's own submission: status and final total only. */

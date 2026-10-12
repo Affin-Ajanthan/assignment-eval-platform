@@ -13,7 +13,7 @@ numpy>=1.26
 pillow>=10
 
 # --- Semantic code similarity (app/similarity/semantic.py, model
-# microsoft/unixcoder-base, ~500 MB, downloaded once on first use and
+# microsoft/unixcoder-base-nine, ~500 MB, downloaded once on first use and
 # cached by Hugging Face). CPU-only torch is enough:
 #   pip install torch --index-url https://download.pytorch.org/whl/cpu
 # Without these (or with SEMANTIC_SIMILARITY=0) the similarity check

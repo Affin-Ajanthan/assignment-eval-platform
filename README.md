@@ -161,7 +161,8 @@ Winnowing fingerprints (Jaccard + containment) catch literal and
 renamed copies, but a copy that's been rewritten -- functions
 reordered, loops restructured -- can share few k-grams with its
 source. `app/similarity/semantic.py` adds Microsoft's
-`microsoft/unixcoder-base` as an extra signal:
+`microsoft/unixcoder-base-nine` (9 languages: Python, Java, JavaScript, PHP,
+Ruby, Go, C, C++, C#; pinned to one revision) as an extra signal:
 
 - Each submission's code is normalized (comments stripped,
   identifiers anonymized), split into overlapping 512-token chunks
@@ -417,3 +418,13 @@ rejection), covering the same flow the automated backend tests cover.
   model on first use; without it (or without `faster-whisper`
   installed), the pipeline degrades to an empty transcript
   automatically rather than failing.
+
+
+
+
+Role	Email	Password
+Admin	admin@school.local	            Admin@123
+Instructor	 instructor@school.local	Instructor@123
+Student 1	student1@school.local	       Student1@123
+Student 2	student2@school.local      	Student2@123
+Student 3	student3@school.local	      Student3@123

@@ -85,7 +85,7 @@ from .models import (
     User,
 )
 from .similarity.ai_heuristics import score_source as _score_ai_code
-from .similarity.core import Fingerprint, compare_all, fingerprint_source
+from .similarity.core import Fingerprint, compare_all, fingerprint_source, subtract_starter
 from .similarity.semantic import (
     MODEL_NAME as _SEMANTIC_MODEL,
     apply_semantic_signal,
@@ -94,7 +94,9 @@ from .similarity.semantic import (
     submissions_needing_semantic,
 )
 
-_CODE_EXTENSIONS = {".py", ".java", ".js", ".ts", ".c", ".cpp", ".go", ".rb"}
+# Source files the similarity check and code analysis read. Includes C# and
+# C/C++ headers, which unixcoder-base-nine was trained on.
+_CODE_EXTENSIONS = {".py", ".java", ".js", ".c", ".cpp",".cc",".cxx",".hh",".hxx", ".h", ".hpp", ".cs", ".go", ".rb",".php"}
 
 Base.metadata.create_all(bind=engine)
 add_missing_columns("similarity_flags", {
@@ -104,6 +106,7 @@ add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON", "ai_
 # Submissions made before assignments existed keep assignment_id NULL (and
 # their free-text assignment_name); nothing else about them changes.
 add_missing_columns("submissions", {"assignment_id": "INTEGER REFERENCES assignments(id)"})
+add_missing_columns("assignments", {"starter_code": "TEXT", "starter_code_filename": "VARCHAR"})
 
 
 # --------------------------------------------------------------------------
@@ -211,6 +214,9 @@ class RubricOut(BaseModel):
     assignment_names: list[str] = []
 
 
+_STARTER_CODE_MAX = 200_000
+
+
 class AssignmentIn(BaseModel):
     subject_id: int
     name: str = Field(max_length=200)
@@ -220,6 +226,11 @@ class AssignmentIn(BaseModel):
     available_from: datetime
     deadline: datetime
     rubric_id: Optional[int] = None
+    # Optional instructor starter code (one file). Its fingerprints are left
+    # out of the token similarity check; the file name's extension decides
+    # which submitted files it is subtracted from.
+    starter_code: str = Field(default="", max_length=_STARTER_CODE_MAX)
+    starter_code_filename: str = Field(default="", max_length=200)
 
 
 class AssignmentUpdate(BaseModel):
@@ -228,6 +239,8 @@ class AssignmentUpdate(BaseModel):
     available_from: Optional[datetime] = None
     deadline: Optional[datetime] = None
     rubric_id: Optional[int] = None  # send null explicitly to detach the rubric
+    starter_code: Optional[str] = Field(default=None, max_length=_STARTER_CODE_MAX)  # "" removes it
+    starter_code_filename: Optional[str] = Field(default=None, max_length=200)
 
 
 class AssignmentOut(BaseModel):
@@ -248,6 +261,8 @@ class AssignmentOut(BaseModel):
     graded_count: int
     created_at: UTCDateTime
     updated_at: Optional[UTCDateTime]
+    starter_code: str = ""
+    starter_code_filename: str = ""
 
 
 class MySubmissionOut(BaseModel):
@@ -430,6 +445,9 @@ class SimilarityCheckOut(BaseModel):
     compared: int
     pairs: list[SimilarityPairOut]
     semantic: SemanticSummaryOut
+    # True when the assignment's starter code was subtracted from the
+    # token fingerprints before comparing.
+    starter_code_excluded: bool = False
 
 
 class BatchAutoEvaluateIn(BaseModel):
@@ -933,7 +951,23 @@ def _assignment_out(db: Session, a: Assignment) -> AssignmentOut:
         max_points=a.rubric.max_total if a.rubric else None,
         submission_count=len(subs), graded_count=sum(1 for s in subs if s.status == "graded"),
         created_at=_as_utc(a.created_at), updated_at=_as_utc(a.updated_at),
+        starter_code=a.starter_code or "", starter_code_filename=a.starter_code_filename or "",
     )
+
+
+def _clean_starter_code(code: str, filename: str) -> tuple[Optional[str], Optional[str]]:
+    """Blank code means no starter code. Otherwise the file name must carry
+    a code extension the similarity check reads, since that's what decides
+    which submitted files the starter is subtracted from."""
+    if not code.strip():
+        return None, None
+    filename = Path(filename.strip()).name
+    if Path(filename).suffix.lower() not in _CODE_EXTENSIONS:
+        raise HTTPException(
+            400, "Starter code needs a file name ending in a code extension "
+                 f"({', '.join(sorted(_CODE_EXTENSIONS))}), e.g. starter.py",
+        )
+    return code, filename
 
 
 def _my_submission_out(submission: Submission, assignment_open: bool) -> MySubmissionOut:
@@ -971,9 +1005,11 @@ def create_assignment(payload: AssignmentIn, instructor: User = Depends(require_
     _validate_window(available_from, deadline)
     _require_unique_assignment_name(db, payload.subject_id, name)
     _check_assignment_rubric(db, payload.subject_id, payload.rubric_id)
+    starter_code, starter_filename = _clean_starter_code(payload.starter_code, payload.starter_code_filename)
     assignment = Assignment(
         subject_id=payload.subject_id, name=name, description=payload.description.strip(),
         available_from=available_from, deadline=deadline, rubric_id=payload.rubric_id,
+        starter_code=starter_code, starter_code_filename=starter_filename,
         created_by_id=instructor.id,
     )
     db.add(assignment)
@@ -1060,6 +1096,12 @@ def update_assignment(
         assignment.name = name
     if payload.description is not None:
         assignment.description = payload.description.strip()
+    if payload.starter_code is not None or payload.starter_code_filename is not None:
+        # Either field may be sent alone; the other keeps its stored value.
+        code = payload.starter_code if payload.starter_code is not None else (assignment.starter_code or "")
+        filename = (payload.starter_code_filename if payload.starter_code_filename is not None
+                    else (assignment.starter_code_filename or ""))
+        assignment.starter_code, assignment.starter_code_filename = _clean_starter_code(code, filename)
     assignment.available_from, assignment.deadline = available_from, deadline
     db.commit()
     db.refresh(assignment)
@@ -1575,6 +1617,18 @@ def check_similarity(
     if len(submissions) < 2:
         raise HTTPException(400, "Need at least 2 code submissions for this assignment to compare")
 
+    # Starter code every student was given is subtracted from each file's
+    # fingerprint (same extension only) so shared boilerplate can't flag a
+    # pair on its own. The semantic path below still sees the full files.
+    assignment = next(
+        (a for a in db.query(Assignment).filter(Assignment.subject_id == subject_id).all()
+         if _norm_name(a.name) == _norm_name(assignment_name)),
+        None,
+    )
+    starter_fp = None
+    if assignment and assignment.starter_code and assignment.starter_code_filename:
+        starter_fp = fingerprint_source("starter", assignment.starter_code_filename, assignment.starter_code)
+
     # 1-4: read + normalize each submission once, fingerprint it, and
     # compare every unordered pair (A-B only, never B-A) on tokens.
     fingerprints: dict[str, "Fingerprint"] = {}
@@ -1587,7 +1641,7 @@ def check_similarity(
             for path in sorted(code_dir.rglob("*")):
                 if path.is_file() and path.suffix.lower() in _CODE_EXTENSIONS:
                     source = path.read_text(encoding="utf-8", errors="ignore")
-                    fp = fingerprint_source(str(submission.id), path.name, source)
+                    fp = subtract_starter(fingerprint_source(str(submission.id), path.name, source), starter_fp)
                     merged.hashes |= fp.hashes
                     merged.token_count += fp.token_count
                     normalized_files.append(normalize_code(source, path.name))
@@ -1655,6 +1709,7 @@ def check_similarity(
             cohort_median=stats.get("cohort_median"),
             review_threshold=stats.get("review_threshold"),
         ),
+        starter_code_excluded=starter_fp is not None,
     )
 
 
