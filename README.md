@@ -348,8 +348,9 @@ those, both are small interfaces with:
     (`ollama pull qwen3-vl:4b`, override with `VISION_MODEL`), 4 frames
     spread across the video are downscaled and described by it, and the
     descriptions go to the grader next to the transcript, so a silent
-    video can still be judged from what is on screen. It switches itself
-    on only when the model is installed; `VIDEO_VISION=off` disables it.
+    video can still be judged from what is on screen. It is **off by
+    default**, so only `qwen3:4b` is used; enable it with `VIDEO_VISION=auto`
+    (it then runs only if the model is installed).
     The descriptions are machine-generated and the grader is told they may
     be wrong; if the step fails, a review flag says so and grading
     continues on the transcript alone. It costs roughly one model call

@@ -25,8 +25,8 @@ download at all, so it always runs for real.
 
 Vision: a few sampled frames are described by a small local vision model
 (Ollama, default ``qwen3-vl:4b``) so a video with no speech can still be
-graded from what is on screen. Auto-enabled when the model is installed;
-``VIDEO_VISION=off`` disables it. A failure never breaks the analysis.
+graded from what is on screen. Opt-in (``VIDEO_VISION=auto``), so by default
+only qwen3:4b is used. A failure never breaks the analysis.
 """
 
 from __future__ import annotations
@@ -221,8 +221,8 @@ def analyze_frames(video_path: Path, sample_fps: float = 1.0) -> FrameAnalysis:
 # A video with no speech has an empty transcript, so the grader would have
 # nothing to judge. A small local vision model (Ollama, default qwen3-vl:4b)
 # describes a few frames spread across the video and those descriptions are
-# given to the grader next to the transcript. Auto-enabled only when the
-# model is installed; ``VIDEO_VISION=off`` disables it. Any failure leaves the
+# given to the grader next to the transcript. Opt-in: set ``VIDEO_VISION=auto``
+# (and install the model); off by default. Any failure leaves the
 # rest of the analysis intact.
 
 VISION_MODEL = os.environ.get("VISION_MODEL", "qwen3-vl:4b")
@@ -318,9 +318,10 @@ class OllamaFrameDescriber(FrameDescriber):
 
 
 def build_default_describer() -> FrameDescriber | None:
-    """The Ollama vision describer when VIDEO_VISION is not 'off' and the
-    vision model is installed; None (no frame descriptions) otherwise."""
-    if os.environ.get("VIDEO_VISION", "auto").strip().lower() == "off":
+    """None (no frame descriptions) by default, so only qwen3:4b is used.
+    With VIDEO_VISION=auto (or on) the Ollama vision describer is used when
+    the vision model is installed."""
+    if os.environ.get("VIDEO_VISION", "off").strip().lower() not in ("auto", "on"):
         return None
     return OllamaFrameDescriber() if _ollama_available(OLLAMA_URL, VISION_MODEL) else None
 

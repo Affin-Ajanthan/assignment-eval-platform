@@ -106,10 +106,12 @@ def test_describer_raises_when_every_frame_fails():
         OllamaFrameDescriber(post=post).describe([(1.0, b"a"), (2.0, b"b")])
 
 
-def test_default_describer_respects_off_and_availability(monkeypatch):
-    monkeypatch.setenv("VIDEO_VISION", "off")
+def test_default_describer_is_off_unless_enabled_and_installed(monkeypatch):
     monkeypatch.setattr(va, "_ollama_available", lambda *a, **k: True)
-    assert build_default_describer() is None                       # switched off
+    monkeypatch.delenv("VIDEO_VISION", raising=False)
+    assert build_default_describer() is None                       # default: only qwen3:4b is used
+    monkeypatch.setenv("VIDEO_VISION", "off")
+    assert build_default_describer() is None                       # explicitly off
     monkeypatch.setenv("VIDEO_VISION", "auto")
     assert isinstance(build_default_describer(), OllamaFrameDescriber)  # installed -> used
     monkeypatch.setattr(va, "_ollama_available", lambda *a, **k: False)
