@@ -327,6 +327,11 @@ those, both are small interfaces with:
     2. **Claude**, when `ANTHROPIC_API_KEY` is set;
     3. the keyword-overlap heuristic grader.
 
+    `GRADER_FEWSHOT=on` adds six hand-written calibration examples to the
+    grading prompt. It is **off by default**: on 299 human-graded short
+    answers it made the small model worse (mean error 1.54 -> 1.87 marks of
+    5) because it more often claimed "no answer was provided".
+
     Force one with `GRADER_BACKEND=ollama|claude|heuristic`; change the
     local model or server with `OLLAMA_MODEL` / `OLLAMA_URL`. The grader
     used is stored with every auto-evaluation (`ollama`, `llm`,

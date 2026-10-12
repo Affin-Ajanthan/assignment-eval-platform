@@ -218,6 +218,44 @@ def _build_grading_tool() -> dict:
     }
 
 
+# Hand-written calibration examples (not taken from any evaluation data).
+# They span the whole range on purpose: a small model told only "do not be
+# harsh" drifts to 4/5 for everything, so the weak and wrong cases matter as
+# much as the generous one. Scores are out of 10 and scaled to each criterion.
+FEW_SHOT_EXAMPLES = """\
+CALIBRATION EXAMPLES (illustrative scores out of 10 -- scale proportionally to each \
+criterion's max points). Judge meaning, not wording: give full marks when the key idea is \
+clearly present even if the answer is short or informal, and give low marks when something \
+important is missing, vague or wrong.
+
+Example A -- criterion "Explains what a stack is"
+  Evidence: "A stack is a list where you add and remove from the same end, so the last thing in is the first out."
+  Score: 10 -- states the key LIFO idea correctly, in plain words.
+Example B -- criterion "Explains what a stack is"
+  Evidence: "A stack stores data."
+  Score: 3 -- true but vague; it never says how a stack behaves.
+Example C -- criterion "Explains what a stack is"
+  Evidence: "A stack is a queue where the first item added is the first one removed."
+  Score: 1 -- describes FIFO (a queue); the central idea is wrong.
+Example D -- criterion "Handles empty input" (evidence: def avg(v): return sum(v) / len(v))
+  Score: 2 -- no check for an empty list, so it crashes with a division by zero.
+Example E -- criterion "Report describes testing"
+  Evidence: "We tested 12 inputs, including an empty list and a very long one, and compared the results with Python's sorted()."
+  Score: 9 -- concrete test cases and a way of checking them.
+Example F -- criterion "Report describes testing"
+  Evidence: (nothing submitted for this)
+  Score: 0 -- no evidence.
+"""
+
+
+def _few_shot_enabled() -> bool:
+    # Opt-in (GRADER_FEWSHOT=on). Measured on 299 Mohler answers through this
+    # prompt, the examples made grading WORSE (MAE 1.54 -> 1.87): they raised
+    # the share of false "no answer was provided" zeros from 69 to 127, so
+    # they are off by default until a better set is validated.
+    return os.environ.get("GRADER_FEWSHOT", "off").strip().lower() == "on"
+
+
 def _build_prompt(criteria: list[Criterion], evidence: Evidence) -> str:
     criteria_desc = "\n".join(
         f"- {c.name} (max {c.max_points} points): {c.description}" for c in criteria
@@ -258,7 +296,8 @@ def _build_prompt(criteria: list[Criterion], evidence: Evidence) -> str:
         "RESULT section (if present) for what a run did, and must not state what the "
         "code prints or returns as if observed unless such a section shows it. Judge by "
         "reading it, and word uncertain judgements as \"appears to\" or \"by inspection\".\n\n"
-        f"RUBRIC:\n{criteria_desc}\n\n"
+        + (f"{FEW_SHOT_EXAMPLES}\n" if _few_shot_enabled() else "")
+        + f"RUBRIC:\n{criteria_desc}\n\n"
         f"CODE ANALYSIS (static metrics):\n{code_summary}\n\n"
         f"SOURCE CODE (truncated):\n{source_code}\n\n"
         f"{execution}"

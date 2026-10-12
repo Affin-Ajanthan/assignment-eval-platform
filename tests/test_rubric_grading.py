@@ -361,3 +361,48 @@ def test_no_grader_changes_marks_because_of_review_flags(flags):
 
     claude = LLMRubricGrader(client=_FakeAnthropicClient({"criteria": reply}))
     assert claude.grade(criteria, flagged).total_score == claude.grade(criteria, plain).total_score == 17
+
+
+# --------------------------------------------------------------------------
+# Calibration (few-shot) examples in the grading prompt.
+# --------------------------------------------------------------------------
+
+
+def _example_scores():
+    return [int(m) for m in re.findall(r"Score: (\d+)", rubric_grading.FEW_SHOT_EXAMPLES)]
+
+
+def test_prompt_contains_calibration_examples_before_the_rubric_when_enabled(monkeypatch):
+    monkeypatch.setenv("GRADER_FEWSHOT", "on")
+    prompt = rubric_grading._build_prompt([Criterion("X", "d", 5)], Evidence())
+    assert "CALIBRATION EXAMPLES" in prompt
+    assert prompt.index("CALIBRATION EXAMPLES") < prompt.index("RUBRIC:")
+    assert "scale proportionally to each criterion's max points" in prompt
+
+
+def test_calibration_examples_are_off_by_default(monkeypatch):
+    """Off by default: on the Mohler evaluation they made the platform prompt
+    worse (more false 'no answer provided' zeros), so they are opt-in."""
+    monkeypatch.delenv("GRADER_FEWSHOT", raising=False)
+    prompt = rubric_grading._build_prompt([Criterion("X", "d", 5)], Evidence())
+    assert "CALIBRATION EXAMPLES" not in prompt
+    monkeypatch.setenv("GRADER_FEWSHOT", "off")
+    assert "CALIBRATION EXAMPLES" not in rubric_grading._build_prompt([Criterion("X", "d", 5)], Evidence())
+
+
+def test_calibration_examples_cover_the_whole_range_not_just_generous_marks():
+    """Telling a small model only 'do not be harsh' made it score nearly
+    everything 4-5 in our evaluation (weak answers inflated by 1-1.6 marks), so
+    the examples must include clearly low and zero cases as well as full marks."""
+    scores = _example_scores()
+    assert len(scores) >= 5
+    assert max(scores) >= 9                                   # full marks for a short, correct answer
+    assert sum(1 for s in scores if s <= 3) >= 3              # several clearly weak or wrong cases
+    assert 0 in scores                                        # and a no-evidence case
+
+
+def test_calibration_examples_do_not_depend_on_review_flags(monkeypatch):
+    monkeypatch.setenv("GRADER_FEWSHOT", "on")
+    criteria = [Criterion("Academic integrity", "Original work", 20)]
+    assert rubric_grading._build_prompt(criteria, Evidence(similarity_flagged=True)) == \
+        rubric_grading._build_prompt(criteria, Evidence())
