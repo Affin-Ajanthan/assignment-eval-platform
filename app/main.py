@@ -2081,9 +2081,10 @@ def _run_auto_evaluation(
         )
         .all()
     )
-    # Only token/fingerprint overlap counts as a similarity flag that can
-    # cap an integrity score; a semantic-only "review" flag is surfaced
-    # to the instructor but never penalizes on its own.
+    # Similarity flags are review signals only and never change marks in
+    # any grader. Token/fingerprint overlap is the "high" flag; a
+    # semantic-only "review" flag is surfaced the same way, just worded
+    # as a weaker signal.
     similarity_flagged = any(f.flag_level in (None, "high") for f in flags)
     semantic_review_flagged = any(f.flag_level == "review" for f in flags)
 

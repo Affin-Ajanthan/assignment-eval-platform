@@ -132,8 +132,9 @@ logged in.
    /submissions/{id}/auto-evaluate` runs the full pipeline --
    static analysis, AI-text/AI-code heuristics, video frame analysis
    and transcription, cross-modal consistency, and rubric grading --
-   against the chosen rubric, folding in the similarity flag from step
-   4. The result (recommended score, review flags, per-criterion
+   against the chosen rubric. The similarity flag from step 4 is shown
+   as a review flag; it never changes the marks (the same rule for every
+   grader). The result (recommended score, review flags, per-criterion
    breakdown) is stored and shown on the dashboard.
    **Whole assignment at once**: `POST
    /subjects/{id}/assignments/{name}/auto-evaluate` with `{"rubric_id": ...}`
@@ -177,9 +178,9 @@ Ruby, Go, C, C++, C#; pinned to one revision) as an extra signal:
 - A pair the token check didn't flag gets a **"review"** flag when its
   semantic score is at least 0.80 *and* clearly above the rest of
   the cohort (median + 2 robust standard deviations). Token-based flags stay
-  the only **"high"** ones, and a semantic-only flag never caps a score
-  in auto-evaluation -- it's shown as "potential similarity detected
-  -- lecturer review recommended".
+  the only **"high"** ones. No similarity flag changes marks in
+  auto-evaluation, for any grader -- they are shown as review flags
+  ("potential similarity detected -- lecturer review recommended").
 
 The model (~500 MB) downloads once on first use (it's preloaded in
 the background at startup) and is cached by Hugging Face afterwards.
@@ -357,6 +358,11 @@ those, both are small interfaces with:
     2. **Claude**, when `ANTHROPIC_API_KEY` is set;
     3. the keyword-overlap heuristic grader.
 
+    `GRADER_FEWSHOT=on` adds six hand-written calibration examples to the
+    grading prompt. It is **off by default**: on 299 human-graded short
+    answers it made the small model worse (mean error 1.54 -> 1.87 marks of
+    5) because it more often claimed "no answer was provided".
+
     Force one with `GRADER_BACKEND=ollama|claude|heuristic`; change the
     local model or server with `OLLAMA_MODEL` / `OLLAMA_URL`. The grader
     used is stored with every auto-evaluation (`ollama`, `llm`,
@@ -368,6 +374,28 @@ those, both are small interfaces with:
     fails for any reason, the video stage continues with an empty
     transcript (backend `null`, reason kept in `TranscriptionResult.error`)
     and the frame analysis, so an evaluation never crashes on it.
+  - **Video frame descriptions (vision)** -- a video with no speech has an
+    empty transcript. When a local vision model is installed
+    (`ollama pull qwen3-vl:4b`, override with `VISION_MODEL`), 4 frames
+    spread across the video are downscaled and described by it, and the
+    descriptions go to the grader next to the transcript, so a silent
+    video can still be judged from what is on screen. It is **off by
+    default**, so only `qwen3:4b` is used; enable it with `VIDEO_VISION=auto`
+    (it then runs only if the model is installed).
+    The descriptions are machine-generated and the grader is told they may
+    be wrong; if the step fails, a review flag says so and grading
+    continues on the transcript alone. It costs roughly one model call
+    per frame.
+  - **Running the code (optional, off by default)** -- the LLM graders can
+    only read code. Set `CODE_SANDBOX=docker` and each submission's `.py`
+    files (at most 3) are run in a throw-away Docker container (no network,
+    read-only filesystem, code mounted read-only, all capabilities dropped,
+    unprivileged user, 256 MB / 0.5 CPU / 64 processes, 10 s limit). The
+    real exit code, stdout and stderr go to the grader as an EXECUTION
+    RESULT it may cite, and a crash or timeout adds a review flag. If Docker
+    is not running nothing is executed -- there is no unsandboxed fallback --
+    and a review flag says so. Image: `CODE_SANDBOX_IMAGE`
+    (default `python:3.12-slim`).
 
 The AI-content heuristics (for both code and report text) are
 explicitly style heuristics, not validated classifiers -- there is no

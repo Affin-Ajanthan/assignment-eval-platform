@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .code_analysis import CodeReport, analyze_directory, read_sources
+from .code_execution import ExecutionResult, SandboxUnavailable, run_python_files, sandbox_enabled
 from .cross_modal import ConsistencyResult, check_consistency
 from .document_extraction import ReportExtraction, extract_report_text
 from .report_analysis import ReportAnalysis, analyze_report
@@ -111,12 +112,27 @@ def evaluate_submission(
 
     report_ai_flagged = bool(report_analysis and report_analysis.ai_text.signal == "high")
 
+    # Optional (CODE_SANDBOX=docker): run the student's code in an isolated
+    # container so the grader can cite a real result. A sandbox problem is
+    # reported as a review flag and never fails the evaluation.
+    code_execution: list[ExecutionResult] = []
+    sandbox_problem: str | None = None
+    if code_dir and sandbox_enabled():
+        try:
+            code_execution = run_python_files(code_dir)
+        except SandboxUnavailable as exc:
+            sandbox_problem = f"code execution is enabled but the sandbox is unavailable: {exc}"
+        except Exception as exc:
+            sandbox_problem = f"code execution failed ({exc.__class__.__name__}: {exc})"[:200]
+
     grader = grader or build_default_grader()
     evidence = Evidence(
         code_reports=code_reports,
         code_sources=read_sources(code_dir) if code_dir else {},
+        code_execution=code_execution,
         report=report_analysis,
         video_transcript=video_transcript,
+        video_frames=[(d.seconds, d.text) for d in video_analysis.frame_descriptions] if video_analysis else [],
         similarity_flagged=similarity_flagged,
         # AI-content signals (report and code) are review flags only: they
         # never lower the suggested score. AI detectors misfire, notably on
@@ -126,6 +142,13 @@ def evaluate_submission(
     grading = grader.grade(criteria, evidence)
 
     review_flags: list[str] = []
+    if sandbox_problem:
+        review_flags.append(sandbox_problem)
+    for run in code_execution:
+        if run.status == "timeout":
+            review_flags.append(f"sandbox: {run.filename} did not finish within the time limit -- review recommended")
+        elif run.status == "error":
+            review_flags.append(f"sandbox: {run.filename} crashed (exit code {run.exit_code}) -- review recommended")
     if similarity_flagged:
         review_flags.append("code similarity checker flagged this submission against another student's")
     if semantic_review_flagged:
@@ -148,6 +171,11 @@ def evaluate_submission(
     # stored, but it no longer adds review flags: it only matches function
     # names word-for-word, so it contradicts the meaning-based cross-modal
     # check (semantic_consistency.py), which is the consistency signal shown.
+    if video_analysis and video_analysis.vision_error:
+        review_flags.append(
+            f"video frames could not be described by the vision model ({video_analysis.vision_error}); "
+            "the grader only had the transcript"
+        )
     if video_analysis and video_analysis.frames.screen_recording_score >= 80:
         review_flags.append(
             f"video looks like a static screen recording (avg frame diff {video_analysis.frames.avg_frame_diff})"
