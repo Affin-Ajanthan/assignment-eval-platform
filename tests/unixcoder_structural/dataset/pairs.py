@@ -346,6 +346,9 @@ PAIRS = [
      "random": lambda r: (r.randint(0, 50), r.randint(0, 500), r.randint(0, 100))},
 
     {"id": "TC16", "category": "structural", "transformation": "add unused variables", "entry": "find_max",
+     # Production preprocessing removes unused variables (python_cleanup), so this
+     # change is expected to disappear before embedding.
+     "removed_by_cleanup": True,
      "original": d("""
         def find_max(values):
             best = values[0]

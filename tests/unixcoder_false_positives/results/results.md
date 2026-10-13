@@ -34,13 +34,13 @@ Note: in production the semantic flag also requires the pair to be an outlier ag
 | 9 | TC02 | Python | same task (maximum), manual vs standard library | **0.709** | 0.761 | 0.00 / 0.00 | 50% | same function signature and purpose; very short |
 | 10 | TC07 | Python | same string problem (palindrome), different approach | **0.705** | 0.725 | 0.03 / 0.09 | 25% | same task; both normalise case and compare characters |
 | 11 | TC05 | Python | same task (search), linear vs binary | **0.688** | 0.610 | 0.06 / 0.22 | 40% | same task; both loop and compare against a target |
-| 12 | TC12 | Python | different tasks using the same standard-library modules | **0.670** | 0.580 | 0.22 / 0.38 | 33% | both lean on collections.Counter/defaultdict and itertools |
-| 13 | TC01 | Python | same task (maximum), different algorithm | **0.661** | 0.669 | 0.00 / 0.00 | 17% | same task; both iterate over the same list and compare elements |
+| 12 | TC01 | Python | same task (maximum), different algorithm | **0.661** | 0.669 | 0.00 / 0.00 | 17% | same task; both iterate over the same list and compare elements |
+| 13 | TC12 | Python | different tasks using the same standard-library modules | **0.607** | 0.580 | 0.22 / 0.38 | 33% | both lean on collections.Counter/defaultdict and itertools |
 | 14 | TC08 | Python | same array problem (second largest), different approach | **0.581** | 0.738 | 0.06 / 0.17 | 33% | same task; both track the largest values of a list |
 | 15 | TC19 | Python | different logic under the same step-by-step comments | **0.572** | 0.633 | 0.12 / 0.29 | 50% | identical comment outline (removed by normalisation) |
 | 16 | TC16 | Python | different tasks with the same function name | **0.456** | 0.314 | 0.06 / 0.14 | 25% | both define and call `process(data)` (names removed by normalisation) |
 | 17 | TC15 | Python | different tasks with the same variable names | **0.440** | 0.427 | 0.12 / 0.21 | 20% | shares names like values/total/count/result (removed by normalisation) |
-| 18 | TC10 | Python | different tasks sharing the same import block | **0.420** | 0.299 | 0.14 / 0.26 | 50% | identical import statements at the top of both files |
+| 18 | TC10 | Python | different tasks sharing the same import block | **0.386** | 0.299 | 0.14 / 0.26 | 50% | identical import statements at the top of both files |
 | 19 | TC18 | JavaScript | different apps sharing Express framework boilerplate | **0.339** | 0.281 | 0.33 / 0.50 | 46% | identical Express setup: require, app, middleware, listen |
 | 20 | TC09 | Python | different tasks (FizzBuzz vs grade bands) using common loops/conditions | **0.273** | 0.236 | 0.32 / 0.53 | 8% | both are a for loop over a range/list with an if/elif/else chain |
 

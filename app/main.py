@@ -88,6 +88,7 @@ from .models import (
 )
 from .similarity.ai_heuristics import score_source as _score_ai_code
 from .similarity.core import Fingerprint, compare_all, fingerprint_source, subtract_starter
+from .similarity.python_cleanup import names_in
 from .similarity import report_similarity as _report_sim
 from . import exports as _exports
 from .similarity.semantic import (
@@ -1815,14 +1816,19 @@ def check_similarity(
         code_dir = BASE_DIR / submission.code_path
         merged = Fingerprint(submission_id=str(submission.id), filename="(all files)", token_count=0)
         normalized_files: list[str] = []
+        files = []
         if code_dir.is_dir():
-            for path in sorted(code_dir.rglob("*")):
-                if path.is_file() and path.suffix.lower() in _CODE_EXTENSIONS:
-                    source = path.read_text(encoding="utf-8", errors="ignore")
-                    fp = subtract_starter(fingerprint_source(str(submission.id), path.name, source), starter_fp)
-                    merged.hashes |= fp.hashes
-                    merged.token_count += fp.token_count
-                    normalized_files.append(normalize_code(source, path.name))
+            files = [(path, path.read_text(encoding="utf-8", errors="ignore")) for path in sorted(code_dir.rglob("*"))
+                     if path.is_file() and path.suffix.lower() in _CODE_EXTENSIONS]
+        # Names each Python file uses, so a module-level constant read by
+        # another file isn't removed as "unused" before the semantic check.
+        py_names = {path: names_in(source) for path, source in files if path.suffix.lower() == ".py"}
+        for path, source in files:
+            fp = subtract_starter(fingerprint_source(str(submission.id), path.name, source), starter_fp)
+            merged.hashes |= fp.hashes
+            merged.token_count += fp.token_count
+            external = set().union(*(names for other, names in py_names.items() if other != path))
+            normalized_files.append(normalize_code(source, path.name, external))
         fingerprints[str(submission.id)] = merged
         semantic_sources[str(submission.id)] = "\n".join(f for f in normalized_files if f)
 

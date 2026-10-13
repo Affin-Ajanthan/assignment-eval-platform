@@ -227,7 +227,21 @@ TC05,Python,"same task (search), linear vs binary",same task; both loop and comp
             high = mid - 1
     return -1
 "
-TC12,Python,different tasks using the same standard-library modules,both lean on collections.Counter/defaultdict and itertools,0.6696820259094238,0.5798048973083496,0.21621621621621623,0.38095238095238093,False,0.3333333333333333,True,True,False,False,False,False,False,False,"from collections import Counter, defaultdict
+TC01,Python,"same task (maximum), different algorithm",same task; both iterate over the same list and compare elements,0.6609959602355957,0.6692259311676025,0.0,0.0,False,0.16666666666666666,True,True,False,False,False,False,False,False,"def largest(values):
+    best = values[0]
+    for v in values[1:]:
+        if v > best:
+            best = v
+    return best
+","def largest(values):
+    if len(values) == 1:
+        return values[0]
+    middle = len(values) // 2
+    left = largest(values[:middle])
+    right = largest(values[middle:])
+    return left if left >= right else right
+"
+TC12,Python,different tasks using the same standard-library modules,both lean on collections.Counter/defaultdict and itertools,0.6067929267883301,0.5798048973083496,0.21621621621621623,0.38095238095238093,False,0.3333333333333333,True,True,False,False,False,False,False,False,"from collections import Counter, defaultdict
 from itertools import chain
 
 
@@ -244,20 +258,6 @@ def top_bigrams(sentences, n):
     words = list(chain.from_iterable(s.lower().split() for s in sentences))
     pairs = Counter(zip(words, words[1:]))
     return pairs.most_common(n)
-"
-TC01,Python,"same task (maximum), different algorithm",same task; both iterate over the same list and compare elements,0.6609959602355957,0.6692259311676025,0.0,0.0,False,0.16666666666666666,True,True,False,False,False,False,False,False,"def largest(values):
-    best = values[0]
-    for v in values[1:]:
-        if v > best:
-            best = v
-    return best
-","def largest(values):
-    if len(values) == 1:
-        return values[0]
-    middle = len(values) // 2
-    left = largest(values[:middle])
-    right = largest(values[middle:])
-    return left if left >= right else right
 "
 TC08,Python,"same array problem (second largest), different approach",same task; both track the largest values of a list,0.580567479133606,0.7376446723937988,0.06451612903225806,0.16666666666666666,False,0.3333333333333333,True,False,False,False,False,False,False,False,"def second_largest(values):
     first = second = None
@@ -316,7 +316,7 @@ TC15,Python,different tasks with the same variable names,shares names like value
     result = {""range"": total, ""freezing_days"": count}
     return result
 "
-TC10,Python,different tasks sharing the same import block,identical import statements at the top of both files,0.4201636016368866,0.2994718551635742,0.14285714285714285,0.2631578947368421,False,0.5,False,False,False,False,False,False,False,False,"import json
+TC10,Python,different tasks sharing the same import block,identical import statements at the top of both files,0.38590186834335327,0.2994718551635742,0.14285714285714285,0.2631578947368421,False,0.5,False,False,False,False,False,False,False,False,"import json
 import math
 import os
 import sys

@@ -265,30 +265,6 @@
       "b": "def find_index(items, target):\n    low, high = 0, len(items) - 1\n    while low <= high:\n        mid = (low + high) // 2\n        if items[mid] == target:\n            return mid\n        if items[mid] < target:\n            low = mid + 1\n        else:\n            high = mid - 1\n    return -1\n"
     },
     {
-      "id": "TC12",
-      "language": "Python",
-      "relationship": "different tasks using the same standard-library modules",
-      "why_similar": "both lean on collections.Counter/defaultdict and itertools",
-      "production": 0.6696820259094238,
-      "raw": 0.5798048973083496,
-      "jaccard": 0.21621621621621623,
-      "containment": 0.38095238095238093,
-      "token_flag": false,
-      "shared_lines": 0.3333333333333333,
-      "flagged_at": {
-        "0.5": true,
-        "0.6": true,
-        "0.7": false,
-        "0.75": false,
-        "0.8": false,
-        "0.85": false,
-        "0.9": false,
-        "0.95": false
-      },
-      "a": "from collections import Counter, defaultdict\nfrom itertools import chain\n\n\ndef group_anagrams(words):\n    groups = defaultdict(list)\n    for word in words:\n        groups[\"\".join(sorted(word))].append(word)\n    return [g for g in groups.values() if len(g) > 1]\n",
-      "b": "from collections import Counter, defaultdict\nfrom itertools import chain\n\n\ndef top_bigrams(sentences, n):\n    words = list(chain.from_iterable(s.lower().split() for s in sentences))\n    pairs = Counter(zip(words, words[1:]))\n    return pairs.most_common(n)\n"
-    },
-    {
       "id": "TC01",
       "language": "Python",
       "relationship": "same task (maximum), different algorithm",
@@ -311,6 +287,30 @@
       },
       "a": "def largest(values):\n    best = values[0]\n    for v in values[1:]:\n        if v > best:\n            best = v\n    return best\n",
       "b": "def largest(values):\n    if len(values) == 1:\n        return values[0]\n    middle = len(values) // 2\n    left = largest(values[:middle])\n    right = largest(values[middle:])\n    return left if left >= right else right\n"
+    },
+    {
+      "id": "TC12",
+      "language": "Python",
+      "relationship": "different tasks using the same standard-library modules",
+      "why_similar": "both lean on collections.Counter/defaultdict and itertools",
+      "production": 0.6067929267883301,
+      "raw": 0.5798048973083496,
+      "jaccard": 0.21621621621621623,
+      "containment": 0.38095238095238093,
+      "token_flag": false,
+      "shared_lines": 0.3333333333333333,
+      "flagged_at": {
+        "0.5": true,
+        "0.6": true,
+        "0.7": false,
+        "0.75": false,
+        "0.8": false,
+        "0.85": false,
+        "0.9": false,
+        "0.95": false
+      },
+      "a": "from collections import Counter, defaultdict\nfrom itertools import chain\n\n\ndef group_anagrams(words):\n    groups = defaultdict(list)\n    for word in words:\n        groups[\"\".join(sorted(word))].append(word)\n    return [g for g in groups.values() if len(g) > 1]\n",
+      "b": "from collections import Counter, defaultdict\nfrom itertools import chain\n\n\ndef top_bigrams(sentences, n):\n    words = list(chain.from_iterable(s.lower().split() for s in sentences))\n    pairs = Counter(zip(words, words[1:]))\n    return pairs.most_common(n)\n"
     },
     {
       "id": "TC08",
@@ -413,7 +413,7 @@
       "language": "Python",
       "relationship": "different tasks sharing the same import block",
       "why_similar": "identical import statements at the top of both files",
-      "production": 0.4201636016368866,
+      "production": 0.38590186834335327,
       "raw": 0.2994718551635742,
       "jaccard": 0.14285714285714285,
       "containment": 0.2631578947368421,

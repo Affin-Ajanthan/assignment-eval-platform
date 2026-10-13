@@ -27,6 +27,7 @@ from pathlib import Path
 
 from .ai_heuristics import score_source
 from .core import Fingerprint, compare_all, fingerprint_source
+from .python_cleanup import names_in
 from .semantic import (
     apply_semantic_signal,
     get_semantic_service,
@@ -63,13 +64,15 @@ def build_fingerprints(submissions_dir: Path) -> dict[str, Fingerprint]:
 
 
 def build_semantic_sources(submissions_dir: Path) -> dict[str, str]:
-    return {
-        student_dir.name: "\n".join(
-            normalize_code(path.read_text(encoding="utf-8", errors="ignore"), path.name)
-            for path in _iter_code_files(student_dir)
+    out = {}
+    for student_dir in _iter_student_dirs(submissions_dir):
+        files = [(p, p.read_text(encoding="utf-8", errors="ignore")) for p in _iter_code_files(student_dir)]
+        py_names = {p: names_in(src) for p, src in files if p.suffix.lower() == ".py"}
+        out[student_dir.name] = "\n".join(
+            normalize_code(src, p.name, set().union(*(n for other, n in py_names.items() if other != p)))
+            for p, src in files
         )
-        for student_dir in _iter_student_dirs(submissions_dir)
-    }
+    return out
 
 
 def build_ai_scores(submissions_dir: Path):

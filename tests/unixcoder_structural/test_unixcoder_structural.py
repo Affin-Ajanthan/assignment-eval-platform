@@ -100,8 +100,10 @@ def test_structural_pair(case, measured, sink):
     problems = []
     if case["category"] != "unrelated" and preserves is not True:
         problems.append(f"claimed behaviour-preserving but {detail}")
-    if case["category"] in {"structural", "equivalent"} and m["normalized_identical"]:
+    if case["category"] in {"structural", "equivalent"} and m["normalized_identical"]             and not case.get("removed_by_cleanup"):
         problems.append("preprocessing erases the change, so this is not a structural transformation")
+    if case.get("removed_by_cleanup") and not m["normalized_identical"]:
+        problems.append("expected the dead-code cleanup to remove this change, but it did not")
     sink.append({"id": case["id"], "category": case["category"], "transformation": case["transformation"],
                  "preserves_behaviour": preserves, "verification": detail,
                  "normalized_identical": m["normalized_identical"],

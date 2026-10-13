@@ -282,7 +282,7 @@ TC15,structural,equivalent arithmetic expressions,True,identical results on 203 
     discount = (discount_percent * gross) // 100
     return -discount + gross
 "
-TC16,structural,add unused variables,True,identical results on 203 inputs (3 edge cases + 200 random),False,0.6981121897697449,0.776947021484375,PASS,,"def find_max(values):
+TC16,structural,add unused variables,True,identical results on 203 inputs (3 edge cases + 200 random),True,1.0,0.776947021484375,PASS,,"def find_max(values):
     best = values[0]
     for v in values[1:]:
         if v > best:
@@ -298,7 +298,7 @@ TC16,structural,add unused variables,True,identical results on 203 inputs (3 edg
             best = v
     return best
 "
-TC17,structural,add dead code,True,identical results on 203 inputs (3 edge cases + 200 random),False,0.7236107587814331,0.7597095370292664,PASS,,"def find_max(values):
+TC17,structural,add dead code,True,identical results on 203 inputs (3 edge cases + 200 random),False,0.8925982117652893,0.7597095370292664,PASS,,"def find_max(values):
     best = values[0]
     for v in values[1:]:
         if v > best:

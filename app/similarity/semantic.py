@@ -54,6 +54,7 @@ from pathlib import Path
 from typing import Callable, Iterable, Protocol
 
 from .core import _GENERIC_KEYWORDS, PairResult
+from .python_cleanup import strip_python_dead_code
 
 log = logging.getLogger(__name__)
 
@@ -152,12 +153,20 @@ def anonymize_identifiers(code: str) -> str:
     return _STRING_OR_IDENT_RE.sub(substitute, code)
 
 
-def normalize_code(source: str, filename: str = "") -> str:
+def normalize_code(source: str, filename: str = "", external_names: set[str] | None = None) -> str:
     """Prepare code for embedding: strip comments (keeping string
     literals intact), anonymize identifiers, collapse whitespace.
     Comments and names are the cheapest things to change when
     disguising a copy, so leaving them in would let them dominate the
-    embedding over the code's actual structure."""
+    embedding over the code's actual structure.
+
+    Python files first lose code that does nothing (unused variables and
+    imports, dead branches, unreachable statements; see python_cleanup):
+    otherwise one inserted junk variable renumbers every later placeholder
+    and an exact copy scores like different code. `external_names`: the
+    names used by the submission's other files (see python_cleanup)."""
+    if Path(filename).suffix.lower() == ".py":
+        source = strip_python_dead_code(source, external_names)
     pattern = _HASH_COMMENT_RE if Path(filename).suffix.lower() in _HASH_COMMENT_LANGS else _C_COMMENT_RE
     stripped = pattern.sub(lambda m: "" if m.lastgroup == "comment" else m.group(), source)
     return " ".join(anonymize_identifiers(stripped).split())

@@ -469,9 +469,9 @@ def test_api_reports_semantic_review_flag_alongside_token_metrics(injected_servi
     })))
     subject, instructor_tok, student_tok = setup_subject_with_users(client)
     assignment = "Semantic API Assignment"
-    s1 = _submit(student_tok, subject["id"], assignment, GRADES_ORIGINAL + '\nTAG = "ALPHA"\n')
-    s2 = _submit(student_tok, subject["id"], assignment, GRADES_RESTRUCTURED + '\nTAG = "ALPHA2"\n')
-    s3 = _submit(student_tok, subject["id"], assignment, DIFFERENT_BANK + '\nTAG = "BETA"\n')
+    s1 = _submit(student_tok, subject["id"], assignment, GRADES_ORIGINAL + '\nprint("ALPHA")\n')
+    s2 = _submit(student_tok, subject["id"], assignment, GRADES_RESTRUCTURED + '\nprint("ALPHA2")\n')
+    s3 = _submit(student_tok, subject["id"], assignment, DIFFERENT_BANK + '\nprint("BETA")\n')
 
     body = _check(subject["id"], assignment, instructor_tok)
     assert body["semantic"]["status"] == "ok" and body["semantic"]["warning"] is None
@@ -527,8 +527,8 @@ def test_semantic_review_flag_is_shown_in_auto_evaluation_but_never_caps_the_sco
               "criteria": [{"name": "Academic integrity", "description": "original work", "max_points": 20}]},
         headers=auth_headers(instructor_tok),
     ).json()
-    s1 = _submit(student_tok, subject["id"], assignment, GRADES_ORIGINAL + '\nTAG = "ALPHA"\n')
-    s2 = _submit(student_tok, subject["id"], assignment, GRADES_RESTRUCTURED + '\nTAG = "ALPHA2"\n')
+    s1 = _submit(student_tok, subject["id"], assignment, GRADES_ORIGINAL + '\nprint("ALPHA")\n')
+    s2 = _submit(student_tok, subject["id"], assignment, GRADES_RESTRUCTURED + '\nprint("ALPHA2")\n')
     assert _find(_check(subject["id"], assignment, instructor_tok), s1["id"], s2["id"])["flag_level"] == "review"
 
     body = client.post(
