@@ -13,6 +13,12 @@ const fileInput = "mt-1 mb-3 block w-full text-sm";
 const CODE_ACCEPT = ".zip,.py,.java,.js,.ts,.jsx,.tsx,.c,.cpp,.h,.hpp,.cs,.go,.rb,.kt,.swift,.php,.rs";
 const REPORT_ACCEPT = ".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const VIDEO_ACCEPT = ".mp4,.mov,.avi,.mkv,.webm,.m4v,video/*";
+// Shown under each upload field. These must match the backend limits in app/main.py.
+const UPLOAD_HINTS = {
+  code: "A single source file (.py, .java, .js, .c, .cpp and more) or a .zip. Max 50 MB; a .zip may unpack to at most 200 MB.",
+  report: "PDF or DOCX. Max 25 MB.",
+  video: "MP4, MOV, AVI, MKV, WEBM or M4V. Max 1 GB.",
+};
 
 /** The same three upload fields for a new submission or an edit. */
 function UploadForm({
@@ -75,16 +81,19 @@ function UploadForm({
         Code (zip or single file)
       </label>
       <input id={id("code")} type="file" ref={codeRef} accept={CODE_ACCEPT} className={fileInput} />
+      <p className="mb-3 text-xs text-gray-500">{UPLOAD_HINTS.code}</p>
 
       <label className="block text-sm font-semibold" htmlFor={id("report")}>
         Report (PDF or DOCX)
       </label>
       <input id={id("report")} type="file" ref={reportRef} accept={REPORT_ACCEPT} className={fileInput} />
+      <p className="mb-3 text-xs text-gray-500">{UPLOAD_HINTS.report}</p>
 
       <label className="block text-sm font-semibold" htmlFor={id("video")}>
         Presentation video
       </label>
       <input id={id("video")} type="file" ref={videoRef} accept={VIDEO_ACCEPT} className={fileInput} />
+      <p className="mb-3 text-xs text-gray-500">{UPLOAD_HINTS.video}</p>
 
       <div className="flex flex-wrap gap-2">
         <button
@@ -338,7 +347,7 @@ export default function StudentPage() {
                         s.status === "graded" ? "bg-green-50 text-green-800" : "bg-yellow-50 text-yellow-800"
                       }`}
                     >
-                      {s.status}
+                      {s.status === "graded" ? "Graded" : "Submitted"}
                     </span>
                   </td>
                   <td className="border border-gray-200 px-3 py-1.5">{formatMark(s.final_mark, s.max_mark)}</td>
