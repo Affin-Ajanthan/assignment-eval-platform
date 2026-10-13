@@ -50,6 +50,9 @@ export interface Rubric {
 
 export type AssignmentStatus = "upcoming" | "open" | "closed";
 
+/** File kinds an assignment accepts. */
+export type SubmissionType = "code" | "report" | "video";
+
 /** Instructor view of an assignment. Times are ISO strings with a UTC offset. */
 export interface Assignment {
   id: number;
@@ -63,6 +66,7 @@ export interface Assignment {
   rubric_id: number | null;
   rubric_name: string | null;
   max_points: number | null;
+  submission_types: SubmissionType[];
   submission_count: number;
   graded_count: number;
   created_at: string;
@@ -92,6 +96,7 @@ export interface StudentAssignment {
   available_from: string;
   deadline: string;
   status: "open" | "closed";
+  submission_types: SubmissionType[];
   my_submission: MySubmission | null;
 }
 

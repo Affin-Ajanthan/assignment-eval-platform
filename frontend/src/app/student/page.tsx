@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { apiFetch, StudentAssignment, Submission } from "@/lib/api";
+import { apiFetch, StudentAssignment, Submission, SubmissionType } from "@/lib/api";
 import { useRequireRole } from "@/lib/useRequireRole";
 import { formatDateTime, formatMark } from "@/lib/datetime";
 import AccountBar from "@/components/AccountBar";
@@ -20,7 +20,9 @@ const UPLOAD_HINTS = {
   video: "MP4, MOV, AVI, MKV, WEBM or M4V. Max 1 GB.",
 };
 
-/** The same three upload fields for a new submission or an edit. */
+const TYPE_LABEL: Record<SubmissionType, string> = { code: "Code", report: "Report", video: "Presentation video" };
+
+/** Only the upload fields this assignment accepts, for a new submission or an edit. */
 function UploadForm({
   assignment,
   mode,
@@ -38,6 +40,7 @@ function UploadForm({
   const [message, setMessage] = useState<MessageState>(null);
   const [submitting, setSubmitting] = useState(false);
   const id = (field: string) => `${field}-${assignment.id}`;
+  const accepts = (kind: SubmissionType) => assignment.submission_types.includes(kind);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -70,6 +73,9 @@ function UploadForm({
 
   return (
     <form onSubmit={handleSubmit} className="mt-4 rounded-md border border-gray-200 p-4">
+      <p className="mb-3 text-sm text-gray-600">
+        Accepted for this assignment: {assignment.submission_types.map((t) => TYPE_LABEL[t]).join(", ")}.
+      </p>
       {mode === "edit" && assignment.my_submission && (
         <div className="mb-4">
           <p className="mb-2 text-sm font-semibold">Currently submitted files</p>
@@ -77,23 +83,35 @@ function UploadForm({
           <p className="mt-3 text-sm text-gray-600">Choose only the files you want to replace; the others are kept.</p>
         </div>
       )}
-      <label className="block text-sm font-semibold" htmlFor={id("code")}>
-        Code (zip or single file)
-      </label>
-      <input id={id("code")} type="file" ref={codeRef} accept={CODE_ACCEPT} className={fileInput} />
-      <p className="mb-3 text-xs text-gray-500">{UPLOAD_HINTS.code}</p>
+      {accepts("code") && (
+        <>
+          <label className="block text-sm font-semibold" htmlFor={id("code")}>
+            Code (zip or single file)
+          </label>
+          <input id={id("code")} type="file" ref={codeRef} accept={CODE_ACCEPT} className={fileInput} />
+          <p className="mb-3 text-xs text-gray-500">{UPLOAD_HINTS.code}</p>
+        </>
+      )}
 
-      <label className="block text-sm font-semibold" htmlFor={id("report")}>
-        Report (PDF or DOCX)
-      </label>
-      <input id={id("report")} type="file" ref={reportRef} accept={REPORT_ACCEPT} className={fileInput} />
-      <p className="mb-3 text-xs text-gray-500">{UPLOAD_HINTS.report}</p>
+      {accepts("report") && (
+        <>
+          <label className="block text-sm font-semibold" htmlFor={id("report")}>
+            Report (PDF or DOCX)
+          </label>
+          <input id={id("report")} type="file" ref={reportRef} accept={REPORT_ACCEPT} className={fileInput} />
+          <p className="mb-3 text-xs text-gray-500">{UPLOAD_HINTS.report}</p>
+        </>
+      )}
 
-      <label className="block text-sm font-semibold" htmlFor={id("video")}>
-        Presentation video
-      </label>
-      <input id={id("video")} type="file" ref={videoRef} accept={VIDEO_ACCEPT} className={fileInput} />
-      <p className="mb-3 text-xs text-gray-500">{UPLOAD_HINTS.video}</p>
+      {accepts("video") && (
+        <>
+          <label className="block text-sm font-semibold" htmlFor={id("video")}>
+            Presentation video
+          </label>
+          <input id={id("video")} type="file" ref={videoRef} accept={VIDEO_ACCEPT} className={fileInput} />
+          <p className="mb-3 text-xs text-gray-500">{UPLOAD_HINTS.video}</p>
+        </>
+      )}
 
       <div className="flex flex-wrap gap-2">
         <button
@@ -144,6 +162,7 @@ function AssignmentCard({
         <div>
           <h3 className="text-lg font-bold">{a.name}</h3>
           <p className="text-xs text-gray-500">{a.subject_name}</p>
+          <p className="text-xs text-gray-500">Accepts: {a.submission_types.map((t) => TYPE_LABEL[t]).join(", ")}</p>
         </div>
         <span
           className={`rounded px-2 py-0.5 text-xs font-semibold ${

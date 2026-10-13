@@ -85,19 +85,24 @@ def setup_subject_with_users(client, name=None, code=None):
 
 
 def create_assignment(client, instructor_tok, subject_id, name=None, *, opens_in=timedelta(hours=-1),
-                      closes_in=timedelta(days=7), rubric_id=None, description=""):
-    """An assignment whose window is relative to now (open by default)."""
+                      closes_in=timedelta(days=7), rubric_id=None, description="", submission_types=None):
+    """An assignment whose window is relative to now (open by default).
+    `submission_types` (e.g. ["report"]) is sent only when given, so the
+    API default (every type) is what the other tests get."""
     now = datetime.now(timezone.utc)
+    body = {
+        "subject_id": subject_id,
+        "name": name or _unique("Assignment "),
+        "description": description,
+        "available_from": (now + opens_in).isoformat(),
+        "deadline": (now + closes_in).isoformat(),
+        "rubric_id": rubric_id,
+    }
+    if submission_types is not None:
+        body["submission_types"] = submission_types
     r = client.post(
         "/assignments",
-        json={
-            "subject_id": subject_id,
-            "name": name or _unique("Assignment "),
-            "description": description,
-            "available_from": (now + opens_in).isoformat(),
-            "deadline": (now + closes_in).isoformat(),
-            "rubric_id": rubric_id,
-        },
+        json=body,
         headers=auth_headers(instructor_tok),
     )
     assert r.status_code == 200, r.text

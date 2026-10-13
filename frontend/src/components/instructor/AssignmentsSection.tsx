@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { apiFetch, Assignment, AssignmentStatus, Rubric } from "@/lib/api";
+import { apiFetch, Assignment, AssignmentStatus, Rubric, SubmissionType } from "@/lib/api";
 import { combineLocal, formatDateTime, splitLocal } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
@@ -20,9 +20,25 @@ type FormState = {
   dueDate: string;
   dueTime: string;
   rubricId: string; // "" = no rubric
+  types: SubmissionType[];
 };
 
-const EMPTY: FormState = { name: "", description: "", fromDate: "", fromTime: "", dueDate: "", dueTime: "", rubricId: "" };
+const TYPE_OPTIONS: { value: SubmissionType; label: string; hint: string }[] = [
+  { value: "code", label: "Code", hint: "a source file or .zip" },
+  { value: "report", label: "Report", hint: "PDF or DOCX" },
+  { value: "video", label: "Video", hint: "presentation video" },
+];
+
+const typeLabel = (t: SubmissionType) => TYPE_OPTIONS.find((o) => o.value === t)?.label ?? t;
+
+function toggleType(current: SubmissionType[], t: SubmissionType): SubmissionType[] {
+  return current.includes(t) ? current.filter((x) => x !== t) : [...current, t];
+}
+
+const EMPTY: FormState = {
+  name: "", description: "", fromDate: "", fromTime: "", dueDate: "", dueTime: "", rubricId: "",
+  types: ["code", "report", "video"],
+};
 
 const input = "mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm";
 
@@ -61,6 +77,7 @@ export default function AssignmentsSection({
       dueDate: due.date,
       dueTime: due.time,
       rubricId: a.rubric_id ? String(a.rubric_id) : "",
+      types: a.submission_types,
     });
   }
 
@@ -83,12 +100,14 @@ export default function AssignmentsSection({
       return setMsg({ text: "The submission deadline must be later than the available-from date and time.", kind: "error" });
     }
 
+    if (form.types.length === 0) return setMsg({ text: "Choose at least one submission type.", kind: "error" });
     const body = {
       name: form.name.trim(),
       description: form.description,
       available_from: from.toISOString(),
       deadline: due.toISOString(),
       rubric_id: form.rubricId ? parseInt(form.rubricId, 10) : null,
+      submission_types: form.types,
     };
     setSaving(true);
     try {
@@ -135,6 +154,8 @@ export default function AssignmentsSection({
   }
 
   const selectedRubric = rubrics.find((r) => String(r.id) === form.rubricId);
+  // Once any student has submitted, the accepted types are fixed (the API refuses changes).
+  const typesLocked = (assignments.find((a) => a.id === editingId)?.submission_count ?? 0) > 0;
 
   return (
     <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
@@ -171,6 +192,28 @@ export default function AssignmentsSection({
           placeholder="Enter assignment instructions here..."
           className={input}
         />
+
+        <fieldset className="mt-3">
+          <legend className="text-sm font-semibold">Students can submit</legend>
+          <div className="mt-1 flex flex-wrap gap-4">
+            {TYPE_OPTIONS.map((t) => (
+              <label key={t.value} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.types.includes(t.value)}
+                  disabled={typesLocked}
+                  onChange={() => set("types", toggleType(form.types, t.value))}
+                />
+                {t.label} <span className="text-xs text-gray-500">({t.hint})</span>
+              </label>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-gray-500">
+            {typesLocked
+              ? "Locked: students have already submitted to this assignment."
+              : "Students can upload only the kinds you tick. Pick at least one."}
+          </p>
+        </fieldset>
 
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <fieldset>
@@ -271,6 +314,7 @@ export default function AssignmentsSection({
                   <span className={`rounded px-2 py-0.5 text-xs font-semibold ${STATUS_STYLE[a.status].cls}`}>
                     {STATUS_STYLE[a.status].text}
                   </span>
+                  <p className="mt-1 text-xs text-gray-600">Accepts: {a.submission_types.map(typeLabel).join(", ")}</p>
                 </div>
                 <div className="flex gap-2">
                   <button
