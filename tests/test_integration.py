@@ -195,3 +195,47 @@ def test_auto_evaluate_404_for_unknown_submission():
         headers=auth_headers(instructor_tok),
     )
     assert r.status_code == 404
+
+
+CSHARP = """using System;
+class Calc {
+    static int Add(int a, int b) { return a + b; }
+    static int Multiply(int a, int b) { return a * b; }
+    static void Main() {
+        int x = int.Parse(Console.ReadLine());
+        int y = int.Parse(Console.ReadLine());
+        Console.WriteLine("Sum: " + Add(x, y));
+        Console.WriteLine("Product: " + Multiply(x, y));
+    }
+}
+"""
+CSHARP_RENAMED = (CSHARP.replace("Add", "Plus").replace("Multiply", "Times")
+                  .replace("x", "first").replace("y", "second"))
+HEADER = "#ifndef CALC_H\n#define CALC_H\nint add(int a, int b);\nint multiply(int a, int b);\n#endif\n"
+
+
+def test_check_similarity_reads_csharp_and_header_files():
+    import zipfile
+
+    def zipped(cs_source):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("src/Calc.cs", cs_source)
+            zf.writestr("src/calc.h", HEADER)
+        return buf.getvalue()
+
+    subject, instructor_tok, _ = setup_subject_with_users(client)
+    assignment = "CSharp Assignment"
+    ids = []
+    for source in (CSHARP, CSHARP_RENAMED):
+        r = submit(client, subject["id"], assignment,
+                   {"code": ("project.zip", io.BytesIO(zipped(source)), "application/zip")})
+        assert r.status_code == 200, r.text
+        ids.append(r.json()["id"])
+
+    body = client.post(f"/subjects/{subject['id']}/assignments/{assignment}/check-similarity",
+                       headers=auth_headers(instructor_tok)).json()
+    pair = body["pairs"][0]
+    assert {pair["submission_a_id"], pair["submission_b_id"]} == set(ids)
+    assert pair["shared_fingerprints"] > 0  # the .cs/.h files were actually read
+    assert pair["flagged"] and pair["token_flagged"]  # renaming doesn't hide a copy

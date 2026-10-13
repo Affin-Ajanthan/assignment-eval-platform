@@ -1,5 +1,5 @@
 """
-Semantic code similarity with Microsoft's UniXcoder (``microsoft/unixcoder-base``).
+Semantic code similarity with Microsoft's UniXcoder (``microsoft/unixcoder-base-nine``).
 
 The winnowing fingerprints in ``core.py`` catch literal and lightly
 renamed copies, but a submission that was rewritten -- sections
@@ -54,10 +54,15 @@ from pathlib import Path
 from typing import Callable, Iterable, Protocol
 
 from .core import _GENERIC_KEYWORDS, PairResult
+from .python_cleanup import strip_python_dead_code
 
 log = logging.getLogger(__name__)
 
-MODEL_NAME = "microsoft/unixcoder-base"
+# The nine-language UniXcoder (Python, Java, JavaScript, PHP, Ruby, Go, C,
+# C++, C#), pinned to one revision so a re-download can never silently change
+# the model the review thresholds were calibrated with.
+MODEL_NAME = "microsoft/unixcoder-base-nine"
+MODEL_REVISION = "5f0dc256eb0904af496d427451da5d7f90261676"
 
 # UniXcoder's encoder-only input is [CLS] <encoder-only> [SEP] code [SEP].
 _SPECIAL_TOKENS = 4
@@ -98,36 +103,70 @@ _STRING_OR_IDENT_RE = re.compile(
 )
 
 
+# `.name = ...` (not `==`): a field the submission itself assigns.
+_FIELD_ASSIGN_RE = re.compile(r"\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(?!=)")
+
+
 def anonymize_identifiers(code: str) -> str:
     """Replace user-chosen names with positional placeholders (v0, v1,
     ...), consistently within one submission. Keywords, builtins and
-    ``.attribute`` names (library calls like ``.split`` or ``.append``)
-    are kept, string literals are left untouched.
+    library attributes (``.split``, ``.append``) are kept, string
+    literals are left untouched.
 
     Renaming is the cheapest way to disguise a copy, and on raw code
     UniXcoder's embedding is dominated by identifier vocabulary: in
     calibration, honest same-task solutions that happened to pick
     similar names outscored renamed copies. Anonymized, copies and
-    rewrites separate cleanly from independent solutions."""
+    rewrites separate cleanly from independent solutions.
+
+    Attribute names are anonymized too when the submission defines them:
+    assigned as ``.name =`` or used as a plain name somewhere (a declared
+    field or method). Keeping them let renamed fields (``self.stock`` ->
+    ``self.inventory``) decide the score once everything else was
+    anonymized (tests/unixcoder_renaming).
+
+    Numbered placeholders were kept deliberately. A single shared
+    placeholder stops one inserted variable from renumbering every later
+    name, and scored better on the small tests/unixcoder_* programs, but on
+    the realistic samples in tests/semantic_samples.py it spread honest
+    same-task scores out, which raised the cohort-outlier bar above a
+    restructured copy and dropped a renamed C copy below 0.80."""
+
+    def is_attribute(m: re.Match) -> bool:
+        return m.start() > 0 and code[m.start() - 1] == "."
+
+    user_names = {
+        m.group() for m in _STRING_OR_IDENT_RE.finditer(code)
+        if m.lastgroup == "id" and m.group() not in _KEEP_NAMES and not is_attribute(m)
+    }
+    user_names |= {n for n in _FIELD_ASSIGN_RE.findall(code) if n not in _KEEP_NAMES}
     mapping: dict[str, str] = {}
 
     def substitute(m: re.Match) -> str:
         if m.lastgroup == "str":
             return m.group()
         name = m.group()
-        if name in _KEEP_NAMES or (m.start() > 0 and code[m.start() - 1] == "."):
+        if name in _KEEP_NAMES or (is_attribute(m) and name not in user_names):
             return name
         return mapping.setdefault(name, f"v{len(mapping)}")
 
     return _STRING_OR_IDENT_RE.sub(substitute, code)
 
 
-def normalize_code(source: str, filename: str = "") -> str:
+def normalize_code(source: str, filename: str = "", external_names: set[str] | None = None) -> str:
     """Prepare code for embedding: strip comments (keeping string
     literals intact), anonymize identifiers, collapse whitespace.
     Comments and names are the cheapest things to change when
     disguising a copy, so leaving them in would let them dominate the
-    embedding over the code's actual structure."""
+    embedding over the code's actual structure.
+
+    Python files first lose code that does nothing (unused variables and
+    imports, dead branches, unreachable statements; see python_cleanup):
+    otherwise one inserted junk variable renumbers every later placeholder
+    and an exact copy scores like different code. `external_names`: the
+    names used by the submission's other files (see python_cleanup)."""
+    if Path(filename).suffix.lower() == ".py":
+        source = strip_python_dead_code(source, external_names)
     pattern = _HASH_COMMENT_RE if Path(filename).suffix.lower() in _HASH_COMMENT_LANGS else _C_COMMENT_RE
     stripped = pattern.sub(lambda m: "" if m.lastgroup == "comment" else m.group(), source)
     return " ".join(anonymize_identifiers(stripped).split())
@@ -152,6 +191,31 @@ class SubmissionEmbedding:
         return len(self.weights)
 
 
+class InvalidEmbeddingError(ValueError):
+    """An embedding that can't be compared (NaN/inf, zero-norm, bad weights...)."""
+
+
+def _validate_embedding(emb: SubmissionEmbedding, label: str) -> None:
+    """Reject input that would otherwise produce a meaningless score. Without
+    this, NaN or infinite vectors and zero weights came out as similarity 1.0
+    ("identical"), because the final clip turns NaN into 1.0."""
+    import numpy as np
+
+    vectors = np.asarray(emb.vectors, dtype=float)
+    weights = np.asarray(emb.weights, dtype=float)
+    if vectors.ndim != 2 or vectors.shape[0] == 0 or vectors.shape[1] == 0:
+        raise InvalidEmbeddingError(f"embedding {label} has no vectors (shape {vectors.shape})")
+    if not np.isfinite(vectors).all():
+        raise InvalidEmbeddingError(f"embedding {label} contains NaN or infinite values")
+    if (np.linalg.norm(vectors, axis=1) == 0).any():
+        raise InvalidEmbeddingError(f"embedding {label} has a zero-norm vector; cosine similarity is undefined")
+    if weights.shape != (vectors.shape[0],):
+        raise InvalidEmbeddingError(
+            f"embedding {label} has {weights.size} weight(s) for {vectors.shape[0]} vector(s)")
+    if not np.isfinite(weights).all() or (weights <= 0).any():
+        raise InvalidEmbeddingError(f"embedding {label} weights must be finite and greater than 0: {emb.weights}")
+
+
 def semantic_similarity(a: SubmissionEmbedding, b: SubmissionEmbedding) -> float:
     """Symmetric best-match cosine similarity between two submissions.
 
@@ -160,9 +224,17 @@ def semantic_similarity(a: SubmissionEmbedding, b: SubmissionEmbedding) -> float
     single chunk each this is plain cosine similarity; with many it
     rewards submissions whose every part has a close counterpart
     somewhere in the other, regardless of order. Clipped to [0, 1].
+
+    Raises InvalidEmbeddingError for input that can't be compared.
     """
     import numpy as np
 
+    _validate_embedding(a, "A")
+    _validate_embedding(b, "B")
+    if np.asarray(a.vectors).shape[1] != np.asarray(b.vectors).shape[1]:
+        raise InvalidEmbeddingError(
+            f"embeddings have different dimensions ({np.asarray(a.vectors).shape[1]} vs "
+            f"{np.asarray(b.vectors).shape[1]})")
     sims = np.asarray(a.vectors) @ np.asarray(b.vectors).T
     wa = np.asarray(a.weights, dtype=float)
     wb = np.asarray(b.weights, dtype=float)
@@ -179,7 +251,7 @@ class CodeEncoder(Protocol):
 
 
 class UniXcoderEncoder:
-    """Loads ``microsoft/unixcoder-base`` once and encodes submissions
+    """Loads ``microsoft/unixcoder-base-nine`` once and encodes submissions
     in batches of chunks. Construction downloads the model on first use
     (cached afterwards under the Hugging Face cache directory)."""
 
@@ -201,8 +273,9 @@ class UniXcoderEncoder:
             verbosity = hf_logging.get_verbosity()
             hf_logging.set_verbosity_error()
             try:
-                self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-                self.model = AutoModel.from_pretrained(model_name)
+                revision = MODEL_REVISION if model_name == MODEL_NAME else None
+                self.tokenizer = AutoTokenizer.from_pretrained(model_name, revision=revision)
+                self.model = AutoModel.from_pretrained(model_name, revision=revision)
             finally:
                 hf_logging.set_verbosity(verbosity)
         self.model.to(device)

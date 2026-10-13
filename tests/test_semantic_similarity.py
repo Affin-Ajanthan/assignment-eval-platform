@@ -7,7 +7,7 @@ Two kinds of test live here:
 - Fast, offline tests that swap in a fake encoder, covering the plumbing:
   normalization, chunking, scoring, flag combination, caching, "model
   loaded once", failure handling, the API, and a 50-student batch.
-- Tests marked ``slow`` that load the real ``microsoft/unixcoder-base``
+- Tests marked ``slow`` that load the real ``microsoft/unixcoder-base-nine``
   model (downloaded on first use) and check its actual behavior on the
   code samples in tests/semantic_samples.py. They skip, not fail, when the
   model can't be loaded (e.g. no network on first run).
@@ -40,6 +40,10 @@ from app.similarity.semantic import (
     submissions_needing_semantic,
 )
 from semantic_samples import (
+    C_SORT,
+    C_SORT_COPY,
+    CPP_STACK,
+    CS_GRADES,
     DIFFERENT_BANK,
     DIFFERENT_JS,
     DIFFERENT_MAZE,
@@ -171,6 +175,23 @@ def test_anonymization_is_consistent_and_keeps_language_and_library_names():
     b = anonymize_identifiers("acc = 0\nfor m in marks.values():\n    acc += m\nprint(len(marks))")
     assert a == b  # renaming every variable changes nothing
     assert ".values()" in a and "print" in a and "len" in a and "for" in a
+
+
+def test_user_defined_fields_are_anonymized_library_attributes_kept():
+    a = anonymize_identifiers("class Shop:\n    def __init__(self):\n        self.stock = {}\n"
+                              "    def add(self, n):\n        self.stock[n] = self.stock.get(n, 0) + 1\n"
+                              "        if self.ready == 1:\n            log.append(n)")
+    b = anonymize_identifiers("class Store:\n    def __init__(self):\n        self.inventory = {}\n"
+                              "    def put(self, k):\n        self.inventory[k] = self.inventory.get(k, 0) + 1\n"
+                              "        if self.ready == 1:\n            log.append(k)")
+    assert a == b  # renamed class, methods and the assigned field all disappear
+    assert ".get(" in a and ".append(" in a  # library calls are kept
+    assert ".ready" in a  # only compared (==), never assigned or declared here: kept
+
+
+def test_declared_field_is_anonymized_after_a_dot():
+    java = anonymize_identifiers("class A { int count; void inc() { this.count++; } }")
+    assert "count" not in java
 
 
 def test_renamed_copy_normalizes_to_nearly_the_same_text():
@@ -448,13 +469,13 @@ def test_api_reports_semantic_review_flag_alongside_token_metrics(injected_servi
     })))
     subject, instructor_tok, student_tok = setup_subject_with_users(client)
     assignment = "Semantic API Assignment"
-    s1 = _submit(student_tok, subject["id"], assignment, GRADES_ORIGINAL + '\nTAG = "ALPHA"\n')
-    s2 = _submit(student_tok, subject["id"], assignment, GRADES_RESTRUCTURED + '\nTAG = "ALPHA2"\n')
-    s3 = _submit(student_tok, subject["id"], assignment, DIFFERENT_BANK + '\nTAG = "BETA"\n')
+    s1 = _submit(student_tok, subject["id"], assignment, GRADES_ORIGINAL + '\nprint("ALPHA")\n')
+    s2 = _submit(student_tok, subject["id"], assignment, GRADES_RESTRUCTURED + '\nprint("ALPHA2")\n')
+    s3 = _submit(student_tok, subject["id"], assignment, DIFFERENT_BANK + '\nprint("BETA")\n')
 
     body = _check(subject["id"], assignment, instructor_tok)
     assert body["semantic"]["status"] == "ok" and body["semantic"]["warning"] is None
-    assert body["semantic"]["model"] == "microsoft/unixcoder-base"
+    assert body["semantic"]["model"] == "microsoft/unixcoder-base-nine"
 
     rewritten = _find(body, s1["id"], s2["id"])
     assert rewritten["jaccard"] < 0.6 and rewritten["containment"] < 0.75 and not rewritten["token_flagged"]
@@ -506,8 +527,8 @@ def test_semantic_review_flag_is_shown_in_auto_evaluation_but_never_caps_the_sco
               "criteria": [{"name": "Academic integrity", "description": "original work", "max_points": 20}]},
         headers=auth_headers(instructor_tok),
     ).json()
-    s1 = _submit(student_tok, subject["id"], assignment, GRADES_ORIGINAL + '\nTAG = "ALPHA"\n')
-    s2 = _submit(student_tok, subject["id"], assignment, GRADES_RESTRUCTURED + '\nTAG = "ALPHA2"\n')
+    s1 = _submit(student_tok, subject["id"], assignment, GRADES_ORIGINAL + '\nprint("ALPHA")\n')
+    s2 = _submit(student_tok, subject["id"], assignment, GRADES_RESTRUCTURED + '\nprint("ALPHA2")\n')
     assert _find(_check(subject["id"], assignment, instructor_tok), s1["id"], s2["id"])["flag_level"] == "review"
 
     body = client.post(
@@ -638,7 +659,9 @@ def test_real_long_submission_is_fully_encoded_and_order_independent(unixcoder):
     e = _real_scores(unixcoder, {"a": ("a.py", long_a), "b": ("a.py", long_b), "short": ("a.py", GRADES_ORIGINAL)})
     assert e["a"].chunk_count > 1  # well past the 512-token model limit
     assert sum(e["a"].weights) == e["a"].token_count  # nothing truncated
-    assert semantic_similarity(e["a"], e["b"]) >= 0.9
+    # Reordering shifts chunk boundaries, so this isn't a perfect 1.0, but a
+    # reordered copy must still clear the review bar (base: 0.95, base-nine: 0.89).
+    assert semantic_similarity(e["a"], e["b"]) >= SemanticThresholds().review
     # The short file is one third of the long one -> clearly less than a full match.
     assert semantic_similarity(e["a"], e["short"]) < semantic_similarity(e["a"], e["b"])
 
@@ -660,3 +683,17 @@ def test_real_fifty_student_batch(unixcoder):
     assert batch.status == "ok"
     assert batch.encoded + batch.cache_hits + len(batch.skipped_too_small) <= 50
     assert stats["semantic_pairs_compared"] > 0
+
+
+@pytest.mark.slow
+def test_real_c_family_languages(unixcoder):
+    """unixcoder-base-nine adds C, C++ and C#: a renamed, restructured C copy
+    reaches the review bar; unrelated C/C++ programs stay well below it."""
+    e = _real_scores(unixcoder, {"c": ("sort.c", C_SORT), "c_copy": ("order.c", C_SORT_COPY),
+                                 "cpp": ("stack.cpp", CPP_STACK), "cs": ("Grades.cs", CS_GRADES),
+                                 "java": ("Grades.java", GRADES_JAVA)})
+    assert semantic_similarity(e["c"], e["c_copy"]) >= SemanticThresholds().review
+    assert semantic_similarity(e["c"], e["cpp"]) < 0.65
+    assert semantic_similarity(e["cs"], e["cpp"]) < 0.65
+    # Same program in C# and Java: related, but below the review bar.
+    assert 0.5 < semantic_similarity(e["cs"], e["java"]) < SemanticThresholds().review

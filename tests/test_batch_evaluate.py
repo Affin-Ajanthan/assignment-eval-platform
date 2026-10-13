@@ -77,10 +77,10 @@ def test_batch_continues_when_one_submission_fails(monkeypatch):
     real = main._run_auto_evaluation
     bad_id = subs[1]["id"]
 
-    def flaky(db, submission, rubric_):
+    def flaky(db, submission, rubric_, **kwargs):
         if submission.id == bad_id:
             raise RuntimeError("Ollama exploded")
-        return real(db, submission, rubric_)
+        return real(db, submission, rubric_, **kwargs)
 
     monkeypatch.setattr(main, "_run_auto_evaluation", flaky)
     body = _batch(subject, assignment, tok, rubric["id"]).json()
@@ -118,3 +118,38 @@ def test_batch_is_instructor_only():
         json={"rubric_id": rubric["id"]}, headers=auth_headers(student_tok),
     )
     assert r.status_code == 403
+
+
+# ---- rubric model on/off switch ------------------------------------------
+
+def _fake_rubric_model(monkeypatch):
+    """Stand in for the rubric model (Ollama / Claude) with a grader that
+    reports its own name, so the tests can see which grader actually ran."""
+    import app.evaluator.pipeline as pipeline
+    from app.evaluator.rubric_grading import HeuristicRubricGrader
+
+    class FakeRubricModel(HeuristicRubricGrader):
+        name = "fake-model"
+
+    monkeypatch.setattr(pipeline, "build_default_grader", FakeRubricModel)
+
+
+def test_rubric_model_switch_on_by_default_and_off_uses_heuristic(monkeypatch):
+    _fake_rubric_model(monkeypatch)
+    subject, tok, rubric, assignment, subs = _setup(2, assignment="Switch Assignment")
+
+    on = _batch(subject, assignment, tok, rubric["id"]).json()
+    assert {item["grader"] for item in on["results"]} == {"fake-model"}
+
+    off = _batch(subject, assignment, tok, rubric["id"], use_rubric_model=False).json()
+    assert off["evaluated"] == 2
+    assert {item["grader"] for item in off["results"]} == {"heuristic"}
+
+    single = client.post(f"/submissions/{subs[0]['id']}/auto-evaluate",
+                         json={"rubric_id": rubric["id"], "use_rubric_model": False},
+                         headers=auth_headers(tok))
+    assert single.status_code == 200, single.text
+    assert single.json()["grader"] == "heuristic"
+    single_on = client.post(f"/submissions/{subs[0]['id']}/auto-evaluate",
+                            json={"rubric_id": rubric["id"]}, headers=auth_headers(tok))
+    assert single_on.json()["grader"] == "fake-model"

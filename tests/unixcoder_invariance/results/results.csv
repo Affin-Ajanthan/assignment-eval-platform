@@ -1,0 +1,6701 @@
+id,language,transformation,mode,preprocessing_applied,comments_removed,normalized_text_identical,score,baseline,difference,tolerance,status,outlier,reason,original_filename,modified_filename,original,modified
+TC01,Python,identical copy (baseline),production,True,True,True,1.0,1.0,0.0,|1 - score| <= 1e-06,PASS,,,python.py,python.py,"# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+","# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+"
+TC01,Python,identical copy (baseline),raw,False,False,True,0.9999998807907104,0.9999998807907104,0.0,n/a (informational),INFO,,,python.py,python.py,"# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+","# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+"
+TC02,Java,identical copy (baseline),production,True,True,True,1.0,1.0,0.0,|1 - score| <= 1e-06,PASS,,,java.java,java.java,"public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC02,Java,identical copy (baseline),raw,False,False,True,0.9999999403953552,0.9999999403953552,0.0,n/a (informational),INFO,,,java.java,java.java,"public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC03,JavaScript,identical copy (baseline),production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,|1 - score| <= 1e-06,PASS,,,javascript.js,javascript.js,"// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC03,JavaScript,identical copy (baseline),raw,False,False,True,1.0,1.0,0.0,n/a (informational),INFO,,,javascript.js,javascript.js,"// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC04,C,identical copy (baseline),production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,|1 - score| <= 1e-06,PASS,,,c.c,c.c,"#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC04,C,identical copy (baseline),raw,False,False,True,1.0,1.0,0.0,n/a (informational),INFO,,,c.c,c.c,"#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC05,C++,identical copy (baseline),production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,|1 - score| <= 1e-06,PASS,,,cpp.cpp,cpp.cpp,"#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC05,C++,identical copy (baseline),raw,False,False,True,0.9999998211860657,0.9999998211860657,0.0,n/a (informational),INFO,,,cpp.cpp,cpp.cpp,"#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC06,C#,identical copy (baseline),production,True,True,True,1.0,1.0,0.0,|1 - score| <= 1e-06,PASS,,,csharp.cs,csharp.cs,"public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC06,C#,identical copy (baseline),raw,False,False,True,1.0,1.0,0.0,n/a (informational),INFO,,,csharp.cs,csharp.cs,"public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC07,Go,identical copy (baseline),production,True,True,True,1.0,1.0,0.0,|1 - score| <= 1e-06,PASS,,,go.go,go.go,"package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+","package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+"
+TC07,Go,identical copy (baseline),raw,False,False,True,1.0,1.0,0.0,n/a (informational),INFO,,,go.go,go.go,"package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+","package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+"
+TC08,PHP,identical copy (baseline),production,True,True,True,1.0,1.0,0.0,|1 - score| <= 1e-06,PASS,,,php.php,php.php,"<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+","<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+"
+TC08,PHP,identical copy (baseline),raw,False,False,True,1.0,1.0,0.0,n/a (informational),INFO,,,php.php,php.php,"<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+","<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+"
+TC09,Ruby,identical copy (baseline),production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,|1 - score| <= 1e-06,PASS,,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+","# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+"
+TC09,Ruby,identical copy (baseline),raw,False,False,True,1.0,1.0,0.0,n/a (informational),INFO,,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+","# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+"
+TC10,C,change indentation,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,c.c,c.c,"#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+  double total = 0;
+  int count = 0;
+  for (int i = 0; i < n; i++) {
+    // skip zero and negative values
+    if (values[i] > 0) {
+      total = total + values[i];
+      count = count + 1;
+    }
+  }
+  if (count == 0) {
+    return 0;
+  }
+  return total / count;
+}
+"
+TC10,C,change indentation,raw,False,False,True,0.998949408531189,1.0,0.0010505914688110352,n/a (informational),INFO,False,,c.c,c.c,"#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+  double total = 0;
+  int count = 0;
+  for (int i = 0; i < n; i++) {
+    // skip zero and negative values
+    if (values[i] > 0) {
+      total = total + values[i];
+      count = count + 1;
+    }
+  }
+  if (count == 0) {
+    return 0;
+  }
+  return total / count;
+}
+"
+TC10,C#,change indentation,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,csharp.cs,csharp.cs,"public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public static class Stats
+{
+  // Average of the positive values in an array.
+  public static double AveragePositive(int[] values)
+  {
+    double total = 0;
+    int count = 0;
+    foreach (int v in values)
+    {
+      // skip zero and negative values
+      if (v > 0)
+      {
+        total = total + v;
+        count = count + 1;
+      }
+    }
+    if (count == 0)
+    {
+      return 0;
+    }
+    return total / count;
+  }
+}
+"
+TC10,C#,change indentation,raw,False,False,True,0.9968661069869995,1.0,0.0031338930130004883,n/a (informational),INFO,False,,csharp.cs,csharp.cs,"public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public static class Stats
+{
+  // Average of the positive values in an array.
+  public static double AveragePositive(int[] values)
+  {
+    double total = 0;
+    int count = 0;
+    foreach (int v in values)
+    {
+      // skip zero and negative values
+      if (v > 0)
+      {
+        total = total + v;
+        count = count + 1;
+      }
+    }
+    if (count == 0)
+    {
+      return 0;
+    }
+    return total / count;
+  }
+}
+"
+TC10,C++,change indentation,production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,cpp.cpp,cpp.cpp,"#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+  double total = 0;
+  int count = 0;
+  for (int v : values) {
+    // skip zero and negative values
+    if (v > 0) {
+      total = total + v;
+      count = count + 1;
+    }
+  }
+  if (count == 0) {
+    return 0;
+  }
+  return total / count;
+}
+"
+TC10,C++,change indentation,raw,False,False,True,0.9986751079559326,0.9999998211860657,0.0013247132301330566,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+  double total = 0;
+  int count = 0;
+  for (int v : values) {
+    // skip zero and negative values
+    if (v > 0) {
+      total = total + v;
+      count = count + 1;
+    }
+  }
+  if (count == 0) {
+    return 0;
+  }
+  return total / count;
+}
+"
+TC10,Go,change indentation,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,go.go,go.go,"package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+","package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+    total := 0
+    count := 0
+    for _, v := range values {
+        // skip zero and negative values
+        if v > 0 {
+            total = total + v
+            count = count + 1
+        }
+    }
+    if count == 0 {
+        return 0
+    }
+    return float64(total) / float64(count)
+}
+"
+TC10,Go,change indentation,raw,False,False,True,0.9983042478561401,1.0,0.0016957521438598633,n/a (informational),INFO,False,,go.go,go.go,"package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+","package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+    total := 0
+    count := 0
+    for _, v := range values {
+        // skip zero and negative values
+        if v > 0 {
+            total = total + v
+            count = count + 1
+        }
+    }
+    if count == 0 {
+        return 0
+    }
+    return float64(total) / float64(count)
+}
+"
+TC10,Java,change indentation,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,java.java,java.java,"public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public class Stats {
+  // Average of the positive values in an array.
+  public static double averagePositive(int[] values) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < values.length; i++) {
+      // skip zero and negative values
+      if (values[i] > 0) {
+        total = total + values[i];
+        count = count + 1;
+      }
+    }
+    if (count == 0) {
+      return 0;
+    }
+    return total / count;
+  }
+}
+"
+TC10,Java,change indentation,raw,False,False,True,0.9986320734024048,0.9999999403953552,0.0013678669929504395,n/a (informational),INFO,False,,java.java,java.java,"public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public class Stats {
+  // Average of the positive values in an array.
+  public static double averagePositive(int[] values) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < values.length; i++) {
+      // skip zero and negative values
+      if (values[i] > 0) {
+        total = total + values[i];
+        count = count + 1;
+      }
+    }
+    if (count == 0) {
+      return 0;
+    }
+    return total / count;
+  }
+}
+"
+TC10,JavaScript,change indentation,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","// Average of the positive values in an array.
+function averagePositive(values) {
+  let total = 0;
+  let count = 0;
+  for (const v of values) {
+    // skip zero and negative values
+    if (v > 0) {
+      total = total + v;
+      count = count + 1;
+    }
+  }
+  if (count == 0) {
+    return 0;
+  }
+  return total / count;
+}
+"
+TC10,JavaScript,change indentation,raw,False,False,True,0.9993504881858826,1.0,0.0006495118141174316,n/a (informational),INFO,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","// Average of the positive values in an array.
+function averagePositive(values) {
+  let total = 0;
+  let count = 0;
+  for (const v of values) {
+    // skip zero and negative values
+    if (v > 0) {
+      total = total + v;
+      count = count + 1;
+    }
+  }
+  if (count == 0) {
+    return 0;
+  }
+  return total / count;
+}
+"
+TC10,PHP,change indentation,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,php.php,php.php,"<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+","<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+  $total = 0;
+  $count = 0;
+  foreach ($values as $v) {
+    // skip zero and negative values
+    if ($v > 0) {
+      $total = $total + $v;
+      $count = $count + 1;
+    }
+  }
+  if ($count == 0) {
+    return 0;
+  }
+  return $total / $count;
+}
+"
+TC10,PHP,change indentation,raw,False,False,True,0.999178409576416,1.0,0.0008215904235839844,n/a (informational),INFO,False,,php.php,php.php,"<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+","<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+  $total = 0;
+  $count = 0;
+  foreach ($values as $v) {
+    // skip zero and negative values
+    if ($v > 0) {
+      $total = $total + $v;
+      $count = $count + 1;
+    }
+  }
+  if ($count == 0) {
+    return 0;
+  }
+  return $total / $count;
+}
+"
+TC10,Python,change indentation,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,python.py,python.py,"# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+","# Average of the positive values in a list.
+def average_positive(values):
+  total = 0
+  count = 0
+  for v in values:
+    # skip zero and negative values
+    if v > 0:
+      total = total + v
+      count = count + 1
+  if count == 0:
+    return 0
+  return total / count
+"
+TC10,Python,change indentation,raw,False,False,True,0.9985114336013794,0.9999998807907104,0.0014884471893310547,n/a (informational),INFO,False,,python.py,python.py,"# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+","# Average of the positive values in a list.
+def average_positive(values):
+  total = 0
+  count = 0
+  for v in values:
+    # skip zero and negative values
+    if v > 0:
+      total = total + v
+      count = count + 1
+  if count == 0:
+    return 0
+  return total / count
+"
+TC10,Ruby,change indentation,production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+","# Average of the positive values in a list.
+def average_positive(values)
+    total = 0
+    count = 0
+    values.each do |v|
+        # skip zero and negative values
+        if v > 0
+            total = total + v
+            count = count + 1
+        end
+    end
+    return 0 if count == 0
+    total.to_f / count
+end
+"
+TC10,Ruby,change indentation,raw,False,False,True,0.9992484450340271,1.0,0.0007515549659729004,n/a (informational),INFO,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+","# Average of the positive values in a list.
+def average_positive(values)
+    total = 0
+    count = 0
+    values.each do |v|
+        # skip zero and negative values
+        if v > 0
+            total = total + v
+            count = count + 1
+        end
+    end
+    return 0 if count == 0
+    total.to_f / count
+end
+"
+TC11,C,add blank lines,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,c.c,c.c,"#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <stdio.h>
+
+
+
+// Average of the positive values in an array.
+
+double average_positive(const int *values, int n) {
+
+    double total = 0;
+
+    int count = 0;
+
+    for (int i = 0; i < n; i++) {
+
+        // skip zero and negative values
+
+        if (values[i] > 0) {
+
+            total = total + values[i];
+
+            count = count + 1;
+
+        }
+
+    }
+
+    if (count == 0) {
+
+        return 0;
+
+    }
+
+    return total / count;
+
+}
+
+"
+TC11,C,add blank lines,raw,False,False,True,0.9307981133460999,1.0,0.06920188665390015,n/a (informational),INFO,False,,c.c,c.c,"#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <stdio.h>
+
+
+
+// Average of the positive values in an array.
+
+double average_positive(const int *values, int n) {
+
+    double total = 0;
+
+    int count = 0;
+
+    for (int i = 0; i < n; i++) {
+
+        // skip zero and negative values
+
+        if (values[i] > 0) {
+
+            total = total + values[i];
+
+            count = count + 1;
+
+        }
+
+    }
+
+    if (count == 0) {
+
+        return 0;
+
+    }
+
+    return total / count;
+
+}
+
+"
+TC11,C#,add blank lines,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,csharp.cs,csharp.cs,"public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public static class Stats
+
+{
+
+    // Average of the positive values in an array.
+
+    public static double AveragePositive(int[] values)
+
+    {
+
+        double total = 0;
+
+        int count = 0;
+
+        foreach (int v in values)
+
+        {
+
+            // skip zero and negative values
+
+            if (v > 0)
+
+            {
+
+                total = total + v;
+
+                count = count + 1;
+
+            }
+
+        }
+
+        if (count == 0)
+
+        {
+
+            return 0;
+
+        }
+
+        return total / count;
+
+    }
+
+}
+
+"
+TC11,C#,add blank lines,raw,False,False,True,0.9914997816085815,1.0,0.008500218391418457,n/a (informational),INFO,False,,csharp.cs,csharp.cs,"public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public static class Stats
+
+{
+
+    // Average of the positive values in an array.
+
+    public static double AveragePositive(int[] values)
+
+    {
+
+        double total = 0;
+
+        int count = 0;
+
+        foreach (int v in values)
+
+        {
+
+            // skip zero and negative values
+
+            if (v > 0)
+
+            {
+
+                total = total + v;
+
+                count = count + 1;
+
+            }
+
+        }
+
+        if (count == 0)
+
+        {
+
+            return 0;
+
+        }
+
+        return total / count;
+
+    }
+
+}
+
+"
+TC11,C++,add blank lines,production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,cpp.cpp,cpp.cpp,"#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <vector>
+
+
+
+// Average of the positive values in a vector.
+
+double averagePositive(const std::vector<int> &values) {
+
+    double total = 0;
+
+    int count = 0;
+
+    for (int v : values) {
+
+        // skip zero and negative values
+
+        if (v > 0) {
+
+            total = total + v;
+
+            count = count + 1;
+
+        }
+
+    }
+
+    if (count == 0) {
+
+        return 0;
+
+    }
+
+    return total / count;
+
+}
+
+"
+TC11,C++,add blank lines,raw,False,False,True,0.9541261196136475,0.9999998211860657,0.04587370157241821,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <vector>
+
+
+
+// Average of the positive values in a vector.
+
+double averagePositive(const std::vector<int> &values) {
+
+    double total = 0;
+
+    int count = 0;
+
+    for (int v : values) {
+
+        // skip zero and negative values
+
+        if (v > 0) {
+
+            total = total + v;
+
+            count = count + 1;
+
+        }
+
+    }
+
+    if (count == 0) {
+
+        return 0;
+
+    }
+
+    return total / count;
+
+}
+
+"
+TC11,Go,add blank lines,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,go.go,go.go,"package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+","package stats
+
+
+
+// AveragePositive returns the average of the positive values.
+
+func AveragePositive(values []int) float64 {
+
+	total := 0
+
+	count := 0
+
+	for _, v := range values {
+
+		// skip zero and negative values
+
+		if v > 0 {
+
+			total = total + v
+
+			count = count + 1
+
+		}
+
+	}
+
+	if count == 0 {
+
+		return 0
+
+	}
+
+	return float64(total) / float64(count)
+
+}
+
+"
+TC11,Go,add blank lines,raw,False,False,True,0.9483891725540161,1.0,0.05161082744598389,n/a (informational),INFO,False,,go.go,go.go,"package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+","package stats
+
+
+
+// AveragePositive returns the average of the positive values.
+
+func AveragePositive(values []int) float64 {
+
+	total := 0
+
+	count := 0
+
+	for _, v := range values {
+
+		// skip zero and negative values
+
+		if v > 0 {
+
+			total = total + v
+
+			count = count + 1
+
+		}
+
+	}
+
+	if count == 0 {
+
+		return 0
+
+	}
+
+	return float64(total) / float64(count)
+
+}
+
+"
+TC11,Java,add blank lines,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,java.java,java.java,"public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public class Stats {
+
+    // Average of the positive values in an array.
+
+    public static double averagePositive(int[] values) {
+
+        double total = 0;
+
+        int count = 0;
+
+        for (int i = 0; i < values.length; i++) {
+
+            // skip zero and negative values
+
+            if (values[i] > 0) {
+
+                total = total + values[i];
+
+                count = count + 1;
+
+            }
+
+        }
+
+        if (count == 0) {
+
+            return 0;
+
+        }
+
+        return total / count;
+
+    }
+
+}
+
+"
+TC11,Java,add blank lines,raw,False,False,True,0.9520993232727051,0.9999999403953552,0.047900617122650146,n/a (informational),INFO,False,,java.java,java.java,"public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public class Stats {
+
+    // Average of the positive values in an array.
+
+    public static double averagePositive(int[] values) {
+
+        double total = 0;
+
+        int count = 0;
+
+        for (int i = 0; i < values.length; i++) {
+
+            // skip zero and negative values
+
+            if (values[i] > 0) {
+
+                total = total + values[i];
+
+                count = count + 1;
+
+            }
+
+        }
+
+        if (count == 0) {
+
+            return 0;
+
+        }
+
+        return total / count;
+
+    }
+
+}
+
+"
+TC11,JavaScript,add blank lines,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","// Average of the positive values in an array.
+
+function averagePositive(values) {
+
+    let total = 0;
+
+    let count = 0;
+
+    for (const v of values) {
+
+        // skip zero and negative values
+
+        if (v > 0) {
+
+            total = total + v;
+
+            count = count + 1;
+
+        }
+
+    }
+
+    if (count == 0) {
+
+        return 0;
+
+    }
+
+    return total / count;
+
+}
+
+"
+TC11,JavaScript,add blank lines,raw,False,False,True,0.946270227432251,1.0,0.05372977256774902,n/a (informational),INFO,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","// Average of the positive values in an array.
+
+function averagePositive(values) {
+
+    let total = 0;
+
+    let count = 0;
+
+    for (const v of values) {
+
+        // skip zero and negative values
+
+        if (v > 0) {
+
+            total = total + v;
+
+            count = count + 1;
+
+        }
+
+    }
+
+    if (count == 0) {
+
+        return 0;
+
+    }
+
+    return total / count;
+
+}
+
+"
+TC11,PHP,add blank lines,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,php.php,php.php,"<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+","<?php
+
+// Average of the positive values in an array.
+
+function averagePositive(array $values) {
+
+    $total = 0;
+
+    $count = 0;
+
+    foreach ($values as $v) {
+
+        // skip zero and negative values
+
+        if ($v > 0) {
+
+            $total = $total + $v;
+
+            $count = $count + 1;
+
+        }
+
+    }
+
+    if ($count == 0) {
+
+        return 0;
+
+    }
+
+    return $total / $count;
+
+}
+
+"
+TC11,PHP,add blank lines,raw,False,False,True,0.9689452052116394,1.0,0.031054794788360596,n/a (informational),INFO,False,,php.php,php.php,"<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+","<?php
+
+// Average of the positive values in an array.
+
+function averagePositive(array $values) {
+
+    $total = 0;
+
+    $count = 0;
+
+    foreach ($values as $v) {
+
+        // skip zero and negative values
+
+        if ($v > 0) {
+
+            $total = $total + $v;
+
+            $count = $count + 1;
+
+        }
+
+    }
+
+    if ($count == 0) {
+
+        return 0;
+
+    }
+
+    return $total / $count;
+
+}
+
+"
+TC11,Python,add blank lines,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,python.py,python.py,"# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+","# Average of the positive values in a list.
+
+def average_positive(values):
+
+    total = 0
+
+    count = 0
+
+    for v in values:
+
+        # skip zero and negative values
+
+        if v > 0:
+
+            total = total + v
+
+            count = count + 1
+
+    if count == 0:
+
+        return 0
+
+    return total / count
+
+"
+TC11,Python,add blank lines,raw,False,False,True,0.9915218353271484,0.9999998807907104,0.008478045463562012,n/a (informational),INFO,False,,python.py,python.py,"# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+","# Average of the positive values in a list.
+
+def average_positive(values):
+
+    total = 0
+
+    count = 0
+
+    for v in values:
+
+        # skip zero and negative values
+
+        if v > 0:
+
+            total = total + v
+
+            count = count + 1
+
+    if count == 0:
+
+        return 0
+
+    return total / count
+
+"
+TC11,Ruby,add blank lines,production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+","# Average of the positive values in a list.
+
+def average_positive(values)
+
+  total = 0
+
+  count = 0
+
+  values.each do |v|
+
+    # skip zero and negative values
+
+    if v > 0
+
+      total = total + v
+
+      count = count + 1
+
+    end
+
+  end
+
+  return 0 if count == 0
+
+  total.to_f / count
+
+end
+
+"
+TC11,Ruby,add blank lines,raw,False,False,True,0.9905322790145874,1.0,0.009467720985412598,n/a (informational),INFO,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+","# Average of the positive values in a list.
+
+def average_positive(values)
+
+  total = 0
+
+  count = 0
+
+  values.each do |v|
+
+    # skip zero and negative values
+
+    if v > 0
+
+      total = total + v
+
+      count = count + 1
+
+    end
+
+  end
+
+  return 0 if count == 0
+
+  total.to_f / count
+
+end
+
+"
+TC12,C,change spaces around operators,production,True,True,False,0.9881844520568848,0.9999998807907104,0.011815428733825684,drop <= 0.1 and score >= 0.8,PASS,False,,c.c,c.c,"#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total=0;
+    int count=0;
+    for (int i=0; i<n; i++) {
+        // skip zero and negative values
+        if (values[i]>0) {
+            total=total+values[i];
+            count=count+1;
+        }
+    }
+    if (count==0) {
+        return 0;
+    }
+    return total/count;
+}
+"
+TC12,C,change spaces around operators,raw,False,False,False,0.9519227743148804,1.0,0.04807722568511963,n/a (informational),INFO,True,,c.c,c.c,"#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total=0;
+    int count=0;
+    for (int i=0; i<n; i++) {
+        // skip zero and negative values
+        if (values[i]>0) {
+            total=total+values[i];
+            count=count+1;
+        }
+    }
+    if (count==0) {
+        return 0;
+    }
+    return total/count;
+}
+"
+TC12,C#,change spaces around operators,production,True,True,False,0.9882758855819702,1.0,0.011724114418029785,drop <= 0.1 and score >= 0.8,PASS,False,,csharp.cs,csharp.cs,"public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total=0;
+        int count=0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v>0)
+            {
+                total=total+v;
+                count=count+1;
+            }
+        }
+        if (count==0)
+        {
+            return 0;
+        }
+        return total/count;
+    }
+}
+"
+TC12,C#,change spaces around operators,raw,False,False,False,0.9857199192047119,1.0,0.014280080795288086,n/a (informational),INFO,False,,csharp.cs,csharp.cs,"public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total=0;
+        int count=0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v>0)
+            {
+                total=total+v;
+                count=count+1;
+            }
+        }
+        if (count==0)
+        {
+            return 0;
+        }
+        return total/count;
+    }
+}
+"
+TC12,C++,change spaces around operators,production,True,True,False,0.9915177226066589,0.9999999403953552,0.008482217788696289,drop <= 0.1 and score >= 0.8,PASS,False,,cpp.cpp,cpp.cpp,"#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total=0;
+    int count=0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v>0) {
+            total=total+v;
+            count=count+1;
+        }
+    }
+    if (count==0) {
+        return 0;
+    }
+    return total/count;
+}
+"
+TC12,C++,change spaces around operators,raw,False,False,False,0.9868112802505493,0.9999998211860657,0.013188540935516357,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total=0;
+    int count=0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v>0) {
+            total=total+v;
+            count=count+1;
+        }
+    }
+    if (count==0) {
+        return 0;
+    }
+    return total/count;
+}
+"
+TC12,Go,change spaces around operators,production,True,True,False,0.9550901651382446,1.0,0.04490983486175537,drop <= 0.1 and score >= 0.8,PASS,True,,go.go,go.go,"package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+","package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total:=0
+	count:=0
+	for _, v:=range values {
+		// skip zero and negative values
+		if v>0 {
+			total=total+v
+			count=count+1
+		}
+	}
+	if count==0 {
+		return 0
+	}
+	return float64(total)/float64(count)
+}
+"
+TC12,Go,change spaces around operators,raw,False,False,False,0.9847477078437805,1.0,0.015252292156219482,n/a (informational),INFO,False,,go.go,go.go,"package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+","package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total:=0
+	count:=0
+	for _, v:=range values {
+		// skip zero and negative values
+		if v>0 {
+			total=total+v
+			count=count+1
+		}
+	}
+	if count==0 {
+		return 0
+	}
+	return float64(total)/float64(count)
+}
+"
+TC12,Java,change spaces around operators,production,True,True,False,0.9869878888130188,1.0,0.013012111186981201,drop <= 0.1 and score >= 0.8,PASS,False,,java.java,java.java,"public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total=0;
+        int count=0;
+        for (int i=0; i<values.length; i++) {
+            // skip zero and negative values
+            if (values[i]>0) {
+                total=total+values[i];
+                count=count+1;
+            }
+        }
+        if (count==0) {
+            return 0;
+        }
+        return total/count;
+    }
+}
+"
+TC12,Java,change spaces around operators,raw,False,False,False,0.9607486724853516,0.9999999403953552,0.03925126791000366,n/a (informational),INFO,True,,java.java,java.java,"public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total=0;
+        int count=0;
+        for (int i=0; i<values.length; i++) {
+            // skip zero and negative values
+            if (values[i]>0) {
+                total=total+values[i];
+                count=count+1;
+            }
+        }
+        if (count==0) {
+            return 0;
+        }
+        return total/count;
+    }
+}
+"
+TC12,JavaScript,change spaces around operators,production,True,True,False,0.9886952638626099,0.9999998807907104,0.011304616928100586,drop <= 0.1 and score >= 0.8,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","// Average of the positive values in an array.
+function averagePositive(values) {
+    let total=0;
+    let count=0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v>0) {
+            total=total+v;
+            count=count+1;
+        }
+    }
+    if (count==0) {
+        return 0;
+    }
+    return total/count;
+}
+"
+TC12,JavaScript,change spaces around operators,raw,False,False,False,0.9868281483650208,1.0,0.013171851634979248,n/a (informational),INFO,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","// Average of the positive values in an array.
+function averagePositive(values) {
+    let total=0;
+    let count=0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v>0) {
+            total=total+v;
+            count=count+1;
+        }
+    }
+    if (count==0) {
+        return 0;
+    }
+    return total/count;
+}
+"
+TC12,PHP,change spaces around operators,production,True,True,False,0.9580007195472717,1.0,0.04199928045272827,drop <= 0.1 and score >= 0.8,PASS,True,,php.php,php.php,"<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+","<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total=0;
+    $count=0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v>0) {
+            $total=$total+$v;
+            $count=$count+1;
+        }
+    }
+    if ($count==0) {
+        return 0;
+    }
+    return $total/$count;
+}
+"
+TC12,PHP,change spaces around operators,raw,False,False,False,0.9833505153656006,1.0,0.016649484634399414,n/a (informational),INFO,False,,php.php,php.php,"<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+","<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total=0;
+    $count=0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v>0) {
+            $total=$total+$v;
+            $count=$count+1;
+        }
+    }
+    if ($count==0) {
+        return 0;
+    }
+    return $total/$count;
+}
+"
+TC12,Python,change spaces around operators,production,True,True,False,0.958077073097229,1.0,0.041922926902770996,drop <= 0.1 and score >= 0.8,PASS,True,,python.py,python.py,"# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+","# Average of the positive values in a list.
+def average_positive(values):
+    total=0
+    count=0
+    for v in values:
+        # skip zero and negative values
+        if v>0:
+            total=total+v
+            count=count+1
+    if count==0:
+        return 0
+    return total/count
+"
+TC12,Python,change spaces around operators,raw,False,False,False,0.9677628874778748,0.9999998807907104,0.03223699331283569,n/a (informational),INFO,True,,python.py,python.py,"# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+","# Average of the positive values in a list.
+def average_positive(values):
+    total=0
+    count=0
+    for v in values:
+        # skip zero and negative values
+        if v>0:
+            total=total+v
+            count=count+1
+    if count==0:
+        return 0
+    return total/count
+"
+TC12,Ruby,change spaces around operators,production,True,True,False,0.9727434515953064,0.9999999403953552,0.027256488800048828,drop <= 0.1 and score >= 0.8,PASS,True,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+","# Average of the positive values in a list.
+def average_positive(values)
+  total=0
+  count=0
+  values.each do |v|
+    # skip zero and negative values
+    if v>0
+      total=total+v
+      count=count+1
+    end
+  end
+  return 0 if count==0
+  total.to_f/count
+end
+"
+TC12,Ruby,change spaces around operators,raw,False,False,False,0.9863535165786743,1.0,0.013646483421325684,n/a (informational),INFO,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+","# Average of the positive values in a list.
+def average_positive(values)
+  total=0
+  count=0
+  values.each do |v|
+    # skip zero and negative values
+    if v>0
+      total=total+v
+      count=count+1
+    end
+  end
+  return 0 if count==0
+  total.to_f/count
+end
+"
+TC13,C,change spaces around commas and parentheses,production,True,True,False,0.9967288970947266,0.9999998807907104,0.0032709836959838867,drop <= 0.1 and score >= 0.8,PASS,False,,c.c,c.c,"#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive( const int *values ,int n ) {
+    double total = 0;
+    int count = 0;
+    for ( int i = 0; i < n; i++ ) {
+        // skip zero and negative values
+        if ( values[i] > 0 ) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if ( count == 0 ) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC13,C,change spaces around commas and parentheses,raw,False,False,False,0.994928240776062,1.0,0.005071759223937988,n/a (informational),INFO,False,,c.c,c.c,"#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive( const int *values ,int n ) {
+    double total = 0;
+    int count = 0;
+    for ( int i = 0; i < n; i++ ) {
+        // skip zero and negative values
+        if ( values[i] > 0 ) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if ( count == 0 ) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC13,C#,change spaces around commas and parentheses,production,True,True,False,0.9919486045837402,1.0,0.008051395416259766,drop <= 0.1 and score >= 0.8,PASS,False,,csharp.cs,csharp.cs,"public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive( int[] values )
+    {
+        double total = 0;
+        int count = 0;
+        foreach ( int v in values )
+        {
+            // skip zero and negative values
+            if ( v > 0 )
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if ( count == 0 )
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC13,C#,change spaces around commas and parentheses,raw,False,False,False,0.9962251782417297,1.0,0.0037748217582702637,n/a (informational),INFO,False,,csharp.cs,csharp.cs,"public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive( int[] values )
+    {
+        double total = 0;
+        int count = 0;
+        foreach ( int v in values )
+        {
+            // skip zero and negative values
+            if ( v > 0 )
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if ( count == 0 )
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC13,C++,change spaces around commas and parentheses,production,True,True,False,0.9960159063339233,0.9999999403953552,0.003984034061431885,drop <= 0.1 and score >= 0.8,PASS,False,,cpp.cpp,cpp.cpp,"#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive( const std::vector<int> &values ) {
+    double total = 0;
+    int count = 0;
+    for ( int v : values ) {
+        // skip zero and negative values
+        if ( v > 0 ) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if ( count == 0 ) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC13,C++,change spaces around commas and parentheses,raw,False,False,False,0.9948402643203735,0.9999998211860657,0.005159556865692139,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive( const std::vector<int> &values ) {
+    double total = 0;
+    int count = 0;
+    for ( int v : values ) {
+        // skip zero and negative values
+        if ( v > 0 ) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if ( count == 0 ) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC13,Go,change spaces around commas and parentheses,production,True,True,False,0.998248815536499,1.0,0.0017511844635009766,drop <= 0.1 and score >= 0.8,PASS,False,,go.go,go.go,"package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+","package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive( values []int ) float64 {
+	total := 0
+	count := 0
+	for _ ,v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64( total ) / float64( count )
+}
+"
+TC13,Go,change spaces around commas and parentheses,raw,False,False,False,0.9986985325813293,1.0,0.0013014674186706543,n/a (informational),INFO,False,,go.go,go.go,"package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+","package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive( values []int ) float64 {
+	total := 0
+	count := 0
+	for _ ,v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64( total ) / float64( count )
+}
+"
+TC13,Java,change spaces around commas and parentheses,production,True,True,False,0.9957132339477539,1.0,0.004286766052246094,drop <= 0.1 and score >= 0.8,PASS,False,,java.java,java.java,"public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive( int[] values ) {
+        double total = 0;
+        int count = 0;
+        for ( int i = 0; i < values.length; i++ ) {
+            // skip zero and negative values
+            if ( values[i] > 0 ) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if ( count == 0 ) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC13,Java,change spaces around commas and parentheses,raw,False,False,False,0.9973207116127014,0.9999999403953552,0.0026792287826538086,n/a (informational),INFO,False,,java.java,java.java,"public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive( int[] values ) {
+        double total = 0;
+        int count = 0;
+        for ( int i = 0; i < values.length; i++ ) {
+            // skip zero and negative values
+            if ( values[i] > 0 ) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if ( count == 0 ) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC13,JavaScript,change spaces around commas and parentheses,production,True,True,False,0.9927020072937012,0.9999998807907104,0.007297873497009277,drop <= 0.1 and score >= 0.8,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","// Average of the positive values in an array.
+function averagePositive( values ) {
+    let total = 0;
+    let count = 0;
+    for ( const v of values ) {
+        // skip zero and negative values
+        if ( v > 0 ) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if ( count == 0 ) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC13,JavaScript,change spaces around commas and parentheses,raw,False,False,False,0.9978612661361694,1.0,0.0021387338638305664,n/a (informational),INFO,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","// Average of the positive values in an array.
+function averagePositive( values ) {
+    let total = 0;
+    let count = 0;
+    for ( const v of values ) {
+        // skip zero and negative values
+        if ( v > 0 ) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if ( count == 0 ) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC13,PHP,change spaces around commas and parentheses,production,True,True,False,0.9926041960716248,1.0,0.007395803928375244,drop <= 0.1 and score >= 0.8,PASS,False,,php.php,php.php,"<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+","<?php
+// Average of the positive values in an array.
+function averagePositive( array $values ) {
+    $total = 0;
+    $count = 0;
+    foreach ( $values as $v ) {
+        // skip zero and negative values
+        if ( $v > 0 ) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ( $count == 0 ) {
+        return 0;
+    }
+    return $total / $count;
+}
+"
+TC13,PHP,change spaces around commas and parentheses,raw,False,False,False,0.9955601692199707,1.0,0.004439830780029297,n/a (informational),INFO,False,,php.php,php.php,"<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+","<?php
+// Average of the positive values in an array.
+function averagePositive( array $values ) {
+    $total = 0;
+    $count = 0;
+    foreach ( $values as $v ) {
+        // skip zero and negative values
+        if ( $v > 0 ) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ( $count == 0 ) {
+        return 0;
+    }
+    return $total / $count;
+}
+"
+TC13,Python,change spaces around commas and parentheses,production,True,True,False,0.9976962804794312,1.0,0.0023037195205688477,drop <= 0.1 and score >= 0.8,PASS,False,,python.py,python.py,"# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+","# Average of the positive values in a list.
+def average_positive( values ):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+"
+TC13,Python,change spaces around commas and parentheses,raw,False,False,False,0.9980852603912354,0.9999998807907104,0.0019146203994750977,n/a (informational),INFO,False,,python.py,python.py,"# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+","# Average of the positive values in a list.
+def average_positive( values ):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+"
+TC13,Ruby,change spaces around commas and parentheses,production,True,True,False,0.9973881244659424,0.9999999403953552,0.002611815929412842,drop <= 0.1 and score >= 0.8,PASS,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+","# Average of the positive values in a list.
+def average_positive( values )
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+"
+TC13,Ruby,change spaces around commas and parentheses,raw,False,False,False,0.9994790554046631,1.0,0.0005209445953369141,n/a (informational),INFO,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+","# Average of the positive values in a list.
+def average_positive( values )
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+"
+TC14,C,add comments to one submission,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,c.c,c.c,"#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","// Student submission for the statistics exercise.
+// Written and tested by the student.
+#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    // the next statement is explained here
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        // the next statement is explained here
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    // the next statement is explained here
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC14,C,add comments to one submission,raw,False,False,True,0.8539524078369141,1.0,0.14604759216308594,n/a (informational),INFO,False,,c.c,c.c,"#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","// Student submission for the statistics exercise.
+// Written and tested by the student.
+#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    // the next statement is explained here
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        // the next statement is explained here
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    // the next statement is explained here
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC14,C#,add comments to one submission,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,csharp.cs,csharp.cs,"public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","// Student submission for the statistics exercise.
+// Written and tested by the student.
+public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        // the next statement is explained here
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            // the next statement is explained here
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        // the next statement is explained here
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC14,C#,add comments to one submission,raw,False,False,True,0.7938562631607056,1.0,0.20614373683929443,n/a (informational),INFO,False,,csharp.cs,csharp.cs,"public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","// Student submission for the statistics exercise.
+// Written and tested by the student.
+public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        // the next statement is explained here
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            // the next statement is explained here
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        // the next statement is explained here
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC14,C++,add comments to one submission,production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,cpp.cpp,cpp.cpp,"#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","// Student submission for the statistics exercise.
+// Written and tested by the student.
+#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    // the next statement is explained here
+    for (int v : values) {
+        // skip zero and negative values
+        // the next statement is explained here
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    // the next statement is explained here
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC14,C++,add comments to one submission,raw,False,False,True,0.828235387802124,0.9999998211860657,0.17176443338394165,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","// Student submission for the statistics exercise.
+// Written and tested by the student.
+#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    // the next statement is explained here
+    for (int v : values) {
+        // skip zero and negative values
+        // the next statement is explained here
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    // the next statement is explained here
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC14,Go,add comments to one submission,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,go.go,go.go,"package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+","// Student submission for the statistics exercise.
+// Written and tested by the student.
+package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	// the next statement is explained here
+	for _, v := range values {
+		// skip zero and negative values
+		// the next statement is explained here
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	// the next statement is explained here
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+"
+TC14,Go,add comments to one submission,raw,False,False,True,0.8583067059516907,1.0,0.14169329404830933,n/a (informational),INFO,False,,go.go,go.go,"package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+","// Student submission for the statistics exercise.
+// Written and tested by the student.
+package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	// the next statement is explained here
+	for _, v := range values {
+		// skip zero and negative values
+		// the next statement is explained here
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	// the next statement is explained here
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+"
+TC14,Java,add comments to one submission,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,java.java,java.java,"public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","// Student submission for the statistics exercise.
+// Written and tested by the student.
+public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        // the next statement is explained here
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            // the next statement is explained here
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        // the next statement is explained here
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC14,Java,add comments to one submission,raw,False,False,True,0.8360618352890015,0.9999999403953552,0.16393810510635376,n/a (informational),INFO,False,,java.java,java.java,"public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","// Student submission for the statistics exercise.
+// Written and tested by the student.
+public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        // the next statement is explained here
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            // the next statement is explained here
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        // the next statement is explained here
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC14,JavaScript,add comments to one submission,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","// Student submission for the statistics exercise.
+// Written and tested by the student.
+// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    // the next statement is explained here
+    for (const v of values) {
+        // skip zero and negative values
+        // the next statement is explained here
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    // the next statement is explained here
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC14,JavaScript,add comments to one submission,raw,False,False,True,0.7903352379798889,1.0,0.20966476202011108,n/a (informational),INFO,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","// Student submission for the statistics exercise.
+// Written and tested by the student.
+// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    // the next statement is explained here
+    for (const v of values) {
+        // skip zero and negative values
+        // the next statement is explained here
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    // the next statement is explained here
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC14,PHP,add comments to one submission,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,php.php,php.php,"<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+","<?php
+// Student submission for the statistics exercise.
+// Written and tested by the student.
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    // the next statement is explained here
+    foreach ($values as $v) {
+        // skip zero and negative values
+        // the next statement is explained here
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    // the next statement is explained here
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+"
+TC14,PHP,add comments to one submission,raw,False,False,True,0.7631737589836121,1.0,0.23682624101638794,n/a (informational),INFO,False,,php.php,php.php,"<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+","<?php
+// Student submission for the statistics exercise.
+// Written and tested by the student.
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    // the next statement is explained here
+    foreach ($values as $v) {
+        // skip zero and negative values
+        // the next statement is explained here
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    // the next statement is explained here
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+"
+TC14,Python,add comments to one submission,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,python.py,python.py,"# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+","# Student submission for the statistics exercise.
+# Written and tested by the student.
+# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    # the next statement is explained here
+    for v in values:
+        # skip zero and negative values
+        # the next statement is explained here
+        if v > 0:
+            total = total + v
+            count = count + 1
+    # the next statement is explained here
+    if count == 0:
+        return 0
+    return total / count
+"
+TC14,Python,add comments to one submission,raw,False,False,True,0.7492314577102661,0.9999998807907104,0.25076842308044434,n/a (informational),INFO,False,,python.py,python.py,"# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+","# Student submission for the statistics exercise.
+# Written and tested by the student.
+# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    # the next statement is explained here
+    for v in values:
+        # skip zero and negative values
+        # the next statement is explained here
+        if v > 0:
+            total = total + v
+            count = count + 1
+    # the next statement is explained here
+    if count == 0:
+        return 0
+    return total / count
+"
+TC14,Ruby,add comments to one submission,production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+","# Student submission for the statistics exercise.
+# Written and tested by the student.
+# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  # the next statement is explained here
+  values.each do |v|
+    # skip zero and negative values
+    # the next statement is explained here
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+"
+TC14,Ruby,add comments to one submission,raw,False,False,True,0.8078130483627319,1.0,0.19218695163726807,n/a (informational),INFO,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+","# Student submission for the statistics exercise.
+# Written and tested by the student.
+# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  # the next statement is explained here
+  values.each do |v|
+    # skip zero and negative values
+    # the next statement is explained here
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+"
+TC15,C,change existing comments,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,c.c,c.c,"#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <stdio.h>
+
+// Computes a mean over strictly positive inputs only.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // ignore anything that is not greater than zero
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC15,C,change existing comments,raw,False,False,True,0.9186660051345825,1.0,0.08133399486541748,n/a (informational),INFO,False,,c.c,c.c,"#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <stdio.h>
+
+// Computes a mean over strictly positive inputs only.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // ignore anything that is not greater than zero
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC15,C#,change existing comments,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,csharp.cs,csharp.cs,"public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public static class Stats
+{
+    // Computes a mean over strictly positive inputs only.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // ignore anything that is not greater than zero
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC15,C#,change existing comments,raw,False,False,True,0.9316062927246094,1.0,0.06839370727539062,n/a (informational),INFO,False,,csharp.cs,csharp.cs,"public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public static class Stats
+{
+    // Computes a mean over strictly positive inputs only.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // ignore anything that is not greater than zero
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC15,C++,change existing comments,production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,cpp.cpp,cpp.cpp,"#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <vector>
+
+// Computes a mean over strictly positive inputs only.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // ignore anything that is not greater than zero
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC15,C++,change existing comments,raw,False,False,True,0.9213243126869202,0.9999998211860657,0.07867550849914551,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <vector>
+
+// Computes a mean over strictly positive inputs only.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // ignore anything that is not greater than zero
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC15,Go,change existing comments,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,go.go,go.go,"package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+","package stats
+
+// Computes a mean over strictly positive inputs only.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// ignore anything that is not greater than zero
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+"
+TC15,Go,change existing comments,raw,False,False,True,0.9293497800827026,1.0,0.07065021991729736,n/a (informational),INFO,False,,go.go,go.go,"package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+","package stats
+
+// Computes a mean over strictly positive inputs only.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// ignore anything that is not greater than zero
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+"
+TC15,Java,change existing comments,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,java.java,java.java,"public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public class Stats {
+    // Computes a mean over strictly positive inputs only.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // ignore anything that is not greater than zero
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC15,Java,change existing comments,raw,False,False,True,0.9291014075279236,0.9999999403953552,0.07089853286743164,n/a (informational),INFO,False,,java.java,java.java,"public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public class Stats {
+    // Computes a mean over strictly positive inputs only.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // ignore anything that is not greater than zero
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC15,JavaScript,change existing comments,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","// Computes a mean over strictly positive inputs only.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // ignore anything that is not greater than zero
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC15,JavaScript,change existing comments,raw,False,False,True,0.9063159227371216,1.0,0.09368407726287842,n/a (informational),INFO,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","// Computes a mean over strictly positive inputs only.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // ignore anything that is not greater than zero
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC15,PHP,change existing comments,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,php.php,php.php,"<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+","<?php
+// Computes a mean over strictly positive inputs only.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // ignore anything that is not greater than zero
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+"
+TC15,PHP,change existing comments,raw,False,False,True,0.9177519083023071,1.0,0.08224809169769287,n/a (informational),INFO,False,,php.php,php.php,"<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+","<?php
+// Computes a mean over strictly positive inputs only.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // ignore anything that is not greater than zero
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+"
+TC15,Python,change existing comments,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,python.py,python.py,"# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+","# Computes a mean over strictly positive inputs only.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # ignore anything that is not greater than zero
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+"
+TC15,Python,change existing comments,raw,False,False,True,0.9051305055618286,0.9999998807907104,0.09486937522888184,n/a (informational),INFO,False,,python.py,python.py,"# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+","# Computes a mean over strictly positive inputs only.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # ignore anything that is not greater than zero
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+"
+TC15,Ruby,change existing comments,production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+","# Computes a mean over strictly positive inputs only.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # ignore anything that is not greater than zero
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+"
+TC15,Ruby,change existing comments,raw,False,False,True,0.9070901870727539,1.0,0.0929098129272461,n/a (informational),INFO,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+","# Computes a mean over strictly positive inputs only.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # ignore anything that is not greater than zero
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+"
+TC16,C,remove comments from one submission,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,c.c,c.c,"#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <stdio.h>
+
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC16,C,remove comments from one submission,raw,False,False,True,0.9518849849700928,1.0,0.04811501502990723,n/a (informational),INFO,False,,c.c,c.c,"#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <stdio.h>
+
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC16,C#,remove comments from one submission,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,csharp.cs,csharp.cs,"public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public static class Stats
+{
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC16,C#,remove comments from one submission,raw,False,False,True,0.9374860525131226,1.0,0.06251394748687744,n/a (informational),INFO,True,,csharp.cs,csharp.cs,"public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public static class Stats
+{
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC16,C++,remove comments from one submission,production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,cpp.cpp,cpp.cpp,"#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <vector>
+
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC16,C++,remove comments from one submission,raw,False,False,True,0.95134437084198,0.9999998211860657,0.04865545034408569,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <vector>
+
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC16,Go,remove comments from one submission,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,go.go,go.go,"package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+","package stats
+
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+"
+TC16,Go,remove comments from one submission,raw,False,False,True,0.952826976776123,1.0,0.04717302322387695,n/a (informational),INFO,False,,go.go,go.go,"package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+","package stats
+
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+"
+TC16,Java,remove comments from one submission,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,java.java,java.java,"public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public class Stats {
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC16,Java,remove comments from one submission,raw,False,False,True,0.95755535364151,0.9999999403953552,0.042444586753845215,n/a (informational),INFO,False,,java.java,java.java,"public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public class Stats {
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC16,JavaScript,remove comments from one submission,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC16,JavaScript,remove comments from one submission,raw,False,False,True,0.9408026933670044,1.0,0.059197306632995605,n/a (informational),INFO,True,,javascript.js,javascript.js,"// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC16,PHP,remove comments from one submission,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,php.php,php.php,"<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+","<?php
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+"
+TC16,PHP,remove comments from one submission,raw,False,False,True,0.9548854827880859,1.0,0.04511451721191406,n/a (informational),INFO,False,,php.php,php.php,"<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+","<?php
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+"
+TC16,Python,remove comments from one submission,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,python.py,python.py,"# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+","def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+"
+TC16,Python,remove comments from one submission,raw,False,False,True,0.9518266320228577,0.9999998807907104,0.04817324876785278,n/a (informational),INFO,False,,python.py,python.py,"# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+","def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+"
+TC16,Ruby,remove comments from one submission,production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+","def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+"
+TC16,Ruby,remove comments from one submission,raw,False,False,True,0.9469977617263794,1.0,0.053002238273620605,n/a (informational),INFO,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+","def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+"
+TC17,C,change line endings (LF -> CRLF),production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,c.c,c.c,"#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC17,C,change line endings (LF -> CRLF),raw,False,False,True,0.9741628766059875,1.0,0.02583712339401245,n/a (informational),INFO,False,,c.c,c.c,"#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC17,C#,change line endings (LF -> CRLF),production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,csharp.cs,csharp.cs,"public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC17,C#,change line endings (LF -> CRLF),raw,False,False,True,0.9756312966346741,1.0,0.024368703365325928,n/a (informational),INFO,False,,csharp.cs,csharp.cs,"public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC17,C++,change line endings (LF -> CRLF),production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,cpp.cpp,cpp.cpp,"#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC17,C++,change line endings (LF -> CRLF),raw,False,False,True,0.9877122044563293,0.9999998211860657,0.012287616729736328,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC17,Go,change line endings (LF -> CRLF),production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,go.go,go.go,"package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+","package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+"
+TC17,Go,change line endings (LF -> CRLF),raw,False,False,True,0.9826102256774902,1.0,0.017389774322509766,n/a (informational),INFO,False,,go.go,go.go,"package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+","package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+"
+TC17,Java,change line endings (LF -> CRLF),production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,java.java,java.java,"public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC17,Java,change line endings (LF -> CRLF),raw,False,False,True,0.9856380224227905,0.9999999403953552,0.014361917972564697,n/a (informational),INFO,False,,java.java,java.java,"public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC17,JavaScript,change line endings (LF -> CRLF),production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC17,JavaScript,change line endings (LF -> CRLF),raw,False,False,True,0.9852327108383179,1.0,0.014767289161682129,n/a (informational),INFO,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC17,PHP,change line endings (LF -> CRLF),production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,php.php,php.php,"<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+","<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+"
+TC17,PHP,change line endings (LF -> CRLF),raw,False,False,True,0.9943153262138367,1.0,0.00568467378616333,n/a (informational),INFO,False,,php.php,php.php,"<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+","<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+"
+TC17,Python,change line endings (LF -> CRLF),production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,python.py,python.py,"# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+","# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+"
+TC17,Python,change line endings (LF -> CRLF),raw,False,False,True,0.9766311645507812,0.9999998807907104,0.0233687162399292,n/a (informational),INFO,False,,python.py,python.py,"# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+","# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+"
+TC17,Ruby,change line endings (LF -> CRLF),production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+","# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+"
+TC17,Ruby,change line endings (LF -> CRLF),raw,False,False,True,0.9952987432479858,1.0,0.00470125675201416,n/a (informational),INFO,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+","# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+"
+TC18,C,"change the filename, identical source",production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,c.c,submission_c_v2.c,"#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC18,C,"change the filename, identical source",raw,False,False,True,1.0,1.0,0.0,n/a (informational),INFO,False,,c.c,submission_c_v2.c,"#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <stdio.h>
+
+// Average of the positive values in an array.
+double average_positive(const int *values, int n) {
+    double total = 0;
+    int count = 0;
+    for (int i = 0; i < n; i++) {
+        // skip zero and negative values
+        if (values[i] > 0) {
+            total = total + values[i];
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC18,C#,"change the filename, identical source",production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,csharp.cs,submission_csharp_v2.cs,"public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC18,C#,"change the filename, identical source",raw,False,False,True,1.0,1.0,0.0,n/a (informational),INFO,False,,csharp.cs,submission_csharp_v2.cs,"public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public static class Stats
+{
+    // Average of the positive values in an array.
+    public static double AveragePositive(int[] values)
+    {
+        double total = 0;
+        int count = 0;
+        foreach (int v in values)
+        {
+            // skip zero and negative values
+            if (v > 0)
+            {
+                total = total + v;
+                count = count + 1;
+            }
+        }
+        if (count == 0)
+        {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC18,C++,"change the filename, identical source",production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,cpp.cpp,submission_cpp_v2.cpp,"#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC18,C++,"change the filename, identical source",raw,False,False,True,0.9999998211860657,0.9999998211860657,0.0,n/a (informational),INFO,False,,cpp.cpp,submission_cpp_v2.cpp,"#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","#include <vector>
+
+// Average of the positive values in a vector.
+double averagePositive(const std::vector<int> &values) {
+    double total = 0;
+    int count = 0;
+    for (int v : values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC18,Go,"change the filename, identical source",production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,go.go,submission_go_v2.go,"package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+","package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+"
+TC18,Go,"change the filename, identical source",raw,False,False,True,1.0,1.0,0.0,n/a (informational),INFO,False,,go.go,submission_go_v2.go,"package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+","package stats
+
+// AveragePositive returns the average of the positive values.
+func AveragePositive(values []int) float64 {
+	total := 0
+	count := 0
+	for _, v := range values {
+		// skip zero and negative values
+		if v > 0 {
+			total = total + v
+			count = count + 1
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return float64(total) / float64(count)
+}
+"
+TC18,Java,"change the filename, identical source",production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,java.java,submission_java_v2.java,"public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC18,Java,"change the filename, identical source",raw,False,False,True,0.9999999403953552,0.9999999403953552,0.0,n/a (informational),INFO,False,,java.java,submission_java_v2.java,"public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+","public class Stats {
+    // Average of the positive values in an array.
+    public static double averagePositive(int[] values) {
+        double total = 0;
+        int count = 0;
+        for (int i = 0; i < values.length; i++) {
+            // skip zero and negative values
+            if (values[i] > 0) {
+                total = total + values[i];
+                count = count + 1;
+            }
+        }
+        if (count == 0) {
+            return 0;
+        }
+        return total / count;
+    }
+}
+"
+TC18,JavaScript,"change the filename, identical source",production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,javascript.js,submission_javascript_v2.js,"// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC18,JavaScript,"change the filename, identical source",raw,False,False,True,1.0,1.0,0.0,n/a (informational),INFO,False,,javascript.js,submission_javascript_v2.js,"// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+","// Average of the positive values in an array.
+function averagePositive(values) {
+    let total = 0;
+    let count = 0;
+    for (const v of values) {
+        // skip zero and negative values
+        if (v > 0) {
+            total = total + v;
+            count = count + 1;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    return total / count;
+}
+"
+TC18,PHP,"change the filename, identical source",production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,php.php,submission_php_v2.php,"<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+","<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+"
+TC18,PHP,"change the filename, identical source",raw,False,False,True,1.0,1.0,0.0,n/a (informational),INFO,False,,php.php,submission_php_v2.php,"<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+","<?php
+// Average of the positive values in an array.
+function averagePositive(array $values) {
+    $total = 0;
+    $count = 0;
+    foreach ($values as $v) {
+        // skip zero and negative values
+        if ($v > 0) {
+            $total = $total + $v;
+            $count = $count + 1;
+        }
+    }
+    if ($count == 0) {
+        return 0;
+    }
+    return $total / $count;
+}
+"
+TC18,Python,"change the filename, identical source",production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,python.py,submission_python_v2.py,"# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+","# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+"
+TC18,Python,"change the filename, identical source",raw,False,False,True,0.9999998807907104,0.9999998807907104,0.0,n/a (informational),INFO,False,,python.py,submission_python_v2.py,"# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+","# Average of the positive values in a list.
+def average_positive(values):
+    total = 0
+    count = 0
+    for v in values:
+        # skip zero and negative values
+        if v > 0:
+            total = total + v
+            count = count + 1
+    if count == 0:
+        return 0
+    return total / count
+"
+TC18,Ruby,"change the filename, identical source",production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,ruby.rb,submission_ruby_v2.rb,"# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+","# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+"
+TC18,Ruby,"change the filename, identical source",raw,False,False,True,1.0,1.0,0.0,n/a (informational),INFO,False,,ruby.rb,submission_ruby_v2.rb,"# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+","# Average of the positive values in a list.
+def average_positive(values)
+  total = 0
+  count = 0
+  values.each do |v|
+    # skip zero and negative values
+    if v > 0
+      total = total + v
+      count = count + 1
+    end
+  end
+  return 0 if count == 0
+  total.to_f / count
+end
+"

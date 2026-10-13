@@ -52,6 +52,7 @@ import logging
 import os
 import re
 import threading
+import time
 import tokenize
 from collections import Counter, OrderedDict
 from dataclasses import asdict, dataclass, field
@@ -67,6 +68,8 @@ DEFAULT_THRESHOLD = 0.50
 CHUNK_WORDS = 120
 # Fewer words than this isn't enough meaning to compare reliably.
 MIN_WORDS = 5
+# After a failed model load, try again on the next request after this long.
+RETRY_AFTER_SECONDS = 60
 
 COMPONENT_LABELS = {
     "code": "code documentation",
@@ -286,7 +289,23 @@ class MiniLMEncoder:
             hf_logging.set_verbosity_error()
             hf_logging.disable_progress_bar()
             try:
-                self.model = SentenceTransformer(model_name, device=device)
+                # Load the downloaded copy from its folder when there is one,
+                # so starting the server makes no network call: when
+                # huggingface.co can't be reached, huggingface_hub closes its
+                # shared HTTP client and the load failed with "Cannot send a
+                # request, as the client has been closed". (Passing
+                # local_files_only=True to SentenceTransformer still makes
+                # requests in sentence-transformers 6.)
+                from huggingface_hub import snapshot_download
+
+                try:
+                    source = snapshot_download(model_name, local_files_only=True)
+                except Exception:  # not downloaded yet
+                    from huggingface_hub.utils._http import close_session
+
+                    close_session()  # start the download with a fresh client
+                    source = model_name
+                self.model = SentenceTransformer(source, device=device)
             finally:
                 hf_logging.set_verbosity(verbosity)
                 hf_logging.enable_progress_bar()
@@ -321,21 +340,29 @@ class SentenceEmbeddingService:
         self.error: str | None = None
         self.cache_hits = 0
         self.chunks_encoded = 0
+        self._failed_at: float | None = None
 
     def load(self) -> bool:
+        """Load the model once. After a failure, later calls return False
+        straight away, but a new attempt is made once RETRY_AFTER_SECONDS
+        have passed, so a passing network problem doesn't disable the
+        feature until the server restarts."""
         if not self.enabled:
             return False
         with self._lock:
             if self._encoder is not None:
                 return True
             if self.status == "unavailable":
-                return False
+                if self._failed_at is not None and time.monotonic() - self._failed_at < RETRY_AFTER_SECONDS:
+                    return False
+                self.status, self.error = "not_loaded", None
             try:
                 self._encoder = self._factory()
                 self.status = "ready"
                 return True
             except Exception as exc:  # ImportError, download/network errors, ...
                 self.status = "unavailable"
+                self._failed_at = time.monotonic()
                 self.error = f"{exc.__class__.__name__}: {exc}"
                 log.warning("Cross-modal semantic model unavailable: %s", self.error)
                 return False
@@ -363,6 +390,21 @@ class SentenceEmbeddingService:
         "unavailable" result."""
         import numpy as np
 
+        out: dict[str, DocumentEmbedding] = {}
+        for name, (vecs, weights) in self.embed_chunks(texts).items():
+            mean = (vecs * weights[:, None]).sum(axis=0) / weights.sum()
+            norm = np.linalg.norm(mean)
+            out[name] = DocumentEmbedding(vector=mean / norm if norm else mean,
+                                          chunk_count=len(weights), word_count=int(weights.sum()))
+        return out
+
+    def embed_chunks(self, texts: dict[str, str]) -> dict[str, tuple[object, object]]:
+        """Like ``embed_documents`` but keeps every chunk: per document,
+        (chunk vectors (n, dim), L2-normalized; word count of each chunk).
+        Used to compare reports section by section. Raises on inference
+        failure."""
+        import numpy as np
+
         plans = {name: chunk_text(text) for name, text in texts.items()}
         missing: dict[str, str] = {}
         with self._lock:
@@ -385,17 +427,14 @@ class SentenceEmbeddingService:
                 while len(self._cache) > self._cache_size:
                     self._cache.popitem(last=False)
 
-        out: dict[str, DocumentEmbedding] = {}
+        out: dict[str, tuple[object, object]] = {}
         for name, chunks in plans.items():
             with self._lock:
                 vecs = [self._cache.get(self._key(c)) for c in chunks]
             if any(v is None for v in vecs):  # evicted mid-call by a huge batch: recompute directly
                 vecs = list(np.asarray(self._encoder.encode(chunks), dtype=float))
             weights = np.asarray([len(c.split()) for c in chunks], dtype=float)
-            mean = (np.stack(vecs) * weights[:, None]).sum(axis=0) / weights.sum()
-            norm = np.linalg.norm(mean)
-            out[name] = DocumentEmbedding(vector=mean / norm if norm else mean,
-                                          chunk_count=len(chunks), word_count=int(weights.sum()))
+            out[name] = (np.stack(vecs), weights)
         return out
 
 

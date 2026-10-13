@@ -40,8 +40,9 @@ from typing import Annotated, Optional
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .auth import (
@@ -71,9 +72,10 @@ from .evaluator.document_extraction import (
 from .evaluator.pipeline import evaluate_submission as _run_pipeline
 from .evaluator.semantic_consistency import get_consistency_service
 from .evaluator.ai_text_detection import get_ai_text_detector
-from .evaluator.rubric_grading import Criterion as _EvalCriterion
+from .evaluator.rubric_grading import Criterion as _EvalCriterion, HeuristicRubricGrader
 from .models import (
     Assignment,
+    AuthSession,
     AutoEvaluation,
     Enrollment,
     Grade,
@@ -85,7 +87,10 @@ from .models import (
     User,
 )
 from .similarity.ai_heuristics import score_source as _score_ai_code
-from .similarity.core import Fingerprint, compare_all, fingerprint_source
+from .similarity.core import Fingerprint, compare_all, fingerprint_source, subtract_starter
+from .similarity.python_cleanup import names_in
+from .similarity import report_similarity as _report_sim
+from . import exports as _exports
 from .similarity.semantic import (
     MODEL_NAME as _SEMANTIC_MODEL,
     apply_semantic_signal,
@@ -94,7 +99,9 @@ from .similarity.semantic import (
     submissions_needing_semantic,
 )
 
-_CODE_EXTENSIONS = {".py", ".java", ".js", ".ts", ".c", ".cpp", ".go", ".rb"}
+# Source files the similarity check and code analysis read. Includes C# and
+# C/C++ headers, which unixcoder-base-nine was trained on.
+_CODE_EXTENSIONS = {".py", ".java", ".js", ".c", ".cpp",".cc",".cxx",".hh",".hxx", ".h", ".hpp", ".cs", ".go", ".rb",".php"}
 
 Base.metadata.create_all(bind=engine)
 add_missing_columns("similarity_flags", {
@@ -104,6 +111,7 @@ add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON", "ai_
 # Submissions made before assignments existed keep assignment_id NULL (and
 # their free-text assignment_name); nothing else about them changes.
 add_missing_columns("submissions", {"assignment_id": "INTEGER REFERENCES assignments(id)"})
+add_missing_columns("assignments", {"starter_code": "TEXT", "starter_code_filename": "VARCHAR"})
 
 
 # --------------------------------------------------------------------------
@@ -145,6 +153,9 @@ class UserOut(BaseModel):
     full_name: str
     role: str
     subjects: list[SubjectOut] = []
+    # Admin lists only: how many submissions a student has (shown before
+    # deleting the account, which deletes them too).
+    submission_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -170,6 +181,15 @@ class StudentCreate(BaseModel):
     full_name: str
     password: str = Field(min_length=4)
     subject_ids: list[int] = []
+
+
+class UserUpdate(BaseModel):
+    """Admin edit of an instructor or student. Fields left out are kept;
+    a blank password keeps the current one."""
+    email: Optional[str] = Field(default=None, max_length=254)
+    full_name: Optional[str] = Field(default=None, max_length=200)
+    password: Optional[str] = Field(default=None, max_length=200)
+    subject_ids: Optional[list[int]] = None
 
 
 class Criterion(BaseModel):
@@ -211,6 +231,9 @@ class RubricOut(BaseModel):
     assignment_names: list[str] = []
 
 
+_STARTER_CODE_MAX = 200_000
+
+
 class AssignmentIn(BaseModel):
     subject_id: int
     name: str = Field(max_length=200)
@@ -220,6 +243,11 @@ class AssignmentIn(BaseModel):
     available_from: datetime
     deadline: datetime
     rubric_id: Optional[int] = None
+    # Optional instructor starter code (one file). Its fingerprints are left
+    # out of the token similarity check; the file name's extension decides
+    # which submitted files it is subtracted from.
+    starter_code: str = Field(default="", max_length=_STARTER_CODE_MAX)
+    starter_code_filename: str = Field(default="", max_length=200)
 
 
 class AssignmentUpdate(BaseModel):
@@ -228,6 +256,8 @@ class AssignmentUpdate(BaseModel):
     available_from: Optional[datetime] = None
     deadline: Optional[datetime] = None
     rubric_id: Optional[int] = None  # send null explicitly to detach the rubric
+    starter_code: Optional[str] = Field(default=None, max_length=_STARTER_CODE_MAX)  # "" removes it
+    starter_code_filename: Optional[str] = Field(default=None, max_length=200)
 
 
 class AssignmentOut(BaseModel):
@@ -248,6 +278,8 @@ class AssignmentOut(BaseModel):
     graded_count: int
     created_at: UTCDateTime
     updated_at: Optional[UTCDateTime]
+    starter_code: str = ""
+    starter_code_filename: str = ""
 
 
 class MySubmissionOut(BaseModel):
@@ -321,6 +353,9 @@ class GradeOut(BaseModel):
 
 class AutoEvaluateIn(BaseModel):
     rubric_id: int
+    # False: grade with the built-in heuristic grader instead of the rubric
+    # model (local Ollama / Claude). Everything else in the pipeline runs.
+    use_rubric_model: bool = True
 
 
 class ConsistencyComponentOut(BaseModel):
@@ -430,6 +465,64 @@ class SimilarityCheckOut(BaseModel):
     compared: int
     pairs: list[SimilarityPairOut]
     semantic: SemanticSummaryOut
+    # True when the assignment's starter code was subtracted from the
+    # token fingerprints before comparing.
+    starter_code_excluded: bool = False
+
+
+class ReportPassageOut(BaseModel):
+    words: int
+    text_a: str
+    text_b: str
+
+
+class ReportSimilarityPairOut(BaseModel):
+    submission_a_id: int
+    submission_b_id: int
+    student_a: str
+    student_b: str
+    words_a: int
+    words_b: int
+    shared_fingerprints: int
+    jaccard: float
+    containment: float
+    # Share of each report's words inside an identical passage.
+    coverage_a: float
+    coverage_b: float
+    # all-MiniLM-L6-v2 best-match similarity; None when it didn't run.
+    semantic_similarity: Optional[float]
+    flag_level: Optional[str]  # "high" (identical passages) | "review" (semantic) | None
+    flag_reason: Optional[str]
+    passages: list[ReportPassageOut]
+
+
+class ReportSkippedOut(BaseModel):
+    submission_id: int
+    student: str
+    reason: str
+
+
+class ReportSemanticSummaryOut(BaseModel):
+    status: str  # ok | disabled | unavailable
+    model: str
+    warning: Optional[str] = None
+    pairs_compared: int = 0
+    cohort_median: Optional[float] = None
+    review_threshold: Optional[float] = None
+
+
+class ReportSimilarityOut(BaseModel):
+    subject_id: int
+    assignment_name: str
+    compared: int
+    skipped: list[ReportSkippedOut]
+    # Fingerprints found in most reports (the assignment brief, a template)
+    # that were left out of the comparison.
+    common_fingerprints_excluded: int
+    pairs: list[ReportSimilarityPairOut]
+    semantic: ReportSemanticSummaryOut
+    # Thresholds are uncalibrated: results are exploratory review signals.
+    exploratory: bool = True
 
 
 class BatchAutoEvaluateIn(BaseModel):
@@ -437,6 +530,8 @@ class BatchAutoEvaluateIn(BaseModel):
     # Resume after an interruption: leave submissions that already have an
     # evaluation against this rubric untouched.
     skip_already_evaluated: bool = False
+    # See AutoEvaluateIn.use_rubric_model.
+    use_rubric_model: bool = True
 
 
 class BatchEvaluationItemOut(BaseModel):
@@ -608,6 +703,93 @@ def list_instructors(_admin: User = Depends(require_admin), db: Session = Depend
     return [_user_out(i, db) for i in instructors]
 
 
+def _admin_managed_user(db: Session, user_id: int, role: str) -> User:
+    user = db.get(User, user_id)
+    if not user or user.role != role:
+        raise HTTPException(404, f"{role.capitalize()} not found")
+    return user
+
+
+def _update_user(db: Session, user: User, payload: UserUpdate) -> UserOut:
+    if payload.full_name is not None:
+        name = payload.full_name.strip()
+        if not name:
+            raise HTTPException(400, "Full name can't be empty")
+        user.full_name = name
+    if payload.email is not None:
+        email = payload.email.strip()
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+            raise HTTPException(400, f"'{email}' is not a valid email address")
+        clash = db.query(User).filter(func.lower(User.email) == email.lower(), User.id != user.id).first()
+        if clash:
+            raise HTTPException(400, f"An account with email '{email}' already exists")
+        user.email = email
+    password_changed = False
+    if payload.password:  # blank or missing: keep the current password
+        if len(payload.password) < 4:
+            raise HTTPException(400, "Password must be at least 4 characters")
+        user.password_hash, user.password_salt = hash_password(payload.password)
+        password_changed = True
+    if payload.subject_ids is not None:
+        _require_subjects_exist(db, payload.subject_ids)
+    if password_changed:
+        # Log them out everywhere: the old password must not keep working
+        # through a session that was opened with it.
+        db.query(AuthSession).filter(AuthSession.user_id == user.id).delete(synchronize_session=False)
+    db.add(user)
+    db.commit()
+    if payload.subject_ids is not None:
+        if user.role == "instructor":
+            _set_instructor_subjects(db, user, payload.subject_ids)
+        else:
+            _set_student_subjects(db, user, payload.subject_ids)
+    db.refresh(user)
+    return _user_out(user, db)
+
+
+def _delete_user(db: Session, user: User) -> dict:
+    """Delete an instructor or student and everything that belongs only to
+    them. A student's submissions go too (grades, automated evaluations,
+    similarity flags and the uploaded files). Records an instructor made
+    for others stay: grades keep the grader's name, assignments and rubrics
+    just lose their creator."""
+    upload_parts: list[tuple[Optional[str], str]] = []
+    submissions = db.query(Submission).filter(Submission.student_id == user.id).all()
+    for submission in submissions:
+        upload_parts += [(submission.code_path, "code"), (submission.report_path, "report"),
+                         (submission.video_path, "video")]
+        _discard_derived_results(db, submission.id)
+        db.query(Grade).filter(Grade.submission_id == submission.id).delete(synchronize_session=False)
+        db.delete(submission)
+    db.query(Grade).filter(Grade.graded_by_id == user.id).update({Grade.graded_by_id: None},
+                                                                 synchronize_session=False)
+    db.query(Assignment).filter(Assignment.created_by_id == user.id).update({Assignment.created_by_id: None},
+                                                                            synchronize_session=False)
+    db.query(Rubric).filter(Rubric.created_by_id == user.id).update({Rubric.created_by_id: None},
+                                                                    synchronize_session=False)
+    db.query(AuthSession).filter(AuthSession.user_id == user.id).delete(synchronize_session=False)
+    db.query(InstructorAssignment).filter(InstructorAssignment.instructor_id == user.id).delete(
+        synchronize_session=False)
+    db.query(Enrollment).filter(Enrollment.student_id == user.id).delete(synchronize_session=False)
+    db.delete(user)
+    db.commit()
+    for rel_path, kind in upload_parts:  # files only after the database change succeeded
+        _remove_upload_part(rel_path, kind)
+    return {"status": "deleted", "submissions_deleted": len(submissions)}
+
+
+@app.put("/admin/instructors/{instructor_id}", response_model=UserOut)
+def update_instructor(
+    instructor_id: int, payload: UserUpdate, _admin: User = Depends(require_admin), db: Session = Depends(get_db)
+):
+    return _update_user(db, _admin_managed_user(db, instructor_id, "instructor"), payload)
+
+
+@app.delete("/admin/instructors/{instructor_id}")
+def delete_instructor(instructor_id: int, _admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return _delete_user(db, _admin_managed_user(db, instructor_id, "instructor"))
+
+
 @app.put("/admin/instructors/{instructor_id}/subjects", response_model=UserOut)
 def set_instructor_subjects(
     instructor_id: int, payload: SubjectIdsIn, _admin: User = Depends(require_admin), db: Session = Depends(get_db)
@@ -642,7 +824,22 @@ def create_student(payload: StudentCreate, _admin: User = Depends(require_admin)
 @app.get("/admin/students", response_model=list[UserOut])
 def list_students(_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     students = db.query(User).filter(User.role == "student").order_by(User.full_name).all()
-    return [_user_out(s, db) for s in students]
+    counts = dict(
+        db.query(Submission.student_id, func.count(Submission.id)).group_by(Submission.student_id).all()
+    )
+    return [_user_out(s, db).model_copy(update={"submission_count": counts.get(s.id, 0)}) for s in students]
+
+
+@app.put("/admin/students/{student_id}", response_model=UserOut)
+def update_student(
+    student_id: int, payload: UserUpdate, _admin: User = Depends(require_admin), db: Session = Depends(get_db)
+):
+    return _update_user(db, _admin_managed_user(db, student_id, "student"), payload)
+
+
+@app.delete("/admin/students/{student_id}")
+def delete_student(student_id: int, _admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return _delete_user(db, _admin_managed_user(db, student_id, "student"))
 
 
 @app.put("/admin/students/{student_id}/subjects", response_model=UserOut)
@@ -933,7 +1130,23 @@ def _assignment_out(db: Session, a: Assignment) -> AssignmentOut:
         max_points=a.rubric.max_total if a.rubric else None,
         submission_count=len(subs), graded_count=sum(1 for s in subs if s.status == "graded"),
         created_at=_as_utc(a.created_at), updated_at=_as_utc(a.updated_at),
+        starter_code=a.starter_code or "", starter_code_filename=a.starter_code_filename or "",
     )
+
+
+def _clean_starter_code(code: str, filename: str) -> tuple[Optional[str], Optional[str]]:
+    """Blank code means no starter code. Otherwise the file name must carry
+    a code extension the similarity check reads, since that's what decides
+    which submitted files the starter is subtracted from."""
+    if not code.strip():
+        return None, None
+    filename = Path(filename.strip()).name
+    if Path(filename).suffix.lower() not in _CODE_EXTENSIONS:
+        raise HTTPException(
+            400, "Starter code needs a file name ending in a code extension "
+                 f"({', '.join(sorted(_CODE_EXTENSIONS))}), e.g. starter.py",
+        )
+    return code, filename
 
 
 def _my_submission_out(submission: Submission, assignment_open: bool) -> MySubmissionOut:
@@ -971,9 +1184,11 @@ def create_assignment(payload: AssignmentIn, instructor: User = Depends(require_
     _validate_window(available_from, deadline)
     _require_unique_assignment_name(db, payload.subject_id, name)
     _check_assignment_rubric(db, payload.subject_id, payload.rubric_id)
+    starter_code, starter_filename = _clean_starter_code(payload.starter_code, payload.starter_code_filename)
     assignment = Assignment(
         subject_id=payload.subject_id, name=name, description=payload.description.strip(),
         available_from=available_from, deadline=deadline, rubric_id=payload.rubric_id,
+        starter_code=starter_code, starter_code_filename=starter_filename,
         created_by_id=instructor.id,
     )
     db.add(assignment)
@@ -1060,6 +1275,12 @@ def update_assignment(
         assignment.name = name
     if payload.description is not None:
         assignment.description = payload.description.strip()
+    if payload.starter_code is not None or payload.starter_code_filename is not None:
+        # Either field may be sent alone; the other keeps its stored value.
+        code = payload.starter_code if payload.starter_code is not None else (assignment.starter_code or "")
+        filename = (payload.starter_code_filename if payload.starter_code_filename is not None
+                    else (assignment.starter_code_filename or ""))
+        assignment.starter_code, assignment.starter_code_filename = _clean_starter_code(code, filename)
     assignment.available_from, assignment.deadline = available_from, deadline
     db.commit()
     db.refresh(assignment)
@@ -1575,6 +1796,18 @@ def check_similarity(
     if len(submissions) < 2:
         raise HTTPException(400, "Need at least 2 code submissions for this assignment to compare")
 
+    # Starter code every student was given is subtracted from each file's
+    # fingerprint (same extension only) so shared boilerplate can't flag a
+    # pair on its own. The semantic path below still sees the full files.
+    assignment = next(
+        (a for a in db.query(Assignment).filter(Assignment.subject_id == subject_id).all()
+         if _norm_name(a.name) == _norm_name(assignment_name)),
+        None,
+    )
+    starter_fp = None
+    if assignment and assignment.starter_code and assignment.starter_code_filename:
+        starter_fp = fingerprint_source("starter", assignment.starter_code_filename, assignment.starter_code)
+
     # 1-4: read + normalize each submission once, fingerprint it, and
     # compare every unordered pair (A-B only, never B-A) on tokens.
     fingerprints: dict[str, "Fingerprint"] = {}
@@ -1583,14 +1816,19 @@ def check_similarity(
         code_dir = BASE_DIR / submission.code_path
         merged = Fingerprint(submission_id=str(submission.id), filename="(all files)", token_count=0)
         normalized_files: list[str] = []
+        files = []
         if code_dir.is_dir():
-            for path in sorted(code_dir.rglob("*")):
-                if path.is_file() and path.suffix.lower() in _CODE_EXTENSIONS:
-                    source = path.read_text(encoding="utf-8", errors="ignore")
-                    fp = fingerprint_source(str(submission.id), path.name, source)
-                    merged.hashes |= fp.hashes
-                    merged.token_count += fp.token_count
-                    normalized_files.append(normalize_code(source, path.name))
+            files = [(path, path.read_text(encoding="utf-8", errors="ignore")) for path in sorted(code_dir.rglob("*"))
+                     if path.is_file() and path.suffix.lower() in _CODE_EXTENSIONS]
+        # Names each Python file uses, so a module-level constant read by
+        # another file isn't removed as "unused" before the semantic check.
+        py_names = {path: names_in(source) for path, source in files if path.suffix.lower() == ".py"}
+        for path, source in files:
+            fp = subtract_starter(fingerprint_source(str(submission.id), path.name, source), starter_fp)
+            merged.hashes |= fp.hashes
+            merged.token_count += fp.token_count
+            external = set().union(*(names for other, names in py_names.items() if other != path))
+            normalized_files.append(normalize_code(source, path.name, external))
         fingerprints[str(submission.id)] = merged
         semantic_sources[str(submission.id)] = "\n".join(f for f in normalized_files if f)
 
@@ -1655,6 +1893,131 @@ def check_similarity(
             cohort_median=stats.get("cohort_median"),
             review_threshold=stats.get("review_threshold"),
         ),
+        starter_code_excluded=starter_fp is not None,
+    )
+
+
+# ---- Excel exports of results already shown to the instructor ---------------
+#
+# The browser sends back the result it received (similarity check, report
+# similarity, whole-assignment evaluation) and gets the same data as .xlsx,
+# so nothing expensive is re-run. Instructor-only, for their own subjects.
+
+def _export_subject(db: Session, instructor: User, subject_id: int) -> Subject:
+    if subject_id not in instructor_subject_ids(db, instructor):
+        raise HTTPException(403, "You are not assigned to this subject")
+    subject = db.get(Subject, subject_id)
+    if subject is None:
+        raise HTTPException(404, "Subject not found")
+    return subject
+
+
+def _xlsx_response(content: bytes, kind: str, assignment_name: str) -> Response:
+    return Response(content=content, media_type=_exports.XLSX_MEDIA_TYPE, headers={
+        "Content-Disposition": f'attachment; filename="{_exports.filename(kind, assignment_name)}"'})
+
+
+@app.post("/exports/code-similarity.xlsx")
+def export_code_similarity(
+    payload: SimilarityCheckOut, instructor: User = Depends(require_instructor), db: Session = Depends(get_db)
+):
+    subject = _export_subject(db, instructor, payload.subject_id)
+    return _xlsx_response(_exports.code_similarity_xlsx(payload, f"{subject.name} ({subject.code})"),
+                          "code-similarity", payload.assignment_name)
+
+
+@app.post("/exports/report-similarity.xlsx")
+def export_report_similarity(
+    payload: ReportSimilarityOut, instructor: User = Depends(require_instructor), db: Session = Depends(get_db)
+):
+    subject = _export_subject(db, instructor, payload.subject_id)
+    return _xlsx_response(_exports.report_similarity_xlsx(payload, f"{subject.name} ({subject.code})"),
+                          "report-similarity", payload.assignment_name)
+
+
+@app.post("/exports/batch-evaluation.xlsx")
+def export_batch_evaluation(
+    payload: BatchAutoEvaluateOut, instructor: User = Depends(require_instructor), db: Session = Depends(get_db)
+):
+    subject = _export_subject(db, instructor, payload.subject_id)
+    rubric = db.get(Rubric, payload.rubric_id)
+    rubric_name = rubric.name if rubric and rubric.subject_id == subject.id else f"Rubric #{payload.rubric_id}"
+    return _xlsx_response(_exports.batch_evaluation_xlsx(payload, f"{subject.name} ({subject.code})", rubric_name),
+                          "evaluation", payload.assignment_name)
+
+
+@app.post("/subjects/{subject_id}/assignments/{assignment_name}/check-report-similarity",
+          response_model=ReportSimilarityOut)
+def check_report_similarity(
+    subject_id: int, assignment_name: str, instructor: User = Depends(require_instructor), db: Session = Depends(get_db)
+):
+    """Compare the PDF reports of one assignment pairwise: identical
+    passages (Winnowing over words) and similar meaning (all-MiniLM-L6-v2).
+    Review signal only -- nothing is stored, so it never affects grading."""
+    if subject_id not in instructor_subject_ids(db, instructor):
+        raise HTTPException(403, "You are not assigned to this subject")
+
+    submissions = (
+        db.query(Submission)
+        .filter(Submission.subject_id == subject_id, Submission.assignment_name == assignment_name)
+        .order_by(Submission.id)
+        .all()
+    )
+    names = {str(s.id): s.student_name for s in submissions}
+    texts: dict[str, str] = {}
+    skipped: list[ReportSkippedOut] = []
+    for submission in submissions:
+        def skip(reason: str) -> None:
+            skipped.append(ReportSkippedOut(submission_id=submission.id, student=submission.student_name,
+                                            reason=reason))
+
+        if not submission.report_path:
+            skip("No report submitted")
+            continue
+        path = BASE_DIR / submission.report_path
+        if path.suffix.lower() != ".pdf":
+            skip(f"Report is not a PDF ({path.suffix or 'no extension'}); only PDF reports are compared")
+            continue
+        if not path.is_file():
+            skip("Report file not found")
+            continue
+        try:
+            text = _report_sim.clean_report_pages(_report_sim.extract_pdf_pages(path))
+        except Exception as exc:  # corrupt / encrypted PDF: compare the rest
+            skip(f"Could not read the PDF ({exc.__class__.__name__})")
+            continue
+        if len(text.split()) < _report_sim.MIN_REPORT_WORDS:
+            skip(f"Too little text to compare (under {_report_sim.MIN_REPORT_WORDS} words; "
+                 "a scanned PDF has no extractable text)")
+            continue
+        texts[str(submission.id)] = text
+
+    if len(texts) < 2:
+        raise HTTPException(400, "Need at least 2 readable PDF reports for this assignment to compare")
+
+    result = _report_sim.compare_reports(texts, get_consistency_service())
+    return ReportSimilarityOut(
+        subject_id=subject_id,
+        assignment_name=assignment_name,
+        compared=len(texts),
+        skipped=skipped,
+        common_fingerprints_excluded=result.common_fingerprints_excluded,
+        pairs=[
+            ReportSimilarityPairOut(
+                submission_a_id=int(p.submission_a), submission_b_id=int(p.submission_b),
+                student_a=names[p.submission_a], student_b=names[p.submission_b],
+                words_a=p.words_a, words_b=p.words_b, shared_fingerprints=p.shared_fingerprints,
+                jaccard=p.jaccard, containment=p.containment, coverage_a=p.coverage_a, coverage_b=p.coverage_b,
+                semantic_similarity=p.semantic_similarity, flag_level=p.flag_level, flag_reason=p.flag_reason,
+                passages=[ReportPassageOut(words=x.words, text_a=x.text_a, text_b=x.text_b) for x in p.passages],
+            )
+            for p in result.pairs
+        ],
+        semantic=ReportSemanticSummaryOut(
+            status=result.semantic_status, model="sentence-transformers/all-MiniLM-L6-v2",
+            warning=result.semantic_warning, pairs_compared=result.semantic_pairs_compared,
+            cohort_median=result.cohort_median, review_threshold=result.review_threshold,
+        ),
     )
 
 
@@ -1679,13 +2042,17 @@ def auto_evaluate(
         raise HTTPException(403, "You are not assigned to this subject")
     if rubric.subject_id != submission.subject_id:
         raise HTTPException(400, "That rubric belongs to a different subject than this submission")
-    return _run_auto_evaluation(db, submission, rubric)
+    return _run_auto_evaluation(db, submission, rubric, use_rubric_model=payload.use_rubric_model)
 
 
-def _run_auto_evaluation(db: Session, submission: Submission, rubric: Rubric) -> AutoEvaluation:
+def _run_auto_evaluation(
+    db: Session, submission: Submission, rubric: Rubric, use_rubric_model: bool = True
+) -> AutoEvaluation:
     """Run the full pipeline for one submission against one rubric, store
     and return the AutoEvaluation. Shared by the single and batch endpoints;
-    callers have already checked access and that the rubric matches."""
+    callers have already checked access and that the rubric matches.
+    ``use_rubric_model=False`` grades with the heuristic grader instead of
+    the rubric model (the instructor's on/off switch)."""
     submission_id = submission.id
     code_dir = BASE_DIR / submission.code_path if submission.code_path else None
     report_path = BASE_DIR / submission.report_path if submission.report_path else None
@@ -1740,6 +2107,7 @@ def _run_auto_evaluation(db: Session, submission: Submission, rubric: Rubric) ->
         semantic_review_flagged=semantic_review_flagged,
         code_ai_flagged=code_ai_flagged,
         report_extraction=report_extraction,
+        grader=None if use_rubric_model else HeuristicRubricGrader(),
     )
 
     auto_eval = AutoEvaluation(
@@ -1842,7 +2210,7 @@ def auto_evaluate_assignment(
                 submission_id=submission.id, student_name=name, status="skipped"))
             continue
         try:
-            ev = _run_auto_evaluation(db, submission, rubric)
+            ev = _run_auto_evaluation(db, submission, rubric, use_rubric_model=payload.use_rubric_model)
         except Exception as exc:  # one bad submission must not stop the batch
             db.rollback()
             results.append(BatchEvaluationItemOut(
