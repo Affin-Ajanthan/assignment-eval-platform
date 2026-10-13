@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { apiFetch, Assignment, BatchEvaluationResult, Rubric } from "@/lib/api";
 import { formatMark } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
+import DownloadExcelButton from "@/components/instructor/DownloadExcelButton";
+import RubricModelToggle, { useRubricModelSetting } from "@/components/instructor/RubricModelToggle";
 
 const STATUS_STYLE: Record<string, string> = {
   evaluated: "bg-green-50 text-green-800",
@@ -31,6 +33,7 @@ export default function BatchEvaluateSection({
   const [assignment, setAssignment] = useState("");
   const [rubricId, setRubricId] = useState<number | null>(null);
   const [skipDone, setSkipDone] = useState(false);
+  const [useRubricModel, setUseRubricModel] = useRubricModelSetting();
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<BatchEvaluationResult | null>(null);
   const [msg, setMsg] = useState<MessageState>(null);
@@ -59,7 +62,7 @@ export default function BatchEvaluateSection({
     try {
       const res = await apiFetch<BatchEvaluationResult>(
         `/subjects/${subjectId}/assignments/${encodeURIComponent(assignment)}/auto-evaluate`,
-        { method: "POST", json: { rubric_id: rubricId, skip_already_evaluated: skipDone } }
+        { method: "POST", json: { rubric_id: rubricId, skip_already_evaluated: skipDone, use_rubric_model: useRubricModel } }
       );
       setResult(res);
       setMsg({
@@ -124,6 +127,8 @@ export default function BatchEvaluateSection({
         </div>
       </div>
 
+      <RubricModelToggle on={useRubricModel} onChange={setUseRubricModel} disabled={running} />
+
       <label className="mt-3 flex items-center gap-2 text-sm">
         <input type="checkbox" checked={skipDone} disabled={running} onChange={(e) => setSkipDone(e.target.checked)} />
         Skip submissions already evaluated with this rubric (use to resume)
@@ -145,6 +150,16 @@ export default function BatchEvaluateSection({
         </div>
       )}
       <Message state={msg} />
+      {result && (
+        <div className="mt-3">
+          <DownloadExcelButton
+            path="/exports/batch-evaluation.xlsx"
+            result={result}
+            filePrefix="evaluation"
+            assignmentName={result.assignment_name}
+          />
+        </div>
+      )}
 
       {result && (
         <div className="mt-4 overflow-x-auto">

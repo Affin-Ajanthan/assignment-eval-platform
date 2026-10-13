@@ -19,6 +19,8 @@ export interface UserInfo {
   full_name: string;
   role: Role;
   subjects: Subject[];
+  /** Admin student list only: number of submissions. */
+  submission_count?: number;
 }
 
 export interface LoginResult {
@@ -154,6 +156,50 @@ export interface SemanticSummary {
   pairs_compared: number;
   cohort_median: number | null;
   review_threshold: number | null;
+}
+
+export interface ReportPassage {
+  words: number;
+  text_a: string;
+  text_b: string;
+}
+
+export interface ReportSimilarityPair {
+  submission_a_id: number;
+  submission_b_id: number;
+  student_a: string;
+  student_b: string;
+  words_a: number;
+  words_b: number;
+  shared_fingerprints: number;
+  jaccard: number;
+  containment: number;
+  /** Share of each report's words inside an identical passage. */
+  coverage_a: number;
+  coverage_b: number;
+  /** all-MiniLM-L6-v2 best-match similarity (0-1); null when it didn't run. */
+  semantic_similarity: number | null;
+  flag_level: "high" | "review" | null;
+  flag_reason: string | null;
+  passages: ReportPassage[];
+}
+
+export interface ReportSimilarityResult {
+  subject_id: number;
+  assignment_name: string;
+  compared: number;
+  skipped: { submission_id: number; student: string; reason: string }[];
+  common_fingerprints_excluded: number;
+  pairs: ReportSimilarityPair[];
+  semantic: {
+    status: "ok" | "unavailable" | "disabled";
+    model: string;
+    warning: string | null;
+    pairs_compared: number;
+    cohort_median: number | null;
+    review_threshold: number | null;
+  };
+  exploratory: boolean;
 }
 
 export interface BatchEvaluationItem {
@@ -348,12 +394,19 @@ export interface SubmissionFile {
   size: number;
 }
 
-/** Download a protected file as a Blob (a plain link can't send the bearer token). */
-export async function apiFetchBlob(path: string): Promise<Blob> {
+/** Download a protected file as a Blob (a plain link can't send the bearer token).
+ * With `json`, the body is POSTed (used for the Excel exports). */
+export async function apiFetchBlob(path: string, json?: unknown): Promise<Blob> {
   const headers = new Headers();
   const token = getToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  const res = await fetch(`${API_BASE}${path}`, { headers });
+  const init: RequestInit = { headers };
+  if (json !== undefined) {
+    headers.set("Content-Type", "application/json");
+    init.method = "POST";
+    init.body = JSON.stringify(json);
+  }
+  const res = await fetch(`${API_BASE}${path}`, init);
   if (res.status === 401) {
     clearSession();
     // Same as apiFetch: a plain utility can't use useRouter().

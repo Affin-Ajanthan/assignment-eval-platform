@@ -192,6 +192,36 @@ restructured copies scored 0.82-0.91; five independently written
 solutions to the same task scored up to 0.78), so check them against
 a real cohort before relying on them.
 
+### Report similarity (PDF)
+
+`POST /subjects/{id}/assignments/{name}/check-report-similarity`, the
+"Check report similarity" button in the instructor's Similarity check
+card, compares the PDF reports of one assignment pairwise
+(`app/similarity/report_similarity.py`):
+
+1. **Extract** each page's text with PyMuPDF.
+2. **Clean**: drop page-number lines and running headers/footers (lines
+   near the top or bottom of a page, digits ignored, repeated on at least
+   half the pages), rejoin hyphenated words, collapse whitespace.
+3. **Winnowing over words** (6-word k-grams, window 5): Jaccard and
+   containment, plus the actual **matching passages**: identical runs of
+   10+ words, shown side by side. Fingerprints found in most reports
+   (the assignment brief, a template) are ignored.
+4. **Semantic**: all-MiniLM-L6-v2 embeddings of ~120-word chunks; each
+   chunk is matched to its most similar chunk in the other report, in
+   both directions, so one copied or paraphrased section scores high.
+5. **Combined flag**: "high" for identical passages (Jaccard >= 0.30 or
+   containment >= 0.40); "review" for very similar meaning without them
+   (>= 0.85, raised by the same cohort-outlier rule as code once there
+   are 10+ pairs).
+
+Results are a review signal only: nothing is stored, so report
+similarity never changes a mark. DOCX reports, scanned PDFs (no text
+layer) and reports under 50 words are listed as not compared. The
+semantic part shares the MiniLM model with cross-modal consistency, so
+`CROSS_MODAL_SEMANTIC=0` turns it off too. The thresholds are
+**uncalibrated**; check them against real reports before relying on them.
+
 ### Cross-modal semantic consistency (MiniLM)
 
 Cross-modal semantic consistency uses a local sentence-embedding model

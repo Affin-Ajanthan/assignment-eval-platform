@@ -5,41 +5,7 @@ import { apiFetch, Subject, UserInfo } from "@/lib/api";
 import { useRequireRole } from "@/lib/useRequireRole";
 import AccountBar from "@/components/AccountBar";
 import Message, { MessageState } from "@/components/Message";
-
-function SubjectCheckboxes({
-  id,
-  subjects,
-  checked,
-  onToggle,
-}: {
-  id: string;
-  subjects: Subject[];
-  checked: Set<number>;
-  onToggle: (id: number) => void;
-}) {
-  if (subjects.length === 0) {
-    return <p className="text-sm text-gray-500">Add a subject above first.</p>;
-  }
-  return (
-    <div id={id} className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-gray-300 px-3 py-2">
-      {subjects.map((s) => (
-        <label key={s.id} className="flex items-center gap-2 text-sm font-normal">
-          <input
-            type="checkbox"
-            checked={checked.has(s.id)}
-            onChange={() => onToggle(s.id)}
-            className="h-4 w-4"
-          />
-          {s.name} ({s.code})
-        </label>
-      ))}
-    </div>
-  );
-}
-
-function subjectNames(subjects: Subject[]): string {
-  return subjects.length ? subjects.map((s) => s.name).join(", ") : "(none)";
-}
+import ManageUsersTable, { SubjectCheckboxes } from "@/components/admin/ManageUsersTable";
 
 export default function AdminPage() {
   const { user, ready } = useRequireRole("admin");
@@ -270,24 +236,7 @@ export default function AdminPage() {
         </form>
 
         <h3 className="mt-5 text-sm font-bold uppercase tracking-wide text-gray-500">Existing instructors</h3>
-        <table className="mt-2 w-full text-sm">
-          <thead>
-            <tr className="bg-gray-50 text-left">
-              <th className="border border-gray-200 px-3 py-1.5">Name</th>
-              <th className="border border-gray-200 px-3 py-1.5">Email</th>
-              <th className="border border-gray-200 px-3 py-1.5">Subjects</th>
-            </tr>
-          </thead>
-          <tbody>
-            {instructors.map((i) => (
-              <tr key={i.id}>
-                <td className="border border-gray-200 px-3 py-1.5">{i.full_name}</td>
-                <td className="border border-gray-200 px-3 py-1.5">{i.email}</td>
-                <td className="border border-gray-200 px-3 py-1.5">{subjectNames(i.subjects)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <ManageUsersTable role="instructor" users={instructors} subjects={subjects} onChanged={loadInstructors} />
       </section>
 
       {/* Students */}
@@ -344,24 +293,7 @@ export default function AdminPage() {
         </form>
 
         <h3 className="mt-5 text-sm font-bold uppercase tracking-wide text-gray-500">Existing students</h3>
-        <table className="mt-2 w-full text-sm">
-          <thead>
-            <tr className="bg-gray-50 text-left">
-              <th className="border border-gray-200 px-3 py-1.5">Name</th>
-              <th className="border border-gray-200 px-3 py-1.5">Email</th>
-              <th className="border border-gray-200 px-3 py-1.5">Subjects</th>
-            </tr>
-          </thead>
-          <tbody>
-            {students.map((s) => (
-              <tr key={s.id}>
-                <td className="border border-gray-200 px-3 py-1.5">{s.full_name}</td>
-                <td className="border border-gray-200 px-3 py-1.5">{s.email}</td>
-                <td className="border border-gray-200 px-3 py-1.5">{subjectNames(s.subjects)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <ManageUsersTable role="student" users={students} subjects={subjects} onChanged={loadStudents} />
       </section>
     </div>
   );
