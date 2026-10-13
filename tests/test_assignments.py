@@ -18,7 +18,9 @@ from tests.auth_helpers import (
     admin_token,
     auth_headers,
     create_assignment,
+    create_instructor,
     create_student,
+    create_subject,
     new_student,
     setup_subject_with_users,
 )
@@ -470,3 +472,35 @@ def test_subject_scoping_for_assignments():
     # A student enrolled later in the subject sees its open assignments.
     _, late_tok = create_student(client, admin_token(client), [other_subject["id"]])
     assert [x["id"] for x in client.get("/assignments", headers=H(late_tok)).json()] == [theirs["id"]]
+
+
+def test_student_sees_only_enrolled_subjects_with_open_and_past_assignments():
+    """A student enrolled in two subjects sees open and past assignments from
+    both, never upcoming ones, never a subject they are not enrolled in."""
+    admin = admin_token(client)
+    maths = create_subject(client, admin)
+    physics = create_subject(client, admin)
+    chemistry = create_subject(client, admin)  # the student is NOT enrolled here
+    _, itok = create_instructor(client, admin, [maths["id"], physics["id"], chemistry["id"]])
+    _, stok = create_student(client, admin, [maths["id"], physics["id"]])
+
+    create_assignment(client, itok, maths["id"], "Maths open")
+    create_assignment(client, itok, maths["id"], "Maths past",
+                      opens_in=timedelta(days=-5), closes_in=timedelta(days=-1))
+    create_assignment(client, itok, maths["id"], "Maths upcoming",
+                      opens_in=timedelta(days=1), closes_in=timedelta(days=2))
+    create_assignment(client, itok, physics["id"], "Physics open")
+    create_assignment(client, itok, chemistry["id"], "Chemistry open")
+
+    listed = client.get("/assignments", headers=H(stok)).json()
+    assert {a["name"]: a["status"] for a in listed} == {
+        "Maths open": "open", "Maths past": "closed", "Physics open": "open",
+    }
+    assert {a["subject_id"] for a in listed} == {maths["id"], physics["id"]}
+
+    # Filtering by an enrolled subject returns only its visible assignments.
+    maths_only = client.get(f"/assignments?subject_id={maths['id']}", headers=H(stok)).json()
+    assert {a["name"] for a in maths_only} == {"Maths open", "Maths past"}
+
+    # A subject the student is not enrolled in is refused outright.
+    assert client.get(f"/assignments?subject_id={chemistry['id']}", headers=H(stok)).status_code == 403
