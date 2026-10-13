@@ -16,6 +16,9 @@ import SubmissionFiles from "@/components/SubmissionFiles";
 import AISignalsPanel from "@/components/AISignalsPanel";
 import AssignmentsSection from "@/components/instructor/AssignmentsSection";
 import BatchEvaluateSection from "@/components/instructor/BatchEvaluateSection";
+import DownloadExcelButton from "@/components/instructor/DownloadExcelButton";
+import ReportSimilarityPanel from "@/components/instructor/ReportSimilarityPanel";
+import RubricModelToggle, { useRubricModelSetting } from "@/components/instructor/RubricModelToggle";
 import RubricsSection from "@/components/instructor/RubricsSection";
 import { formatDateTime, formatMark } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
@@ -40,6 +43,7 @@ export default function InstructorPage() {
   const [autoevalResult, setAutoevalResult] = useState<AutoEvaluation | null>(null);
   const [autoevalMsg, setAutoevalMsg] = useState<MessageState>(null);
   const [autoevalRunning, setAutoevalRunning] = useState(false);
+  const [useRubricModel, setUseRubricModel] = useRubricModelSetting();
 
   // Grading panel
   const [gradingSubmissionId, setGradingSubmissionId] = useState<number | null>(null);
@@ -145,7 +149,7 @@ export default function InstructorPage() {
     try {
       const result = await apiFetch<AutoEvaluation>(`/submissions/${autoevalSubmissionId}/auto-evaluate`, {
         method: "POST",
-        json: { rubric_id: autoevalRubricId },
+        json: { rubric_id: autoevalRubricId, use_rubric_model: useRubricModel },
       });
       setAutoevalResult(result);
       setAutoevalMsg({ text: "Auto-evaluation complete.", kind: "success" });
@@ -251,7 +255,8 @@ export default function InstructorPage() {
           <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-bold">Similarity check</h2>
             <p className="mt-1 text-sm text-gray-600">
-              Compares every code submission for one assignment pairwise and flags likely copies.
+              Compares every code submission for one assignment pairwise and flags likely copies. The PDF reports
+              can be compared below.
             </p>
             <label className="mt-3 block text-sm font-semibold" htmlFor="similarity-assignment">
               Assignment
@@ -276,6 +281,16 @@ export default function InstructorPage() {
               Check similarity
             </button>
             <Message state={similarityMsg} />
+            {similarityResult && (
+              <div className="mt-3">
+                <DownloadExcelButton
+                  path="/exports/code-similarity.xlsx"
+                  result={similarityResult}
+                  filePrefix="code-similarity"
+                  assignmentName={similarityResult.assignment_name}
+                />
+              </div>
+            )}
 
             {similarityResult && similarityResult.semantic.status !== "ok" && similarityResult.semantic.warning && (
               <div className="mt-3 rounded-md bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
@@ -371,6 +386,8 @@ export default function InstructorPage() {
                 )}
               </>
             )}
+
+            <ReportSimilarityPanel subjectId={subjectId} assignmentName={similarityAssignment} />
           </section>
 
           {/* Evaluate a whole assignment */}
@@ -482,7 +499,8 @@ export default function InstructorPage() {
                   </option>
                 ))}
               </select>
-              <div className="space-x-2">
+              <RubricModelToggle on={useRubricModel} onChange={setUseRubricModel} disabled={autoevalRunning} />
+              <div className="mt-3 space-x-2">
                 <button
                   type="button"
                   disabled={autoevalRunning}

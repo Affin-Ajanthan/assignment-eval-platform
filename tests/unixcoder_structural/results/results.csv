@@ -1,0 +1,540 @@
+id,category,transformation,preserves_behaviour,verification,normalized_identical,production,raw,status,problems,original,modified
+REF-A1,superficial,identical copy,True,identical results on 203 inputs (3 edge cases + 200 random),True,0.9999999403953552,1.0,PASS,,"def average_valid(scores):
+    total = 0
+    count = 0
+    for s in scores:
+        if 0 <= s <= 100:
+            total += s
+            count += 1
+    if count == 0:
+        return 0.0
+    return total / count
+","def average_valid(scores):
+    total = 0
+    count = 0
+    for s in scores:
+        if 0 <= s <= 100:
+            total += s
+            count += 1
+    if count == 0:
+        return 0.0
+    return total / count
+"
+REF-A2,superficial,comments added + formatting changed,True,identical results on 203 inputs (3 edge cases + 200 random),False,0.9762901067733765,0.8688678741455078,PASS,,"def average_valid(scores):
+    total = 0
+    count = 0
+    for s in scores:
+        if 0 <= s <= 100:
+            total += s
+            count += 1
+    if count == 0:
+        return 0.0
+    return total / count
+","# Average of the valid marks (0-100).
+def average_valid(scores):
+
+    total=0
+    count=0
+    for s in scores:   # check every mark
+        if 0<=s<=100:
+            total+=s
+            count+=1
+
+    if count==0:
+        return 0.0
+    return total/count
+"
+REF-A3,superficial,all local names renamed,True,identical results on 203 inputs (3 edge cases + 200 random),True,0.9999999403953552,0.7679018974304199,PASS,,"def average_valid(scores):
+    total = 0
+    count = 0
+    for s in scores:
+        if 0 <= s <= 100:
+            total += s
+            count += 1
+    if count == 0:
+        return 0.0
+    return total / count
+","def average_valid(marks):
+    running = 0
+    seen = 0
+    for m in marks:
+        if 0 <= m <= 100:
+            running += m
+            seen += 1
+    if seen == 0:
+        return 0.0
+    return running / seen
+"
+TC01,structural,for loop -> while loop,True,identical results on 205 inputs (5 edge cases + 200 random),False,0.9583722352981567,0.9838017821311951,PASS,,"def sum_even_squares(n):
+    total = 0
+    for i in range(n + 1):
+        if i % 2 == 0:
+            total += i * i
+    return total
+","def sum_even_squares(n):
+    total = 0
+    i = 0
+    while i <= n:
+        if i % 2 == 0:
+            total += i * i
+        i += 1
+    return total
+"
+TC02,structural,while loop -> for loop,True,identical results on 204 inputs (4 edge cases + 200 random),False,0.9781046509742737,0.9867411851882935,PASS,,"def count_vowels(text):
+    count = 0
+    i = 0
+    while i < len(text):
+        if text[i].lower() in ""aeiou"":
+            count += 1
+        i += 1
+    return count
+","def count_vowels(text):
+    count = 0
+    for i in range(len(text)):
+        if text[i].lower() in ""aeiou"":
+            count += 1
+    return count
+"
+TC03,structural,if/else statement -> conditional expression,True,identical results on 203 inputs (3 edge cases + 200 random),False,0.9906299114227295,0.9873741269111633,PASS,,"def classify(scores):
+    labels = []
+    for s in scores:
+        if s >= 50:
+            label = ""pass""
+        else:
+            label = ""fail""
+        labels.append(label)
+    return labels
+","def classify(scores):
+    labels = []
+    for s in scores:
+        label = ""pass"" if s >= 50 else ""fail""
+        labels.append(label)
+    return labels
+"
+TC04,structural,conditional expression -> if/else statement,True,identical results on 203 inputs (3 edge cases + 200 random),False,0.9871212244033813,0.9835699796676636,PASS,,"def clamp_all(values, low, high):
+    out = []
+    for v in values:
+        v = low if v < low else v
+        v = high if v > high else v
+        out.append(v)
+    return out
+","def clamp_all(values, low, high):
+    out = []
+    for v in values:
+        if v < low:
+            v = low
+        else:
+            v = v
+        if v > high:
+            v = high
+        else:
+            v = v
+        out.append(v)
+    return out
+"
+TC05,structural,list comprehension -> explicit loop,True,identical results on 203 inputs (3 edge cases + 200 random),False,0.8312340974807739,0.9588381052017212,PASS,,"def squares_of_odds(values):
+    return [v * v for v in values if v % 2 == 1]
+","def squares_of_odds(values):
+    result = []
+    for v in values:
+        if v % 2 == 1:
+            result.append(v * v)
+    return result
+"
+TC06,structural,explicit loop -> list comprehension,True,identical results on 203 inputs (3 edge cases + 200 random),False,0.8533235788345337,0.9473887085914612,PASS,,"def word_lengths(words):
+    lengths = []
+    for w in words:
+        if w:
+            lengths.append(len(w))
+    return lengths
+","def word_lengths(words):
+    return [len(w) for w in words if w]
+"
+TC07,structural,extract part of a function into a helper,True,identical results on 203 inputs (3 edge cases + 200 random),False,0.820345938205719,0.9390261173248291,PASS,,"def average_valid(scores):
+    total = 0
+    count = 0
+    for s in scores:
+        if 0 <= s <= 100:
+            total += s
+            count += 1
+    if count == 0:
+        return 0.0
+    return total / count
+","def is_valid(score):
+    return 0 <= score <= 100
+
+
+def average_valid(scores):
+    total = 0
+    count = 0
+    for s in scores:
+        if is_valid(s):
+            total += s
+            count += 1
+    if count == 0:
+        return 0.0
+    return total / count
+"
+TC08,structural,inline a helper function,True,identical results on 203 inputs (3 edge cases + 200 random),False,0.8921626806259155,0.9409931302070618,PASS,,"def tax(amount):
+    return amount * 15 // 100
+
+
+def invoice_total(prices):
+    subtotal = 0
+    for p in prices:
+        subtotal += p
+    return subtotal + tax(subtotal)
+","def invoice_total(prices):
+    subtotal = 0
+    for p in prices:
+        subtotal += p
+    return subtotal + subtotal * 15 // 100
+"
+TC09,structural,reorder independent statements,True,identical results on 203 inputs (3 edge cases + 200 random),False,0.9937923550605774,0.9925860166549683,PASS,,"def stats(values):
+    count = len(values)
+    smallest = min(values)
+    largest = max(values)
+    total = sum(values)
+    mean = total / count
+    return {""count"": count, ""min"": smallest, ""max"": largest, ""mean"": mean}
+","def stats(values):
+    total = sum(values)
+    largest = max(values)
+    count = len(values)
+    smallest = min(values)
+    mean = total / count
+    return {""count"": count, ""min"": smallest, ""max"": largest, ""mean"": mean}
+"
+TC10,structural,reorder independent function definitions,True,identical results on 202 inputs (2 edge cases + 200 random),False,0.9664626717567444,0.9818214178085327,PASS,,"def mean(values):
+    return sum(values) / len(values)
+
+
+def spread(values):
+    return max(values) - min(values)
+
+
+def report(values):
+    return round(mean(values), 2), spread(values)
+","def report(values):
+    return round(mean(values), 2), spread(values)
+
+
+def spread(values):
+    return max(values) - min(values)
+
+
+def mean(values):
+    return sum(values) / len(values)
+"
+TC11,structural,split one function into multiple functions,True,identical results on 203 inputs (3 edge cases + 200 random),False,0.8769992589950562,0.8619206547737122,PASS,,"def summarize_marks(lines):
+    marks = []
+    for line in lines:
+        name, mark = line.split("","")
+        mark = int(mark)
+        if 0 <= mark <= 100:
+            marks.append(mark)
+    if not marks:
+        return None
+    highest = max(marks)
+    average = sum(marks) / len(marks)
+    return highest, round(average, 1)
+","def parse_marks(lines):
+    marks = []
+    for line in lines:
+        name, mark = line.split("","")
+        marks.append(int(mark))
+    return marks
+
+
+def keep_valid(marks):
+    return [m for m in marks if 0 <= m <= 100]
+
+
+def summarize_marks(lines):
+    marks = keep_valid(parse_marks(lines))
+    if not marks:
+        return None
+    highest = max(marks)
+    average = sum(marks) / len(marks)
+    return highest, round(average, 1)
+"
+TC12,structural,merge multiple functions into one,True,identical results on 203 inputs (3 edge cases + 200 random),False,0.8806639909744263,0.8517444729804993,PASS,,"def strip_spaces(name):
+    return "" "".join(name.split())
+
+
+def capitalize_words(name):
+    return "" "".join(part.capitalize() for part in name.split("" ""))
+
+
+def normalize_name(name):
+    cleaned = strip_spaces(name)
+    return capitalize_words(cleaned)
+","def normalize_name(name):
+    cleaned = "" "".join(name.split())
+    return "" "".join(part.capitalize() for part in cleaned.split("" ""))
+"
+TC15,structural,equivalent arithmetic expressions,True,identical results on 203 inputs (3 edge cases + 200 random),False,0.9694851040840149,0.9887264966964722,PASS,,"def bill(quantity, unit_price, discount_percent):
+    gross = quantity * unit_price
+    discount = gross * discount_percent // 100
+    return gross - discount
+","def bill(quantity, unit_price, discount_percent):
+    gross = unit_price * quantity
+    discount = (discount_percent * gross) // 100
+    return -discount + gross
+"
+TC16,structural,add unused variables,True,identical results on 203 inputs (3 edge cases + 200 random),False,0.6981121897697449,0.776947021484375,PASS,,"def find_max(values):
+    best = values[0]
+    for v in values[1:]:
+        if v > best:
+            best = v
+    return best
+","def find_max(values):
+    best = values[0]
+    checked = 0
+    label = ""maximum""
+    for v in values[1:]:
+        previous = best
+        if v > best:
+            best = v
+    return best
+"
+TC17,structural,add dead code,True,identical results on 203 inputs (3 edge cases + 200 random),False,0.7236107587814331,0.7597095370292664,PASS,,"def find_max(values):
+    best = values[0]
+    for v in values[1:]:
+        if v > best:
+            best = v
+    return best
+","def find_max(values):
+    best = values[0]
+    if False:
+        best = None
+        print(""never runs"")
+    for v in values[1:]:
+        if v > best:
+            best = v
+        elif v > best + 1000000:
+            best = -1
+    return best
+    best = 0
+    return best
+"
+TC18,structural,change control-flow structure (nested if -> guard clauses),True,identical results on 205 inputs (5 edge cases + 200 random),False,0.9378492832183838,0.8643174171447754,PASS,,"def shipping_cost(weight, express):
+    if weight <= 0:
+        cost = 0
+    else:
+        if express:
+            if weight > 10:
+                cost = 30
+            else:
+                cost = 20
+        else:
+            if weight > 10:
+                cost = 15
+            else:
+                cost = 8
+    return cost
+","def shipping_cost(weight, express):
+    if weight <= 0:
+        return 0
+    heavy = weight > 10
+    if express and heavy:
+        return 30
+    if express:
+        return 20
+    if heavy:
+        return 15
+    return 8
+"
+TC13,equivalent,recursion -> iteration,True,identical results on 205 inputs (5 edge cases + 200 random),False,0.7923810482025146,0.7950025796890259,PASS,,"def fib(n):
+    if n < 2:
+        return n
+    return fib(n - 1) + fib(n - 2)
+","def fib(n):
+    if n < 2:
+        return n
+    previous, current = 0, 1
+    for _ in range(n - 1):
+        previous, current = current, previous + current
+    return current
+"
+TC14,equivalent,iteration -> recursion,True,identical results on 204 inputs (4 edge cases + 200 random),False,0.6415277719497681,0.8721317052841187,PASS,,"def power(base, exp):
+    result = 1
+    for _ in range(exp):
+        result *= base
+    return result
+","def power(base, exp):
+    if exp == 0:
+        return 1
+    return base * power(base, exp - 1)
+"
+TC19,equivalent,"different implementation details, same output (manual dict -> Counter)",True,identical results on 203 inputs (3 edge cases + 200 random),False,0.7756475806236267,0.7616491317749023,PASS,,"def word_counts(text):
+    counts = {}
+    for word in text.lower().split():
+        if word in counts:
+            counts[word] += 1
+        else:
+            counts[word] = 1
+    return sorted(counts.items())
+","from collections import Counter
+
+
+def word_counts(text):
+    return sorted(Counter(text.lower().split()).items())
+"
+TC20,equivalent,fundamentally different algorithm (bubble sort -> merge sort),True,identical results on 204 inputs (4 edge cases + 200 random),False,0.7887900471687317,0.6706899404525757,PASS,,"def sort_numbers(values):
+    items = list(values)
+    n = len(items)
+    for i in range(n):
+        for j in range(n - i - 1):
+            if items[j] > items[j + 1]:
+                items[j], items[j + 1] = items[j + 1], items[j]
+    return items
+","def sort_numbers(values):
+    if len(values) <= 1:
+        return list(values)
+    middle = len(values) // 2
+    left = sort_numbers(values[:middle])
+    right = sort_numbers(values[middle:])
+    merged = []
+    i = j = 0
+    while i < len(left) and j < len(right):
+        if left[i] <= right[j]:
+            merged.append(left[i])
+            i += 1
+        else:
+            merged.append(right[j])
+            j += 1
+    return merged + left[i:] + right[j:]
+"
+UNREL-1,unrelated,TC13 vs TC06 (different tasks),,different tasks; behaviour not comparable,False,0.5438873767852783,0.1397298276424408,PASS,,"def fib(n):
+    if n < 2:
+        return n
+    return fib(n - 1) + fib(n - 2)
+","def word_lengths(words):
+    lengths = []
+    for w in words:
+        if w:
+            lengths.append(len(w))
+    return lengths
+"
+UNREL-2,unrelated,TC20 vs TC19 (different tasks),,different tasks; behaviour not comparable,False,0.4790152907371521,0.25675469636917114,PASS,,"def sort_numbers(values):
+    items = list(values)
+    n = len(items)
+    for i in range(n):
+        for j in range(n - i - 1):
+            if items[j] > items[j + 1]:
+                items[j], items[j + 1] = items[j + 1], items[j]
+    return items
+","def word_counts(text):
+    counts = {}
+    for word in text.lower().split():
+        if word in counts:
+            counts[word] += 1
+        else:
+            counts[word] = 1
+    return sorted(counts.items())
+"
+UNREL-3,unrelated,TC18 vs TC14 (different tasks),,different tasks; behaviour not comparable,False,0.5224483013153076,0.18634355068206787,PASS,,"def shipping_cost(weight, express):
+    if weight <= 0:
+        cost = 0
+    else:
+        if express:
+            if weight > 10:
+                cost = 30
+            else:
+                cost = 20
+        else:
+            if weight > 10:
+                cost = 15
+            else:
+                cost = 8
+    return cost
+","def power(base, exp):
+    result = 1
+    for _ in range(exp):
+        result *= base
+    return result
+"
+UNREL-4,unrelated,TC11 vs TC10 (different tasks),,different tasks; behaviour not comparable,False,0.6368990540504456,0.43476933240890503,PASS,,"def summarize_marks(lines):
+    marks = []
+    for line in lines:
+        name, mark = line.split("","")
+        mark = int(mark)
+        if 0 <= mark <= 100:
+            marks.append(mark)
+    if not marks:
+        return None
+    highest = max(marks)
+    average = sum(marks) / len(marks)
+    return highest, round(average, 1)
+","def mean(values):
+    return sum(values) / len(values)
+
+
+def spread(values):
+    return max(values) - min(values)
+
+
+def report(values):
+    return round(mean(values), 2), spread(values)
+"
+UNREL-5,unrelated,TC01 vs TC12 (different tasks),,different tasks; behaviour not comparable,False,0.5208414196968079,0.18102657794952393,PASS,,"def sum_even_squares(n):
+    total = 0
+    for i in range(n + 1):
+        if i % 2 == 0:
+            total += i * i
+    return total
+","def strip_spaces(name):
+    return "" "".join(name.split())
+
+
+def capitalize_words(name):
+    return "" "".join(part.capitalize() for part in name.split("" ""))
+
+
+def normalize_name(name):
+    cleaned = strip_spaces(name)
+    return capitalize_words(cleaned)
+"
+UNREL-6,unrelated,TC02 vs TC15 (different tasks),,different tasks; behaviour not comparable,False,0.3849871754646301,0.211588516831398,PASS,,"def count_vowels(text):
+    count = 0
+    i = 0
+    while i < len(text):
+        if text[i].lower() in ""aeiou"":
+            count += 1
+        i += 1
+    return count
+","def bill(quantity, unit_price, discount_percent):
+    gross = quantity * unit_price
+    discount = gross * discount_percent // 100
+    return gross - discount
+"
+UNREL-7,unrelated,TC09 vs TC03 (different tasks),,different tasks; behaviour not comparable,False,0.4733008146286011,0.3695574998855591,PASS,,"def stats(values):
+    count = len(values)
+    smallest = min(values)
+    largest = max(values)
+    total = sum(values)
+    mean = total / count
+    return {""count"": count, ""min"": smallest, ""max"": largest, ""mean"": mean}
+","def classify(scores):
+    labels = []
+    for s in scores:
+        if s >= 50:
+            label = ""pass""
+        else:
+            label = ""fail""
+        labels.append(label)
+    return labels
+"
+UNREL-8,unrelated,TC08 vs TC05 (different tasks),,different tasks; behaviour not comparable,False,0.5638900399208069,0.14899908006191254,PASS,,"def tax(amount):
+    return amount * 15 // 100
+
+
+def invoice_total(prices):
+    subtotal = 0
+    for p in prices:
+        subtotal += p
+    return subtotal + tax(subtotal)
+","def squares_of_odds(values):
+    return [v * v for v in values if v % 2 == 1]
+"

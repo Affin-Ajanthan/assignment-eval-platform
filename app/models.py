@@ -140,6 +140,11 @@ class Assignment(Base):
     available_from = Column(DateTime, nullable=False)
     deadline = Column(DateTime, nullable=False)
     rubric_id = Column(Integer, ForeignKey("rubrics.id"), nullable=True)
+    # Optional code handed out to every student. Its Winnowing fingerprints
+    # are excluded from the token similarity check (files with the same
+    # extension as starter_code_filename only). Instructor-only.
+    starter_code = Column(String, nullable=True)
+    starter_code_filename = Column(String, nullable=True)
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)

@@ -1,0 +1,398 @@
+id,language,relationship,why_similar,production,raw,jaccard,containment,token_flag,shared_lines,flag@0.5,flag@0.6,flag@0.7,flag@0.75,flag@0.8,flag@0.85,flag@0.9,flag@0.95,a,b
+TC06,Python,"same algorithm (binary search), written independently",the binary-search algorithm has one canonical shape (low/high/mid loop),0.9321384429931641,0.6542153358459473,0.2,0.34782608695652173,False,0.18181818181818182,True,True,True,True,True,True,True,False,"def binary_search(sorted_items, wanted):
+    low, high = 0, len(sorted_items) - 1
+    while low <= high:
+        mid = (low + high) // 2
+        if sorted_items[mid] < wanted:
+            low = mid + 1
+        elif sorted_items[mid] > wanted:
+            high = mid - 1
+        else:
+            return mid
+    return -1
+","def binary_search(data, key):
+    left, right = 0, len(data)
+    while left < right:
+        centre = left + (right - left) // 2
+        if data[centre] >= key:
+            right = centre
+        else:
+            left = centre + 1
+    if left < len(data) and data[left] == key:
+        return left
+    return -1
+"
+TC14,Python,"very short programs, same beginner exercise (even/odd), written separately",tiny programs for a common exercise have very few possible shapes,0.921846866607666,0.8950497508049011,0.0,0.0,False,0.0,True,True,True,True,True,True,True,False,"def is_even(number):
+    return number % 2 == 0
+","def is_even(n):
+    if n % 2:
+        return False
+    return True
+"
+TC17,Python,instructor starter code + independent student logic,most of each file is the identical instructor-provided starter code,0.899418830871582,0.9488511085510254,0.5957446808510638,0.8,True,0.9411764705882353,True,True,True,True,True,True,False,False,"# CS101 Assignment 3 - Library fines
+# DO NOT MODIFY read_input() or main(); implement calculate_fine().
+
+def read_input():
+    n = int(input())
+    records = []
+    for _ in range(n):
+        name, days = input().split()
+        records.append((name, int(days)))
+    return records
+
+
+def calculate_fine(days_late):
+    if days_late <= 0:
+        return 0.0
+    elif days_late <= 7:
+        return days_late * 0.25
+    elif days_late <= 30:
+        return 1.75 + (days_late - 7) * 0.5
+    return 20.0
+
+
+def main():
+    records = read_input()
+    for name, days in records:
+        print(name, calculate_fine(days))
+
+
+if __name__ == ""__main__"":
+    main()
+","# CS101 Assignment 3 - Library fines
+# DO NOT MODIFY read_input() or main(); implement calculate_fine().
+
+def read_input():
+    n = int(input())
+    records = []
+    for _ in range(n):
+        name, days = input().split()
+        records.append((name, int(days)))
+    return records
+
+
+def calculate_fine(days_late):
+    return min(max(days_late, 0) * 0.5, 20.0)
+
+
+def main():
+    records = read_input()
+    for name, days in records:
+        print(name, calculate_fine(days))
+
+
+if __name__ == ""__main__"":
+    main()
+"
+TC03,Python,"same task (average), different implementation",same task; both accumulate a sum over a list,0.8506114482879639,0.757294237613678,0.10526315789473684,0.2,False,0.2,True,True,True,True,True,True,False,False,"def average(numbers):
+    total = 0
+    count = 0
+    for n in numbers:
+        total += n
+        count += 1
+    return total / count if count else 0.0
+","def average(numbers):
+    mean = 0.0
+    for index, value in enumerate(numbers, start=1):
+        mean += (value - mean) / index
+    return mean
+"
+TC04,Python,"same task (sorting), different algorithms",same task and output; both are loop-heavy list manipulation,0.8306249380111694,0.5235532522201538,0.0,0.0,False,0.14285714285714285,True,True,True,True,True,False,False,False,"def sort_list(items):
+    result = list(items)
+    for i in range(1, len(result)):
+        key = result[i]
+        j = i - 1
+        while j >= 0 and result[j] > key:
+            result[j + 1] = result[j]
+            j -= 1
+        result[j + 1] = key
+    return result
+","def sort_list(items):
+    if len(items) <= 1:
+        return list(items)
+    pivot = items[0]
+    smaller = [x for x in items[1:] if x < pivot]
+    larger = [x for x in items[1:] if x >= pivot]
+    return sort_list(smaller) + [pivot] + sort_list(larger)
+"
+TC20,Python,"same nested-loop structure, different functionality",identical nested for-loop/if/counter skeleton,0.8207206726074219,0.5135315656661987,0.5833333333333334,0.7777777777777778,True,0.7142857142857143,True,True,True,True,True,False,False,False,"def count_pairs_with_sum(values, target):
+    count = 0
+    for i in range(len(values)):
+        for j in range(i + 1, len(values)):
+            if values[i] + values[j] == target:
+                count += 1
+    return count
+","def count_inversions(values):
+    count = 0
+    for i in range(len(values)):
+        for j in range(i + 1, len(values)):
+            if values[i] > values[j]:
+                count += 1
+    return count
+"
+TC13,Python,different tasks with the same exception-handling structure,same try/with open/except FileNotFoundError/except ValueError skeleton,0.7768547534942627,0.491161972284317,0.5161290322580645,0.6956521739130435,False,0.4,True,True,True,True,False,False,False,False,"def sum_numbers_in_file(path):
+    try:
+        with open(path) as handle:
+            return sum(float(line) for line in handle if line.strip())
+    except FileNotFoundError:
+        print(""file not found:"", path)
+        return None
+    except ValueError:
+        print(""file contains a non-number"")
+        return None
+","def count_matching_lines(path, keyword):
+    try:
+        with open(path) as handle:
+            return sum(1 for line in handle if keyword.lower() in line.lower())
+    except FileNotFoundError:
+        print(""file not found:"", path)
+        return 0
+    except UnicodeDecodeError:
+        print(""file is not text"")
+        return 0
+"
+TC11,Java,different tasks sharing class/main/Scanner boilerplate,"identical class declaration, main method and Scanner setup",0.7392373085021973,0.3553306460380554,0.28888888888888886,0.5416666666666666,False,0.7,True,True,True,False,False,False,False,False,"import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        double celsius = scanner.nextDouble();
+        double fahrenheit = celsius * 9 / 5 + 32;
+        System.out.println(""Fahrenheit: "" + fahrenheit);
+        scanner.close();
+    }
+}
+","import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        int size = scanner.nextInt();
+        for (int row = 1; row <= size; row++) {
+            StringBuilder line = new StringBuilder();
+            for (int col = 1; col <= size; col++) {
+                line.append(row * col).append(' ');
+            }
+            System.out.println(line.toString().trim());
+        }
+        scanner.close();
+    }
+}
+"
+TC02,Python,"same task (maximum), manual vs standard library",same function signature and purpose; very short,0.7088874578475952,0.7612054944038391,0.0,0.0,False,0.5,True,True,True,False,False,False,False,False,"def largest(values):
+    if not values:
+        return None
+    best = values[0]
+    for v in values:
+        if v > best:
+            best = v
+    return best
+","def largest(values):
+    return max(values, default=None)
+"
+TC07,Python,"same string problem (palindrome), different approach",same task; both normalise case and compare characters,0.7052246928215027,0.7254873514175415,0.029411764705882353,0.09090909090909091,False,0.25,True,True,True,False,False,False,False,False,"def is_palindrome(text):
+    i, j = 0, len(text) - 1
+    while i < j:
+        if not text[i].isalnum():
+            i += 1
+        elif not text[j].isalnum():
+            j -= 1
+        elif text[i].lower() != text[j].lower():
+            return False
+        else:
+            i += 1
+            j -= 1
+    return True
+","import re
+
+
+def is_palindrome(text):
+    cleaned = re.sub(r""[^a-z0-9]"", """", text.lower())
+    return cleaned == cleaned[::-1]
+"
+TC05,Python,"same task (search), linear vs binary",same task; both loop and compare against a target,0.6881798505783081,0.610293984413147,0.06060606060606061,0.2222222222222222,False,0.4,True,True,False,False,False,False,False,False,"def find_index(items, target):
+    for position, item in enumerate(items):
+        if item == target:
+            return position
+    return -1
+","def find_index(items, target):
+    low, high = 0, len(items) - 1
+    while low <= high:
+        mid = (low + high) // 2
+        if items[mid] == target:
+            return mid
+        if items[mid] < target:
+            low = mid + 1
+        else:
+            high = mid - 1
+    return -1
+"
+TC12,Python,different tasks using the same standard-library modules,both lean on collections.Counter/defaultdict and itertools,0.6696820259094238,0.5798048973083496,0.21621621621621623,0.38095238095238093,False,0.3333333333333333,True,True,False,False,False,False,False,False,"from collections import Counter, defaultdict
+from itertools import chain
+
+
+def group_anagrams(words):
+    groups = defaultdict(list)
+    for word in words:
+        groups["""".join(sorted(word))].append(word)
+    return [g for g in groups.values() if len(g) > 1]
+","from collections import Counter, defaultdict
+from itertools import chain
+
+
+def top_bigrams(sentences, n):
+    words = list(chain.from_iterable(s.lower().split() for s in sentences))
+    pairs = Counter(zip(words, words[1:]))
+    return pairs.most_common(n)
+"
+TC01,Python,"same task (maximum), different algorithm",same task; both iterate over the same list and compare elements,0.6609959602355957,0.6692259311676025,0.0,0.0,False,0.16666666666666666,True,True,False,False,False,False,False,False,"def largest(values):
+    best = values[0]
+    for v in values[1:]:
+        if v > best:
+            best = v
+    return best
+","def largest(values):
+    if len(values) == 1:
+        return values[0]
+    middle = len(values) // 2
+    left = largest(values[:middle])
+    right = largest(values[middle:])
+    return left if left >= right else right
+"
+TC08,Python,"same array problem (second largest), different approach",same task; both track the largest values of a list,0.580567479133606,0.7376446723937988,0.06451612903225806,0.16666666666666666,False,0.3333333333333333,True,False,False,False,False,False,False,False,"def second_largest(values):
+    first = second = None
+    for v in values:
+        if first is None or v > first:
+            first, second = v, first
+        elif v != first and (second is None or v > second):
+            second = v
+    return second
+","def second_largest(values):
+    distinct = sorted(set(values), reverse=True)
+    return distinct[1] if len(distinct) > 1 else None
+"
+TC19,Python,different logic under the same step-by-step comments,identical comment outline (removed by normalisation),0.5718899965286255,0.633459210395813,0.12121212121212122,0.2857142857142857,False,0.5,True,False,False,False,False,False,False,False,"def analyse(scores):
+    # Step 1: read and validate the data
+    valid = [s for s in scores if 0 <= s <= 100]
+    # Step 2: process the data
+    valid.sort()
+    middle = len(valid) // 2
+    # Step 3: produce the output
+    return valid[middle] if valid else None
+","def analyse(scores):
+    # Step 1: read and validate the data
+    cleaned = {}
+    for name, score in scores.items():
+        cleaned[name.strip().title()] = int(score)
+    # Step 2: process the data
+    ranking = sorted(cleaned, key=cleaned.get, reverse=True)
+    # Step 3: produce the output
+    return ranking[:3]
+"
+TC16,Python,different tasks with the same function name,both define and call `process(data)` (names removed by normalisation),0.45575442910194397,0.3136192560195923,0.0625,0.14285714285714285,False,0.25,False,False,False,False,False,False,False,False,"def process(data):
+    words = data.split()
+    return "" "".join(w.capitalize() for w in words)
+
+
+print(process(""hello student world""))
+","def process(data):
+    squares = [x * x for x in data if x > 0]
+    return sum(squares) / len(squares) if squares else 0
+
+
+print(process([3, -1, 4]))
+"
+TC15,Python,different tasks with the same variable names,shares names like values/total/count/result (removed by normalisation),0.44008177518844604,0.4274992346763611,0.12,0.21428571428571427,False,0.2,False,False,False,False,False,False,False,False,"def order_total(values):
+    total = 0
+    count = 0
+    for item in values:
+        total += item[""price""] * item[""qty""]
+        count += item[""qty""]
+    result = {""total"": total, ""items"": count}
+    return result
+","def temperature_range(values):
+    total = max(values) - min(values)
+    count = sum(1 for v in values if v < 0)
+    result = {""range"": total, ""freezing_days"": count}
+    return result
+"
+TC10,Python,different tasks sharing the same import block,identical import statements at the top of both files,0.4201636016368866,0.2994718551635742,0.14285714285714285,0.2631578947368421,False,0.5,False,False,False,False,False,False,False,False,"import json
+import math
+import os
+import sys
+
+
+def load_settings(path):
+    if not os.path.exists(path):
+        return {}
+    with open(path) as handle:
+        settings = json.load(handle)
+    settings.setdefault(""debug"", False)
+    return settings
+","import json
+import math
+import os
+import sys
+
+
+def circle_report(radius):
+    area = math.pi * radius ** 2
+    circumference = 2 * math.pi * radius
+    return json.dumps({""area"": round(area, 2), ""circumference"": round(circumference, 2)})
+"
+TC18,JavaScript,different apps sharing Express framework boilerplate,"identical Express setup: require, app, middleware, listen",0.33901745080947876,0.28127142786979675,0.3333333333333333,0.5,False,0.46153846153846156,False,False,False,False,False,False,False,False,"const express = require('express');
+const app = express();
+app.use(express.json());
+
+const todos = [];
+
+app.get('/todos', (req, res) => {
+  res.json(todos);
+});
+
+app.post('/todos', (req, res) => {
+  const todo = { id: todos.length + 1, title: req.body.title, done: false };
+  todos.push(todo);
+  res.status(201).json(todo);
+});
+
+app.listen(3000, () => console.log('Listening on port 3000'));
+","const express = require('express');
+const app = express();
+app.use(express.json());
+
+app.get('/convert/:celsius', (req, res) => {
+  const celsius = Number(req.params.celsius);
+  if (Number.isNaN(celsius)) {
+    return res.status(400).json({ error: 'not a number' });
+  }
+  res.json({ celsius, fahrenheit: celsius * 9 / 5 + 32 });
+});
+
+app.listen(3000, () => console.log('Listening on port 3000'));
+"
+TC09,Python,different tasks (FizzBuzz vs grade bands) using common loops/conditions,both are a for loop over a range/list with an if/elif/else chain,0.27346235513687134,0.23558297753334045,0.32,0.5333333333333333,False,0.08333333333333333,False,False,False,False,False,False,False,False,"def fizzbuzz(limit):
+    lines = []
+    for n in range(1, limit + 1):
+        if n % 15 == 0:
+            lines.append(""FizzBuzz"")
+        elif n % 3 == 0:
+            lines.append(""Fizz"")
+        elif n % 5 == 0:
+            lines.append(""Buzz"")
+        else:
+            lines.append(str(n))
+    return lines
+","def grade_bands(marks):
+    bands = []
+    for mark in marks:
+        if mark >= 70:
+            bands.append(""First"")
+        elif mark >= 60:
+            bands.append(""Upper second"")
+        elif mark >= 40:
+            bands.append(""Pass"")
+        else:
+            bands.append(""Fail"")
+    return bands
+"

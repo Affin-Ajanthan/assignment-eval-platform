@@ -1,0 +1,812 @@
+[
+  {
+    "id": "TC01",
+    "language": "Python",
+    "transformation": "identical copy (baseline)",
+    "original_filename": "python.py",
+    "modified_filename": "python.py",
+    "original": "# Average of the positive values in a list.\ndef average_positive(values):\n    total = 0\n    count = 0\n    for v in values:\n        # skip zero and negative values\n        if v > 0:\n            total = total + v\n            count = count + 1\n    if count == 0:\n        return 0\n    return total / count\n",
+    "modified": "# Average of the positive values in a list.\ndef average_positive(values):\n    total = 0\n    count = 0\n    for v in values:\n        # skip zero and negative values\n        if v > 0:\n            total = total + v\n            count = count + 1\n    if count == 0:\n        return 0\n    return total / count\n"
+  },
+  {
+    "id": "TC10",
+    "language": "Python",
+    "transformation": "change indentation",
+    "original_filename": "python.py",
+    "modified_filename": "python.py",
+    "original": "# Average of the positive values in a list.\ndef average_positive(values):\n    total = 0\n    count = 0\n    for v in values:\n        # skip zero and negative values\n        if v > 0:\n            total = total + v\n            count = count + 1\n    if count == 0:\n        return 0\n    return total / count\n",
+    "modified": "# Average of the positive values in a list.\ndef average_positive(values):\n  total = 0\n  count = 0\n  for v in values:\n    # skip zero and negative values\n    if v > 0:\n      total = total + v\n      count = count + 1\n  if count == 0:\n    return 0\n  return total / count\n"
+  },
+  {
+    "id": "TC11",
+    "language": "Python",
+    "transformation": "add blank lines",
+    "original_filename": "python.py",
+    "modified_filename": "python.py",
+    "original": "# Average of the positive values in a list.\ndef average_positive(values):\n    total = 0\n    count = 0\n    for v in values:\n        # skip zero and negative values\n        if v > 0:\n            total = total + v\n            count = count + 1\n    if count == 0:\n        return 0\n    return total / count\n",
+    "modified": "# Average of the positive values in a list.\n\ndef average_positive(values):\n\n    total = 0\n\n    count = 0\n\n    for v in values:\n\n        # skip zero and negative values\n\n        if v > 0:\n\n            total = total + v\n\n            count = count + 1\n\n    if count == 0:\n\n        return 0\n\n    return total / count\n\n"
+  },
+  {
+    "id": "TC12",
+    "language": "Python",
+    "transformation": "change spaces around operators",
+    "original_filename": "python.py",
+    "modified_filename": "python.py",
+    "original": "# Average of the positive values in a list.\ndef average_positive(values):\n    total = 0\n    count = 0\n    for v in values:\n        # skip zero and negative values\n        if v > 0:\n            total = total + v\n            count = count + 1\n    if count == 0:\n        return 0\n    return total / count\n",
+    "modified": "# Average of the positive values in a list.\ndef average_positive(values):\n    total=0\n    count=0\n    for v in values:\n        # skip zero and negative values\n        if v>0:\n            total=total+v\n            count=count+1\n    if count==0:\n        return 0\n    return total/count\n"
+  },
+  {
+    "id": "TC13",
+    "language": "Python",
+    "transformation": "change spaces around commas and parentheses",
+    "original_filename": "python.py",
+    "modified_filename": "python.py",
+    "original": "# Average of the positive values in a list.\ndef average_positive(values):\n    total = 0\n    count = 0\n    for v in values:\n        # skip zero and negative values\n        if v > 0:\n            total = total + v\n            count = count + 1\n    if count == 0:\n        return 0\n    return total / count\n",
+    "modified": "# Average of the positive values in a list.\ndef average_positive( values ):\n    total = 0\n    count = 0\n    for v in values:\n        # skip zero and negative values\n        if v > 0:\n            total = total + v\n            count = count + 1\n    if count == 0:\n        return 0\n    return total / count\n"
+  },
+  {
+    "id": "TC14",
+    "language": "Python",
+    "transformation": "add comments to one submission",
+    "original_filename": "python.py",
+    "modified_filename": "python.py",
+    "original": "# Average of the positive values in a list.\ndef average_positive(values):\n    total = 0\n    count = 0\n    for v in values:\n        # skip zero and negative values\n        if v > 0:\n            total = total + v\n            count = count + 1\n    if count == 0:\n        return 0\n    return total / count\n",
+    "modified": "# Student submission for the statistics exercise.\n# Written and tested by the student.\n# Average of the positive values in a list.\ndef average_positive(values):\n    total = 0\n    count = 0\n    # the next statement is explained here\n    for v in values:\n        # skip zero and negative values\n        # the next statement is explained here\n        if v > 0:\n            total = total + v\n            count = count + 1\n    # the next statement is explained here\n    if count == 0:\n        return 0\n    return total / count\n"
+  },
+  {
+    "id": "TC15",
+    "language": "Python",
+    "transformation": "change existing comments",
+    "original_filename": "python.py",
+    "modified_filename": "python.py",
+    "original": "# Average of the positive values in a list.\ndef average_positive(values):\n    total = 0\n    count = 0\n    for v in values:\n        # skip zero and negative values\n        if v > 0:\n            total = total + v\n            count = count + 1\n    if count == 0:\n        return 0\n    return total / count\n",
+    "modified": "# Computes a mean over strictly positive inputs only.\ndef average_positive(values):\n    total = 0\n    count = 0\n    for v in values:\n        # ignore anything that is not greater than zero\n        if v > 0:\n            total = total + v\n            count = count + 1\n    if count == 0:\n        return 0\n    return total / count\n"
+  },
+  {
+    "id": "TC16",
+    "language": "Python",
+    "transformation": "remove comments from one submission",
+    "original_filename": "python.py",
+    "modified_filename": "python.py",
+    "original": "# Average of the positive values in a list.\ndef average_positive(values):\n    total = 0\n    count = 0\n    for v in values:\n        # skip zero and negative values\n        if v > 0:\n            total = total + v\n            count = count + 1\n    if count == 0:\n        return 0\n    return total / count\n",
+    "modified": "def average_positive(values):\n    total = 0\n    count = 0\n    for v in values:\n        if v > 0:\n            total = total + v\n            count = count + 1\n    if count == 0:\n        return 0\n    return total / count\n"
+  },
+  {
+    "id": "TC17",
+    "language": "Python",
+    "transformation": "change line endings (LF -> CRLF)",
+    "original_filename": "python.py",
+    "modified_filename": "python.py",
+    "original": "# Average of the positive values in a list.\ndef average_positive(values):\n    total = 0\n    count = 0\n    for v in values:\n        # skip zero and negative values\n        if v > 0:\n            total = total + v\n            count = count + 1\n    if count == 0:\n        return 0\n    return total / count\n",
+    "modified": "# Average of the positive values in a list.\r\ndef average_positive(values):\r\n    total = 0\r\n    count = 0\r\n    for v in values:\r\n        # skip zero and negative values\r\n        if v > 0:\r\n            total = total + v\r\n            count = count + 1\r\n    if count == 0:\r\n        return 0\r\n    return total / count\r\n"
+  },
+  {
+    "id": "TC18",
+    "language": "Python",
+    "transformation": "change the filename, identical source",
+    "original_filename": "python.py",
+    "modified_filename": "submission_python_v2.py",
+    "original": "# Average of the positive values in a list.\ndef average_positive(values):\n    total = 0\n    count = 0\n    for v in values:\n        # skip zero and negative values\n        if v > 0:\n            total = total + v\n            count = count + 1\n    if count == 0:\n        return 0\n    return total / count\n",
+    "modified": "# Average of the positive values in a list.\ndef average_positive(values):\n    total = 0\n    count = 0\n    for v in values:\n        # skip zero and negative values\n        if v > 0:\n            total = total + v\n            count = count + 1\n    if count == 0:\n        return 0\n    return total / count\n"
+  },
+  {
+    "id": "TC02",
+    "language": "Java",
+    "transformation": "identical copy (baseline)",
+    "original_filename": "java.java",
+    "modified_filename": "java.java",
+    "original": "public class Stats {\n    // Average of the positive values in an array.\n    public static double averagePositive(int[] values) {\n        double total = 0;\n        int count = 0;\n        for (int i = 0; i < values.length; i++) {\n            // skip zero and negative values\n            if (values[i] > 0) {\n                total = total + values[i];\n                count = count + 1;\n            }\n        }\n        if (count == 0) {\n            return 0;\n        }\n        return total / count;\n    }\n}\n",
+    "modified": "public class Stats {\n    // Average of the positive values in an array.\n    public static double averagePositive(int[] values) {\n        double total = 0;\n        int count = 0;\n        for (int i = 0; i < values.length; i++) {\n            // skip zero and negative values\n            if (values[i] > 0) {\n                total = total + values[i];\n                count = count + 1;\n            }\n        }\n        if (count == 0) {\n            return 0;\n        }\n        return total / count;\n    }\n}\n"
+  },
+  {
+    "id": "TC10",
+    "language": "Java",
+    "transformation": "change indentation",
+    "original_filename": "java.java",
+    "modified_filename": "java.java",
+    "original": "public class Stats {\n    // Average of the positive values in an array.\n    public static double averagePositive(int[] values) {\n        double total = 0;\n        int count = 0;\n        for (int i = 0; i < values.length; i++) {\n            // skip zero and negative values\n            if (values[i] > 0) {\n                total = total + values[i];\n                count = count + 1;\n            }\n        }\n        if (count == 0) {\n            return 0;\n        }\n        return total / count;\n    }\n}\n",
+    "modified": "public class Stats {\n  // Average of the positive values in an array.\n  public static double averagePositive(int[] values) {\n    double total = 0;\n    int count = 0;\n    for (int i = 0; i < values.length; i++) {\n      // skip zero and negative values\n      if (values[i] > 0) {\n        total = total + values[i];\n        count = count + 1;\n      }\n    }\n    if (count == 0) {\n      return 0;\n    }\n    return total / count;\n  }\n}\n"
+  },
+  {
+    "id": "TC11",
+    "language": "Java",
+    "transformation": "add blank lines",
+    "original_filename": "java.java",
+    "modified_filename": "java.java",
+    "original": "public class Stats {\n    // Average of the positive values in an array.\n    public static double averagePositive(int[] values) {\n        double total = 0;\n        int count = 0;\n        for (int i = 0; i < values.length; i++) {\n            // skip zero and negative values\n            if (values[i] > 0) {\n                total = total + values[i];\n                count = count + 1;\n            }\n        }\n        if (count == 0) {\n            return 0;\n        }\n        return total / count;\n    }\n}\n",
+    "modified": "public class Stats {\n\n    // Average of the positive values in an array.\n\n    public static double averagePositive(int[] values) {\n\n        double total = 0;\n\n        int count = 0;\n\n        for (int i = 0; i < values.length; i++) {\n\n            // skip zero and negative values\n\n            if (values[i] > 0) {\n\n                total = total + values[i];\n\n                count = count + 1;\n\n            }\n\n        }\n\n        if (count == 0) {\n\n            return 0;\n\n        }\n\n        return total / count;\n\n    }\n\n}\n\n"
+  },
+  {
+    "id": "TC12",
+    "language": "Java",
+    "transformation": "change spaces around operators",
+    "original_filename": "java.java",
+    "modified_filename": "java.java",
+    "original": "public class Stats {\n    // Average of the positive values in an array.\n    public static double averagePositive(int[] values) {\n        double total = 0;\n        int count = 0;\n        for (int i = 0; i < values.length; i++) {\n            // skip zero and negative values\n            if (values[i] > 0) {\n                total = total + values[i];\n                count = count + 1;\n            }\n        }\n        if (count == 0) {\n            return 0;\n        }\n        return total / count;\n    }\n}\n",
+    "modified": "public class Stats {\n    // Average of the positive values in an array.\n    public static double averagePositive(int[] values) {\n        double total=0;\n        int count=0;\n        for (int i=0; i<values.length; i++) {\n            // skip zero and negative values\n            if (values[i]>0) {\n                total=total+values[i];\n                count=count+1;\n            }\n        }\n        if (count==0) {\n            return 0;\n        }\n        return total/count;\n    }\n}\n"
+  },
+  {
+    "id": "TC13",
+    "language": "Java",
+    "transformation": "change spaces around commas and parentheses",
+    "original_filename": "java.java",
+    "modified_filename": "java.java",
+    "original": "public class Stats {\n    // Average of the positive values in an array.\n    public static double averagePositive(int[] values) {\n        double total = 0;\n        int count = 0;\n        for (int i = 0; i < values.length; i++) {\n            // skip zero and negative values\n            if (values[i] > 0) {\n                total = total + values[i];\n                count = count + 1;\n            }\n        }\n        if (count == 0) {\n            return 0;\n        }\n        return total / count;\n    }\n}\n",
+    "modified": "public class Stats {\n    // Average of the positive values in an array.\n    public static double averagePositive( int[] values ) {\n        double total = 0;\n        int count = 0;\n        for ( int i = 0; i < values.length; i++ ) {\n            // skip zero and negative values\n            if ( values[i] > 0 ) {\n                total = total + values[i];\n                count = count + 1;\n            }\n        }\n        if ( count == 0 ) {\n            return 0;\n        }\n        return total / count;\n    }\n}\n"
+  },
+  {
+    "id": "TC14",
+    "language": "Java",
+    "transformation": "add comments to one submission",
+    "original_filename": "java.java",
+    "modified_filename": "java.java",
+    "original": "public class Stats {\n    // Average of the positive values in an array.\n    public static double averagePositive(int[] values) {\n        double total = 0;\n        int count = 0;\n        for (int i = 0; i < values.length; i++) {\n            // skip zero and negative values\n            if (values[i] > 0) {\n                total = total + values[i];\n                count = count + 1;\n            }\n        }\n        if (count == 0) {\n            return 0;\n        }\n        return total / count;\n    }\n}\n",
+    "modified": "// Student submission for the statistics exercise.\n// Written and tested by the student.\npublic class Stats {\n    // Average of the positive values in an array.\n    public static double averagePositive(int[] values) {\n        double total = 0;\n        int count = 0;\n        // the next statement is explained here\n        for (int i = 0; i < values.length; i++) {\n            // skip zero and negative values\n            // the next statement is explained here\n            if (values[i] > 0) {\n                total = total + values[i];\n                count = count + 1;\n            }\n        }\n        // the next statement is explained here\n        if (count == 0) {\n            return 0;\n        }\n        return total / count;\n    }\n}\n"
+  },
+  {
+    "id": "TC15",
+    "language": "Java",
+    "transformation": "change existing comments",
+    "original_filename": "java.java",
+    "modified_filename": "java.java",
+    "original": "public class Stats {\n    // Average of the positive values in an array.\n    public static double averagePositive(int[] values) {\n        double total = 0;\n        int count = 0;\n        for (int i = 0; i < values.length; i++) {\n            // skip zero and negative values\n            if (values[i] > 0) {\n                total = total + values[i];\n                count = count + 1;\n            }\n        }\n        if (count == 0) {\n            return 0;\n        }\n        return total / count;\n    }\n}\n",
+    "modified": "public class Stats {\n    // Computes a mean over strictly positive inputs only.\n    public static double averagePositive(int[] values) {\n        double total = 0;\n        int count = 0;\n        for (int i = 0; i < values.length; i++) {\n            // ignore anything that is not greater than zero\n            if (values[i] > 0) {\n                total = total + values[i];\n                count = count + 1;\n            }\n        }\n        if (count == 0) {\n            return 0;\n        }\n        return total / count;\n    }\n}\n"
+  },
+  {
+    "id": "TC16",
+    "language": "Java",
+    "transformation": "remove comments from one submission",
+    "original_filename": "java.java",
+    "modified_filename": "java.java",
+    "original": "public class Stats {\n    // Average of the positive values in an array.\n    public static double averagePositive(int[] values) {\n        double total = 0;\n        int count = 0;\n        for (int i = 0; i < values.length; i++) {\n            // skip zero and negative values\n            if (values[i] > 0) {\n                total = total + values[i];\n                count = count + 1;\n            }\n        }\n        if (count == 0) {\n            return 0;\n        }\n        return total / count;\n    }\n}\n",
+    "modified": "public class Stats {\n    public static double averagePositive(int[] values) {\n        double total = 0;\n        int count = 0;\n        for (int i = 0; i < values.length; i++) {\n            if (values[i] > 0) {\n                total = total + values[i];\n                count = count + 1;\n            }\n        }\n        if (count == 0) {\n            return 0;\n        }\n        return total / count;\n    }\n}\n"
+  },
+  {
+    "id": "TC17",
+    "language": "Java",
+    "transformation": "change line endings (LF -> CRLF)",
+    "original_filename": "java.java",
+    "modified_filename": "java.java",
+    "original": "public class Stats {\n    // Average of the positive values in an array.\n    public static double averagePositive(int[] values) {\n        double total = 0;\n        int count = 0;\n        for (int i = 0; i < values.length; i++) {\n            // skip zero and negative values\n            if (values[i] > 0) {\n                total = total + values[i];\n                count = count + 1;\n            }\n        }\n        if (count == 0) {\n            return 0;\n        }\n        return total / count;\n    }\n}\n",
+    "modified": "public class Stats {\r\n    // Average of the positive values in an array.\r\n    public static double averagePositive(int[] values) {\r\n        double total = 0;\r\n        int count = 0;\r\n        for (int i = 0; i < values.length; i++) {\r\n            // skip zero and negative values\r\n            if (values[i] > 0) {\r\n                total = total + values[i];\r\n                count = count + 1;\r\n            }\r\n        }\r\n        if (count == 0) {\r\n            return 0;\r\n        }\r\n        return total / count;\r\n    }\r\n}\r\n"
+  },
+  {
+    "id": "TC18",
+    "language": "Java",
+    "transformation": "change the filename, identical source",
+    "original_filename": "java.java",
+    "modified_filename": "submission_java_v2.java",
+    "original": "public class Stats {\n    // Average of the positive values in an array.\n    public static double averagePositive(int[] values) {\n        double total = 0;\n        int count = 0;\n        for (int i = 0; i < values.length; i++) {\n            // skip zero and negative values\n            if (values[i] > 0) {\n                total = total + values[i];\n                count = count + 1;\n            }\n        }\n        if (count == 0) {\n            return 0;\n        }\n        return total / count;\n    }\n}\n",
+    "modified": "public class Stats {\n    // Average of the positive values in an array.\n    public static double averagePositive(int[] values) {\n        double total = 0;\n        int count = 0;\n        for (int i = 0; i < values.length; i++) {\n            // skip zero and negative values\n            if (values[i] > 0) {\n                total = total + values[i];\n                count = count + 1;\n            }\n        }\n        if (count == 0) {\n            return 0;\n        }\n        return total / count;\n    }\n}\n"
+  },
+  {
+    "id": "TC03",
+    "language": "JavaScript",
+    "transformation": "identical copy (baseline)",
+    "original_filename": "javascript.js",
+    "modified_filename": "javascript.js",
+    "original": "// Average of the positive values in an array.\nfunction averagePositive(values) {\n    let total = 0;\n    let count = 0;\n    for (const v of values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "// Average of the positive values in an array.\nfunction averagePositive(values) {\n    let total = 0;\n    let count = 0;\n    for (const v of values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n"
+  },
+  {
+    "id": "TC10",
+    "language": "JavaScript",
+    "transformation": "change indentation",
+    "original_filename": "javascript.js",
+    "modified_filename": "javascript.js",
+    "original": "// Average of the positive values in an array.\nfunction averagePositive(values) {\n    let total = 0;\n    let count = 0;\n    for (const v of values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "// Average of the positive values in an array.\nfunction averagePositive(values) {\n  let total = 0;\n  let count = 0;\n  for (const v of values) {\n    // skip zero and negative values\n    if (v > 0) {\n      total = total + v;\n      count = count + 1;\n    }\n  }\n  if (count == 0) {\n    return 0;\n  }\n  return total / count;\n}\n"
+  },
+  {
+    "id": "TC11",
+    "language": "JavaScript",
+    "transformation": "add blank lines",
+    "original_filename": "javascript.js",
+    "modified_filename": "javascript.js",
+    "original": "// Average of the positive values in an array.\nfunction averagePositive(values) {\n    let total = 0;\n    let count = 0;\n    for (const v of values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "// Average of the positive values in an array.\n\nfunction averagePositive(values) {\n\n    let total = 0;\n\n    let count = 0;\n\n    for (const v of values) {\n\n        // skip zero and negative values\n\n        if (v > 0) {\n\n            total = total + v;\n\n            count = count + 1;\n\n        }\n\n    }\n\n    if (count == 0) {\n\n        return 0;\n\n    }\n\n    return total / count;\n\n}\n\n"
+  },
+  {
+    "id": "TC12",
+    "language": "JavaScript",
+    "transformation": "change spaces around operators",
+    "original_filename": "javascript.js",
+    "modified_filename": "javascript.js",
+    "original": "// Average of the positive values in an array.\nfunction averagePositive(values) {\n    let total = 0;\n    let count = 0;\n    for (const v of values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "// Average of the positive values in an array.\nfunction averagePositive(values) {\n    let total=0;\n    let count=0;\n    for (const v of values) {\n        // skip zero and negative values\n        if (v>0) {\n            total=total+v;\n            count=count+1;\n        }\n    }\n    if (count==0) {\n        return 0;\n    }\n    return total/count;\n}\n"
+  },
+  {
+    "id": "TC13",
+    "language": "JavaScript",
+    "transformation": "change spaces around commas and parentheses",
+    "original_filename": "javascript.js",
+    "modified_filename": "javascript.js",
+    "original": "// Average of the positive values in an array.\nfunction averagePositive(values) {\n    let total = 0;\n    let count = 0;\n    for (const v of values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "// Average of the positive values in an array.\nfunction averagePositive( values ) {\n    let total = 0;\n    let count = 0;\n    for ( const v of values ) {\n        // skip zero and negative values\n        if ( v > 0 ) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if ( count == 0 ) {\n        return 0;\n    }\n    return total / count;\n}\n"
+  },
+  {
+    "id": "TC14",
+    "language": "JavaScript",
+    "transformation": "add comments to one submission",
+    "original_filename": "javascript.js",
+    "modified_filename": "javascript.js",
+    "original": "// Average of the positive values in an array.\nfunction averagePositive(values) {\n    let total = 0;\n    let count = 0;\n    for (const v of values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "// Student submission for the statistics exercise.\n// Written and tested by the student.\n// Average of the positive values in an array.\nfunction averagePositive(values) {\n    let total = 0;\n    let count = 0;\n    // the next statement is explained here\n    for (const v of values) {\n        // skip zero and negative values\n        // the next statement is explained here\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    // the next statement is explained here\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n"
+  },
+  {
+    "id": "TC15",
+    "language": "JavaScript",
+    "transformation": "change existing comments",
+    "original_filename": "javascript.js",
+    "modified_filename": "javascript.js",
+    "original": "// Average of the positive values in an array.\nfunction averagePositive(values) {\n    let total = 0;\n    let count = 0;\n    for (const v of values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "// Computes a mean over strictly positive inputs only.\nfunction averagePositive(values) {\n    let total = 0;\n    let count = 0;\n    for (const v of values) {\n        // ignore anything that is not greater than zero\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n"
+  },
+  {
+    "id": "TC16",
+    "language": "JavaScript",
+    "transformation": "remove comments from one submission",
+    "original_filename": "javascript.js",
+    "modified_filename": "javascript.js",
+    "original": "// Average of the positive values in an array.\nfunction averagePositive(values) {\n    let total = 0;\n    let count = 0;\n    for (const v of values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "function averagePositive(values) {\n    let total = 0;\n    let count = 0;\n    for (const v of values) {\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n"
+  },
+  {
+    "id": "TC17",
+    "language": "JavaScript",
+    "transformation": "change line endings (LF -> CRLF)",
+    "original_filename": "javascript.js",
+    "modified_filename": "javascript.js",
+    "original": "// Average of the positive values in an array.\nfunction averagePositive(values) {\n    let total = 0;\n    let count = 0;\n    for (const v of values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "// Average of the positive values in an array.\r\nfunction averagePositive(values) {\r\n    let total = 0;\r\n    let count = 0;\r\n    for (const v of values) {\r\n        // skip zero and negative values\r\n        if (v > 0) {\r\n            total = total + v;\r\n            count = count + 1;\r\n        }\r\n    }\r\n    if (count == 0) {\r\n        return 0;\r\n    }\r\n    return total / count;\r\n}\r\n"
+  },
+  {
+    "id": "TC18",
+    "language": "JavaScript",
+    "transformation": "change the filename, identical source",
+    "original_filename": "javascript.js",
+    "modified_filename": "submission_javascript_v2.js",
+    "original": "// Average of the positive values in an array.\nfunction averagePositive(values) {\n    let total = 0;\n    let count = 0;\n    for (const v of values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "// Average of the positive values in an array.\nfunction averagePositive(values) {\n    let total = 0;\n    let count = 0;\n    for (const v of values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n"
+  },
+  {
+    "id": "TC04",
+    "language": "C",
+    "transformation": "identical copy (baseline)",
+    "original_filename": "c.c",
+    "modified_filename": "c.c",
+    "original": "#include <stdio.h>\n\n// Average of the positive values in an array.\ndouble average_positive(const int *values, int n) {\n    double total = 0;\n    int count = 0;\n    for (int i = 0; i < n; i++) {\n        // skip zero and negative values\n        if (values[i] > 0) {\n            total = total + values[i];\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "#include <stdio.h>\n\n// Average of the positive values in an array.\ndouble average_positive(const int *values, int n) {\n    double total = 0;\n    int count = 0;\n    for (int i = 0; i < n; i++) {\n        // skip zero and negative values\n        if (values[i] > 0) {\n            total = total + values[i];\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n"
+  },
+  {
+    "id": "TC10",
+    "language": "C",
+    "transformation": "change indentation",
+    "original_filename": "c.c",
+    "modified_filename": "c.c",
+    "original": "#include <stdio.h>\n\n// Average of the positive values in an array.\ndouble average_positive(const int *values, int n) {\n    double total = 0;\n    int count = 0;\n    for (int i = 0; i < n; i++) {\n        // skip zero and negative values\n        if (values[i] > 0) {\n            total = total + values[i];\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "#include <stdio.h>\n\n// Average of the positive values in an array.\ndouble average_positive(const int *values, int n) {\n  double total = 0;\n  int count = 0;\n  for (int i = 0; i < n; i++) {\n    // skip zero and negative values\n    if (values[i] > 0) {\n      total = total + values[i];\n      count = count + 1;\n    }\n  }\n  if (count == 0) {\n    return 0;\n  }\n  return total / count;\n}\n"
+  },
+  {
+    "id": "TC11",
+    "language": "C",
+    "transformation": "add blank lines",
+    "original_filename": "c.c",
+    "modified_filename": "c.c",
+    "original": "#include <stdio.h>\n\n// Average of the positive values in an array.\ndouble average_positive(const int *values, int n) {\n    double total = 0;\n    int count = 0;\n    for (int i = 0; i < n; i++) {\n        // skip zero and negative values\n        if (values[i] > 0) {\n            total = total + values[i];\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "#include <stdio.h>\n\n\n\n// Average of the positive values in an array.\n\ndouble average_positive(const int *values, int n) {\n\n    double total = 0;\n\n    int count = 0;\n\n    for (int i = 0; i < n; i++) {\n\n        // skip zero and negative values\n\n        if (values[i] > 0) {\n\n            total = total + values[i];\n\n            count = count + 1;\n\n        }\n\n    }\n\n    if (count == 0) {\n\n        return 0;\n\n    }\n\n    return total / count;\n\n}\n\n"
+  },
+  {
+    "id": "TC12",
+    "language": "C",
+    "transformation": "change spaces around operators",
+    "original_filename": "c.c",
+    "modified_filename": "c.c",
+    "original": "#include <stdio.h>\n\n// Average of the positive values in an array.\ndouble average_positive(const int *values, int n) {\n    double total = 0;\n    int count = 0;\n    for (int i = 0; i < n; i++) {\n        // skip zero and negative values\n        if (values[i] > 0) {\n            total = total + values[i];\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "#include <stdio.h>\n\n// Average of the positive values in an array.\ndouble average_positive(const int *values, int n) {\n    double total=0;\n    int count=0;\n    for (int i=0; i<n; i++) {\n        // skip zero and negative values\n        if (values[i]>0) {\n            total=total+values[i];\n            count=count+1;\n        }\n    }\n    if (count==0) {\n        return 0;\n    }\n    return total/count;\n}\n"
+  },
+  {
+    "id": "TC13",
+    "language": "C",
+    "transformation": "change spaces around commas and parentheses",
+    "original_filename": "c.c",
+    "modified_filename": "c.c",
+    "original": "#include <stdio.h>\n\n// Average of the positive values in an array.\ndouble average_positive(const int *values, int n) {\n    double total = 0;\n    int count = 0;\n    for (int i = 0; i < n; i++) {\n        // skip zero and negative values\n        if (values[i] > 0) {\n            total = total + values[i];\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "#include <stdio.h>\n\n// Average of the positive values in an array.\ndouble average_positive( const int *values ,int n ) {\n    double total = 0;\n    int count = 0;\n    for ( int i = 0; i < n; i++ ) {\n        // skip zero and negative values\n        if ( values[i] > 0 ) {\n            total = total + values[i];\n            count = count + 1;\n        }\n    }\n    if ( count == 0 ) {\n        return 0;\n    }\n    return total / count;\n}\n"
+  },
+  {
+    "id": "TC14",
+    "language": "C",
+    "transformation": "add comments to one submission",
+    "original_filename": "c.c",
+    "modified_filename": "c.c",
+    "original": "#include <stdio.h>\n\n// Average of the positive values in an array.\ndouble average_positive(const int *values, int n) {\n    double total = 0;\n    int count = 0;\n    for (int i = 0; i < n; i++) {\n        // skip zero and negative values\n        if (values[i] > 0) {\n            total = total + values[i];\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "// Student submission for the statistics exercise.\n// Written and tested by the student.\n#include <stdio.h>\n\n// Average of the positive values in an array.\ndouble average_positive(const int *values, int n) {\n    double total = 0;\n    int count = 0;\n    // the next statement is explained here\n    for (int i = 0; i < n; i++) {\n        // skip zero and negative values\n        // the next statement is explained here\n        if (values[i] > 0) {\n            total = total + values[i];\n            count = count + 1;\n        }\n    }\n    // the next statement is explained here\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n"
+  },
+  {
+    "id": "TC15",
+    "language": "C",
+    "transformation": "change existing comments",
+    "original_filename": "c.c",
+    "modified_filename": "c.c",
+    "original": "#include <stdio.h>\n\n// Average of the positive values in an array.\ndouble average_positive(const int *values, int n) {\n    double total = 0;\n    int count = 0;\n    for (int i = 0; i < n; i++) {\n        // skip zero and negative values\n        if (values[i] > 0) {\n            total = total + values[i];\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "#include <stdio.h>\n\n// Computes a mean over strictly positive inputs only.\ndouble average_positive(const int *values, int n) {\n    double total = 0;\n    int count = 0;\n    for (int i = 0; i < n; i++) {\n        // ignore anything that is not greater than zero\n        if (values[i] > 0) {\n            total = total + values[i];\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n"
+  },
+  {
+    "id": "TC16",
+    "language": "C",
+    "transformation": "remove comments from one submission",
+    "original_filename": "c.c",
+    "modified_filename": "c.c",
+    "original": "#include <stdio.h>\n\n// Average of the positive values in an array.\ndouble average_positive(const int *values, int n) {\n    double total = 0;\n    int count = 0;\n    for (int i = 0; i < n; i++) {\n        // skip zero and negative values\n        if (values[i] > 0) {\n            total = total + values[i];\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "#include <stdio.h>\n\ndouble average_positive(const int *values, int n) {\n    double total = 0;\n    int count = 0;\n    for (int i = 0; i < n; i++) {\n        if (values[i] > 0) {\n            total = total + values[i];\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n"
+  },
+  {
+    "id": "TC17",
+    "language": "C",
+    "transformation": "change line endings (LF -> CRLF)",
+    "original_filename": "c.c",
+    "modified_filename": "c.c",
+    "original": "#include <stdio.h>\n\n// Average of the positive values in an array.\ndouble average_positive(const int *values, int n) {\n    double total = 0;\n    int count = 0;\n    for (int i = 0; i < n; i++) {\n        // skip zero and negative values\n        if (values[i] > 0) {\n            total = total + values[i];\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "#include <stdio.h>\r\n\r\n// Average of the positive values in an array.\r\ndouble average_positive(const int *values, int n) {\r\n    double total = 0;\r\n    int count = 0;\r\n    for (int i = 0; i < n; i++) {\r\n        // skip zero and negative values\r\n        if (values[i] > 0) {\r\n            total = total + values[i];\r\n            count = count + 1;\r\n        }\r\n    }\r\n    if (count == 0) {\r\n        return 0;\r\n    }\r\n    return total / count;\r\n}\r\n"
+  },
+  {
+    "id": "TC18",
+    "language": "C",
+    "transformation": "change the filename, identical source",
+    "original_filename": "c.c",
+    "modified_filename": "submission_c_v2.c",
+    "original": "#include <stdio.h>\n\n// Average of the positive values in an array.\ndouble average_positive(const int *values, int n) {\n    double total = 0;\n    int count = 0;\n    for (int i = 0; i < n; i++) {\n        // skip zero and negative values\n        if (values[i] > 0) {\n            total = total + values[i];\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "#include <stdio.h>\n\n// Average of the positive values in an array.\ndouble average_positive(const int *values, int n) {\n    double total = 0;\n    int count = 0;\n    for (int i = 0; i < n; i++) {\n        // skip zero and negative values\n        if (values[i] > 0) {\n            total = total + values[i];\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n"
+  },
+  {
+    "id": "TC05",
+    "language": "C++",
+    "transformation": "identical copy (baseline)",
+    "original_filename": "cpp.cpp",
+    "modified_filename": "cpp.cpp",
+    "original": "#include <vector>\n\n// Average of the positive values in a vector.\ndouble averagePositive(const std::vector<int> &values) {\n    double total = 0;\n    int count = 0;\n    for (int v : values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "#include <vector>\n\n// Average of the positive values in a vector.\ndouble averagePositive(const std::vector<int> &values) {\n    double total = 0;\n    int count = 0;\n    for (int v : values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n"
+  },
+  {
+    "id": "TC10",
+    "language": "C++",
+    "transformation": "change indentation",
+    "original_filename": "cpp.cpp",
+    "modified_filename": "cpp.cpp",
+    "original": "#include <vector>\n\n// Average of the positive values in a vector.\ndouble averagePositive(const std::vector<int> &values) {\n    double total = 0;\n    int count = 0;\n    for (int v : values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "#include <vector>\n\n// Average of the positive values in a vector.\ndouble averagePositive(const std::vector<int> &values) {\n  double total = 0;\n  int count = 0;\n  for (int v : values) {\n    // skip zero and negative values\n    if (v > 0) {\n      total = total + v;\n      count = count + 1;\n    }\n  }\n  if (count == 0) {\n    return 0;\n  }\n  return total / count;\n}\n"
+  },
+  {
+    "id": "TC11",
+    "language": "C++",
+    "transformation": "add blank lines",
+    "original_filename": "cpp.cpp",
+    "modified_filename": "cpp.cpp",
+    "original": "#include <vector>\n\n// Average of the positive values in a vector.\ndouble averagePositive(const std::vector<int> &values) {\n    double total = 0;\n    int count = 0;\n    for (int v : values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "#include <vector>\n\n\n\n// Average of the positive values in a vector.\n\ndouble averagePositive(const std::vector<int> &values) {\n\n    double total = 0;\n\n    int count = 0;\n\n    for (int v : values) {\n\n        // skip zero and negative values\n\n        if (v > 0) {\n\n            total = total + v;\n\n            count = count + 1;\n\n        }\n\n    }\n\n    if (count == 0) {\n\n        return 0;\n\n    }\n\n    return total / count;\n\n}\n\n"
+  },
+  {
+    "id": "TC12",
+    "language": "C++",
+    "transformation": "change spaces around operators",
+    "original_filename": "cpp.cpp",
+    "modified_filename": "cpp.cpp",
+    "original": "#include <vector>\n\n// Average of the positive values in a vector.\ndouble averagePositive(const std::vector<int> &values) {\n    double total = 0;\n    int count = 0;\n    for (int v : values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "#include <vector>\n\n// Average of the positive values in a vector.\ndouble averagePositive(const std::vector<int> &values) {\n    double total=0;\n    int count=0;\n    for (int v : values) {\n        // skip zero and negative values\n        if (v>0) {\n            total=total+v;\n            count=count+1;\n        }\n    }\n    if (count==0) {\n        return 0;\n    }\n    return total/count;\n}\n"
+  },
+  {
+    "id": "TC13",
+    "language": "C++",
+    "transformation": "change spaces around commas and parentheses",
+    "original_filename": "cpp.cpp",
+    "modified_filename": "cpp.cpp",
+    "original": "#include <vector>\n\n// Average of the positive values in a vector.\ndouble averagePositive(const std::vector<int> &values) {\n    double total = 0;\n    int count = 0;\n    for (int v : values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "#include <vector>\n\n// Average of the positive values in a vector.\ndouble averagePositive( const std::vector<int> &values ) {\n    double total = 0;\n    int count = 0;\n    for ( int v : values ) {\n        // skip zero and negative values\n        if ( v > 0 ) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if ( count == 0 ) {\n        return 0;\n    }\n    return total / count;\n}\n"
+  },
+  {
+    "id": "TC14",
+    "language": "C++",
+    "transformation": "add comments to one submission",
+    "original_filename": "cpp.cpp",
+    "modified_filename": "cpp.cpp",
+    "original": "#include <vector>\n\n// Average of the positive values in a vector.\ndouble averagePositive(const std::vector<int> &values) {\n    double total = 0;\n    int count = 0;\n    for (int v : values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "// Student submission for the statistics exercise.\n// Written and tested by the student.\n#include <vector>\n\n// Average of the positive values in a vector.\ndouble averagePositive(const std::vector<int> &values) {\n    double total = 0;\n    int count = 0;\n    // the next statement is explained here\n    for (int v : values) {\n        // skip zero and negative values\n        // the next statement is explained here\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    // the next statement is explained here\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n"
+  },
+  {
+    "id": "TC15",
+    "language": "C++",
+    "transformation": "change existing comments",
+    "original_filename": "cpp.cpp",
+    "modified_filename": "cpp.cpp",
+    "original": "#include <vector>\n\n// Average of the positive values in a vector.\ndouble averagePositive(const std::vector<int> &values) {\n    double total = 0;\n    int count = 0;\n    for (int v : values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "#include <vector>\n\n// Computes a mean over strictly positive inputs only.\ndouble averagePositive(const std::vector<int> &values) {\n    double total = 0;\n    int count = 0;\n    for (int v : values) {\n        // ignore anything that is not greater than zero\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n"
+  },
+  {
+    "id": "TC16",
+    "language": "C++",
+    "transformation": "remove comments from one submission",
+    "original_filename": "cpp.cpp",
+    "modified_filename": "cpp.cpp",
+    "original": "#include <vector>\n\n// Average of the positive values in a vector.\ndouble averagePositive(const std::vector<int> &values) {\n    double total = 0;\n    int count = 0;\n    for (int v : values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "#include <vector>\n\ndouble averagePositive(const std::vector<int> &values) {\n    double total = 0;\n    int count = 0;\n    for (int v : values) {\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n"
+  },
+  {
+    "id": "TC17",
+    "language": "C++",
+    "transformation": "change line endings (LF -> CRLF)",
+    "original_filename": "cpp.cpp",
+    "modified_filename": "cpp.cpp",
+    "original": "#include <vector>\n\n// Average of the positive values in a vector.\ndouble averagePositive(const std::vector<int> &values) {\n    double total = 0;\n    int count = 0;\n    for (int v : values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "#include <vector>\r\n\r\n// Average of the positive values in a vector.\r\ndouble averagePositive(const std::vector<int> &values) {\r\n    double total = 0;\r\n    int count = 0;\r\n    for (int v : values) {\r\n        // skip zero and negative values\r\n        if (v > 0) {\r\n            total = total + v;\r\n            count = count + 1;\r\n        }\r\n    }\r\n    if (count == 0) {\r\n        return 0;\r\n    }\r\n    return total / count;\r\n}\r\n"
+  },
+  {
+    "id": "TC18",
+    "language": "C++",
+    "transformation": "change the filename, identical source",
+    "original_filename": "cpp.cpp",
+    "modified_filename": "submission_cpp_v2.cpp",
+    "original": "#include <vector>\n\n// Average of the positive values in a vector.\ndouble averagePositive(const std::vector<int> &values) {\n    double total = 0;\n    int count = 0;\n    for (int v : values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n",
+    "modified": "#include <vector>\n\n// Average of the positive values in a vector.\ndouble averagePositive(const std::vector<int> &values) {\n    double total = 0;\n    int count = 0;\n    for (int v : values) {\n        // skip zero and negative values\n        if (v > 0) {\n            total = total + v;\n            count = count + 1;\n        }\n    }\n    if (count == 0) {\n        return 0;\n    }\n    return total / count;\n}\n"
+  },
+  {
+    "id": "TC06",
+    "language": "C#",
+    "transformation": "identical copy (baseline)",
+    "original_filename": "csharp.cs",
+    "modified_filename": "csharp.cs",
+    "original": "public static class Stats\n{\n    // Average of the positive values in an array.\n    public static double AveragePositive(int[] values)\n    {\n        double total = 0;\n        int count = 0;\n        foreach (int v in values)\n        {\n            // skip zero and negative values\n            if (v > 0)\n            {\n                total = total + v;\n                count = count + 1;\n            }\n        }\n        if (count == 0)\n        {\n            return 0;\n        }\n        return total / count;\n    }\n}\n",
+    "modified": "public static class Stats\n{\n    // Average of the positive values in an array.\n    public static double AveragePositive(int[] values)\n    {\n        double total = 0;\n        int count = 0;\n        foreach (int v in values)\n        {\n            // skip zero and negative values\n            if (v > 0)\n            {\n                total = total + v;\n                count = count + 1;\n            }\n        }\n        if (count == 0)\n        {\n            return 0;\n        }\n        return total / count;\n    }\n}\n"
+  },
+  {
+    "id": "TC10",
+    "language": "C#",
+    "transformation": "change indentation",
+    "original_filename": "csharp.cs",
+    "modified_filename": "csharp.cs",
+    "original": "public static class Stats\n{\n    // Average of the positive values in an array.\n    public static double AveragePositive(int[] values)\n    {\n        double total = 0;\n        int count = 0;\n        foreach (int v in values)\n        {\n            // skip zero and negative values\n            if (v > 0)\n            {\n                total = total + v;\n                count = count + 1;\n            }\n        }\n        if (count == 0)\n        {\n            return 0;\n        }\n        return total / count;\n    }\n}\n",
+    "modified": "public static class Stats\n{\n  // Average of the positive values in an array.\n  public static double AveragePositive(int[] values)\n  {\n    double total = 0;\n    int count = 0;\n    foreach (int v in values)\n    {\n      // skip zero and negative values\n      if (v > 0)\n      {\n        total = total + v;\n        count = count + 1;\n      }\n    }\n    if (count == 0)\n    {\n      return 0;\n    }\n    return total / count;\n  }\n}\n"
+  },
+  {
+    "id": "TC11",
+    "language": "C#",
+    "transformation": "add blank lines",
+    "original_filename": "csharp.cs",
+    "modified_filename": "csharp.cs",
+    "original": "public static class Stats\n{\n    // Average of the positive values in an array.\n    public static double AveragePositive(int[] values)\n    {\n        double total = 0;\n        int count = 0;\n        foreach (int v in values)\n        {\n            // skip zero and negative values\n            if (v > 0)\n            {\n                total = total + v;\n                count = count + 1;\n            }\n        }\n        if (count == 0)\n        {\n            return 0;\n        }\n        return total / count;\n    }\n}\n",
+    "modified": "public static class Stats\n\n{\n\n    // Average of the positive values in an array.\n\n    public static double AveragePositive(int[] values)\n\n    {\n\n        double total = 0;\n\n        int count = 0;\n\n        foreach (int v in values)\n\n        {\n\n            // skip zero and negative values\n\n            if (v > 0)\n\n            {\n\n                total = total + v;\n\n                count = count + 1;\n\n            }\n\n        }\n\n        if (count == 0)\n\n        {\n\n            return 0;\n\n        }\n\n        return total / count;\n\n    }\n\n}\n\n"
+  },
+  {
+    "id": "TC12",
+    "language": "C#",
+    "transformation": "change spaces around operators",
+    "original_filename": "csharp.cs",
+    "modified_filename": "csharp.cs",
+    "original": "public static class Stats\n{\n    // Average of the positive values in an array.\n    public static double AveragePositive(int[] values)\n    {\n        double total = 0;\n        int count = 0;\n        foreach (int v in values)\n        {\n            // skip zero and negative values\n            if (v > 0)\n            {\n                total = total + v;\n                count = count + 1;\n            }\n        }\n        if (count == 0)\n        {\n            return 0;\n        }\n        return total / count;\n    }\n}\n",
+    "modified": "public static class Stats\n{\n    // Average of the positive values in an array.\n    public static double AveragePositive(int[] values)\n    {\n        double total=0;\n        int count=0;\n        foreach (int v in values)\n        {\n            // skip zero and negative values\n            if (v>0)\n            {\n                total=total+v;\n                count=count+1;\n            }\n        }\n        if (count==0)\n        {\n            return 0;\n        }\n        return total/count;\n    }\n}\n"
+  },
+  {
+    "id": "TC13",
+    "language": "C#",
+    "transformation": "change spaces around commas and parentheses",
+    "original_filename": "csharp.cs",
+    "modified_filename": "csharp.cs",
+    "original": "public static class Stats\n{\n    // Average of the positive values in an array.\n    public static double AveragePositive(int[] values)\n    {\n        double total = 0;\n        int count = 0;\n        foreach (int v in values)\n        {\n            // skip zero and negative values\n            if (v > 0)\n            {\n                total = total + v;\n                count = count + 1;\n            }\n        }\n        if (count == 0)\n        {\n            return 0;\n        }\n        return total / count;\n    }\n}\n",
+    "modified": "public static class Stats\n{\n    // Average of the positive values in an array.\n    public static double AveragePositive( int[] values )\n    {\n        double total = 0;\n        int count = 0;\n        foreach ( int v in values )\n        {\n            // skip zero and negative values\n            if ( v > 0 )\n            {\n                total = total + v;\n                count = count + 1;\n            }\n        }\n        if ( count == 0 )\n        {\n            return 0;\n        }\n        return total / count;\n    }\n}\n"
+  },
+  {
+    "id": "TC14",
+    "language": "C#",
+    "transformation": "add comments to one submission",
+    "original_filename": "csharp.cs",
+    "modified_filename": "csharp.cs",
+    "original": "public static class Stats\n{\n    // Average of the positive values in an array.\n    public static double AveragePositive(int[] values)\n    {\n        double total = 0;\n        int count = 0;\n        foreach (int v in values)\n        {\n            // skip zero and negative values\n            if (v > 0)\n            {\n                total = total + v;\n                count = count + 1;\n            }\n        }\n        if (count == 0)\n        {\n            return 0;\n        }\n        return total / count;\n    }\n}\n",
+    "modified": "// Student submission for the statistics exercise.\n// Written and tested by the student.\npublic static class Stats\n{\n    // Average of the positive values in an array.\n    public static double AveragePositive(int[] values)\n    {\n        double total = 0;\n        int count = 0;\n        // the next statement is explained here\n        foreach (int v in values)\n        {\n            // skip zero and negative values\n            // the next statement is explained here\n            if (v > 0)\n            {\n                total = total + v;\n                count = count + 1;\n            }\n        }\n        // the next statement is explained here\n        if (count == 0)\n        {\n            return 0;\n        }\n        return total / count;\n    }\n}\n"
+  },
+  {
+    "id": "TC15",
+    "language": "C#",
+    "transformation": "change existing comments",
+    "original_filename": "csharp.cs",
+    "modified_filename": "csharp.cs",
+    "original": "public static class Stats\n{\n    // Average of the positive values in an array.\n    public static double AveragePositive(int[] values)\n    {\n        double total = 0;\n        int count = 0;\n        foreach (int v in values)\n        {\n            // skip zero and negative values\n            if (v > 0)\n            {\n                total = total + v;\n                count = count + 1;\n            }\n        }\n        if (count == 0)\n        {\n            return 0;\n        }\n        return total / count;\n    }\n}\n",
+    "modified": "public static class Stats\n{\n    // Computes a mean over strictly positive inputs only.\n    public static double AveragePositive(int[] values)\n    {\n        double total = 0;\n        int count = 0;\n        foreach (int v in values)\n        {\n            // ignore anything that is not greater than zero\n            if (v > 0)\n            {\n                total = total + v;\n                count = count + 1;\n            }\n        }\n        if (count == 0)\n        {\n            return 0;\n        }\n        return total / count;\n    }\n}\n"
+  },
+  {
+    "id": "TC16",
+    "language": "C#",
+    "transformation": "remove comments from one submission",
+    "original_filename": "csharp.cs",
+    "modified_filename": "csharp.cs",
+    "original": "public static class Stats\n{\n    // Average of the positive values in an array.\n    public static double AveragePositive(int[] values)\n    {\n        double total = 0;\n        int count = 0;\n        foreach (int v in values)\n        {\n            // skip zero and negative values\n            if (v > 0)\n            {\n                total = total + v;\n                count = count + 1;\n            }\n        }\n        if (count == 0)\n        {\n            return 0;\n        }\n        return total / count;\n    }\n}\n",
+    "modified": "public static class Stats\n{\n    public static double AveragePositive(int[] values)\n    {\n        double total = 0;\n        int count = 0;\n        foreach (int v in values)\n        {\n            if (v > 0)\n            {\n                total = total + v;\n                count = count + 1;\n            }\n        }\n        if (count == 0)\n        {\n            return 0;\n        }\n        return total / count;\n    }\n}\n"
+  },
+  {
+    "id": "TC17",
+    "language": "C#",
+    "transformation": "change line endings (LF -> CRLF)",
+    "original_filename": "csharp.cs",
+    "modified_filename": "csharp.cs",
+    "original": "public static class Stats\n{\n    // Average of the positive values in an array.\n    public static double AveragePositive(int[] values)\n    {\n        double total = 0;\n        int count = 0;\n        foreach (int v in values)\n        {\n            // skip zero and negative values\n            if (v > 0)\n            {\n                total = total + v;\n                count = count + 1;\n            }\n        }\n        if (count == 0)\n        {\n            return 0;\n        }\n        return total / count;\n    }\n}\n",
+    "modified": "public static class Stats\r\n{\r\n    // Average of the positive values in an array.\r\n    public static double AveragePositive(int[] values)\r\n    {\r\n        double total = 0;\r\n        int count = 0;\r\n        foreach (int v in values)\r\n        {\r\n            // skip zero and negative values\r\n            if (v > 0)\r\n            {\r\n                total = total + v;\r\n                count = count + 1;\r\n            }\r\n        }\r\n        if (count == 0)\r\n        {\r\n            return 0;\r\n        }\r\n        return total / count;\r\n    }\r\n}\r\n"
+  },
+  {
+    "id": "TC18",
+    "language": "C#",
+    "transformation": "change the filename, identical source",
+    "original_filename": "csharp.cs",
+    "modified_filename": "submission_csharp_v2.cs",
+    "original": "public static class Stats\n{\n    // Average of the positive values in an array.\n    public static double AveragePositive(int[] values)\n    {\n        double total = 0;\n        int count = 0;\n        foreach (int v in values)\n        {\n            // skip zero and negative values\n            if (v > 0)\n            {\n                total = total + v;\n                count = count + 1;\n            }\n        }\n        if (count == 0)\n        {\n            return 0;\n        }\n        return total / count;\n    }\n}\n",
+    "modified": "public static class Stats\n{\n    // Average of the positive values in an array.\n    public static double AveragePositive(int[] values)\n    {\n        double total = 0;\n        int count = 0;\n        foreach (int v in values)\n        {\n            // skip zero and negative values\n            if (v > 0)\n            {\n                total = total + v;\n                count = count + 1;\n            }\n        }\n        if (count == 0)\n        {\n            return 0;\n        }\n        return total / count;\n    }\n}\n"
+  },
+  {
+    "id": "TC07",
+    "language": "Go",
+    "transformation": "identical copy (baseline)",
+    "original_filename": "go.go",
+    "modified_filename": "go.go",
+    "original": "package stats\n\n// AveragePositive returns the average of the positive values.\nfunc AveragePositive(values []int) float64 {\n\ttotal := 0\n\tcount := 0\n\tfor _, v := range values {\n\t\t// skip zero and negative values\n\t\tif v > 0 {\n\t\t\ttotal = total + v\n\t\t\tcount = count + 1\n\t\t}\n\t}\n\tif count == 0 {\n\t\treturn 0\n\t}\n\treturn float64(total) / float64(count)\n}\n",
+    "modified": "package stats\n\n// AveragePositive returns the average of the positive values.\nfunc AveragePositive(values []int) float64 {\n\ttotal := 0\n\tcount := 0\n\tfor _, v := range values {\n\t\t// skip zero and negative values\n\t\tif v > 0 {\n\t\t\ttotal = total + v\n\t\t\tcount = count + 1\n\t\t}\n\t}\n\tif count == 0 {\n\t\treturn 0\n\t}\n\treturn float64(total) / float64(count)\n}\n"
+  },
+  {
+    "id": "TC10",
+    "language": "Go",
+    "transformation": "change indentation",
+    "original_filename": "go.go",
+    "modified_filename": "go.go",
+    "original": "package stats\n\n// AveragePositive returns the average of the positive values.\nfunc AveragePositive(values []int) float64 {\n\ttotal := 0\n\tcount := 0\n\tfor _, v := range values {\n\t\t// skip zero and negative values\n\t\tif v > 0 {\n\t\t\ttotal = total + v\n\t\t\tcount = count + 1\n\t\t}\n\t}\n\tif count == 0 {\n\t\treturn 0\n\t}\n\treturn float64(total) / float64(count)\n}\n",
+    "modified": "package stats\n\n// AveragePositive returns the average of the positive values.\nfunc AveragePositive(values []int) float64 {\n    total := 0\n    count := 0\n    for _, v := range values {\n        // skip zero and negative values\n        if v > 0 {\n            total = total + v\n            count = count + 1\n        }\n    }\n    if count == 0 {\n        return 0\n    }\n    return float64(total) / float64(count)\n}\n"
+  },
+  {
+    "id": "TC11",
+    "language": "Go",
+    "transformation": "add blank lines",
+    "original_filename": "go.go",
+    "modified_filename": "go.go",
+    "original": "package stats\n\n// AveragePositive returns the average of the positive values.\nfunc AveragePositive(values []int) float64 {\n\ttotal := 0\n\tcount := 0\n\tfor _, v := range values {\n\t\t// skip zero and negative values\n\t\tif v > 0 {\n\t\t\ttotal = total + v\n\t\t\tcount = count + 1\n\t\t}\n\t}\n\tif count == 0 {\n\t\treturn 0\n\t}\n\treturn float64(total) / float64(count)\n}\n",
+    "modified": "package stats\n\n\n\n// AveragePositive returns the average of the positive values.\n\nfunc AveragePositive(values []int) float64 {\n\n\ttotal := 0\n\n\tcount := 0\n\n\tfor _, v := range values {\n\n\t\t// skip zero and negative values\n\n\t\tif v > 0 {\n\n\t\t\ttotal = total + v\n\n\t\t\tcount = count + 1\n\n\t\t}\n\n\t}\n\n\tif count == 0 {\n\n\t\treturn 0\n\n\t}\n\n\treturn float64(total) / float64(count)\n\n}\n\n"
+  },
+  {
+    "id": "TC12",
+    "language": "Go",
+    "transformation": "change spaces around operators",
+    "original_filename": "go.go",
+    "modified_filename": "go.go",
+    "original": "package stats\n\n// AveragePositive returns the average of the positive values.\nfunc AveragePositive(values []int) float64 {\n\ttotal := 0\n\tcount := 0\n\tfor _, v := range values {\n\t\t// skip zero and negative values\n\t\tif v > 0 {\n\t\t\ttotal = total + v\n\t\t\tcount = count + 1\n\t\t}\n\t}\n\tif count == 0 {\n\t\treturn 0\n\t}\n\treturn float64(total) / float64(count)\n}\n",
+    "modified": "package stats\n\n// AveragePositive returns the average of the positive values.\nfunc AveragePositive(values []int) float64 {\n\ttotal:=0\n\tcount:=0\n\tfor _, v:=range values {\n\t\t// skip zero and negative values\n\t\tif v>0 {\n\t\t\ttotal=total+v\n\t\t\tcount=count+1\n\t\t}\n\t}\n\tif count==0 {\n\t\treturn 0\n\t}\n\treturn float64(total)/float64(count)\n}\n"
+  },
+  {
+    "id": "TC13",
+    "language": "Go",
+    "transformation": "change spaces around commas and parentheses",
+    "original_filename": "go.go",
+    "modified_filename": "go.go",
+    "original": "package stats\n\n// AveragePositive returns the average of the positive values.\nfunc AveragePositive(values []int) float64 {\n\ttotal := 0\n\tcount := 0\n\tfor _, v := range values {\n\t\t// skip zero and negative values\n\t\tif v > 0 {\n\t\t\ttotal = total + v\n\t\t\tcount = count + 1\n\t\t}\n\t}\n\tif count == 0 {\n\t\treturn 0\n\t}\n\treturn float64(total) / float64(count)\n}\n",
+    "modified": "package stats\n\n// AveragePositive returns the average of the positive values.\nfunc AveragePositive( values []int ) float64 {\n\ttotal := 0\n\tcount := 0\n\tfor _ ,v := range values {\n\t\t// skip zero and negative values\n\t\tif v > 0 {\n\t\t\ttotal = total + v\n\t\t\tcount = count + 1\n\t\t}\n\t}\n\tif count == 0 {\n\t\treturn 0\n\t}\n\treturn float64( total ) / float64( count )\n}\n"
+  },
+  {
+    "id": "TC14",
+    "language": "Go",
+    "transformation": "add comments to one submission",
+    "original_filename": "go.go",
+    "modified_filename": "go.go",
+    "original": "package stats\n\n// AveragePositive returns the average of the positive values.\nfunc AveragePositive(values []int) float64 {\n\ttotal := 0\n\tcount := 0\n\tfor _, v := range values {\n\t\t// skip zero and negative values\n\t\tif v > 0 {\n\t\t\ttotal = total + v\n\t\t\tcount = count + 1\n\t\t}\n\t}\n\tif count == 0 {\n\t\treturn 0\n\t}\n\treturn float64(total) / float64(count)\n}\n",
+    "modified": "// Student submission for the statistics exercise.\n// Written and tested by the student.\npackage stats\n\n// AveragePositive returns the average of the positive values.\nfunc AveragePositive(values []int) float64 {\n\ttotal := 0\n\tcount := 0\n\t// the next statement is explained here\n\tfor _, v := range values {\n\t\t// skip zero and negative values\n\t\t// the next statement is explained here\n\t\tif v > 0 {\n\t\t\ttotal = total + v\n\t\t\tcount = count + 1\n\t\t}\n\t}\n\t// the next statement is explained here\n\tif count == 0 {\n\t\treturn 0\n\t}\n\treturn float64(total) / float64(count)\n}\n"
+  },
+  {
+    "id": "TC15",
+    "language": "Go",
+    "transformation": "change existing comments",
+    "original_filename": "go.go",
+    "modified_filename": "go.go",
+    "original": "package stats\n\n// AveragePositive returns the average of the positive values.\nfunc AveragePositive(values []int) float64 {\n\ttotal := 0\n\tcount := 0\n\tfor _, v := range values {\n\t\t// skip zero and negative values\n\t\tif v > 0 {\n\t\t\ttotal = total + v\n\t\t\tcount = count + 1\n\t\t}\n\t}\n\tif count == 0 {\n\t\treturn 0\n\t}\n\treturn float64(total) / float64(count)\n}\n",
+    "modified": "package stats\n\n// Computes a mean over strictly positive inputs only.\nfunc AveragePositive(values []int) float64 {\n\ttotal := 0\n\tcount := 0\n\tfor _, v := range values {\n\t\t// ignore anything that is not greater than zero\n\t\tif v > 0 {\n\t\t\ttotal = total + v\n\t\t\tcount = count + 1\n\t\t}\n\t}\n\tif count == 0 {\n\t\treturn 0\n\t}\n\treturn float64(total) / float64(count)\n}\n"
+  },
+  {
+    "id": "TC16",
+    "language": "Go",
+    "transformation": "remove comments from one submission",
+    "original_filename": "go.go",
+    "modified_filename": "go.go",
+    "original": "package stats\n\n// AveragePositive returns the average of the positive values.\nfunc AveragePositive(values []int) float64 {\n\ttotal := 0\n\tcount := 0\n\tfor _, v := range values {\n\t\t// skip zero and negative values\n\t\tif v > 0 {\n\t\t\ttotal = total + v\n\t\t\tcount = count + 1\n\t\t}\n\t}\n\tif count == 0 {\n\t\treturn 0\n\t}\n\treturn float64(total) / float64(count)\n}\n",
+    "modified": "package stats\n\nfunc AveragePositive(values []int) float64 {\n\ttotal := 0\n\tcount := 0\n\tfor _, v := range values {\n\t\tif v > 0 {\n\t\t\ttotal = total + v\n\t\t\tcount = count + 1\n\t\t}\n\t}\n\tif count == 0 {\n\t\treturn 0\n\t}\n\treturn float64(total) / float64(count)\n}\n"
+  },
+  {
+    "id": "TC17",
+    "language": "Go",
+    "transformation": "change line endings (LF -> CRLF)",
+    "original_filename": "go.go",
+    "modified_filename": "go.go",
+    "original": "package stats\n\n// AveragePositive returns the average of the positive values.\nfunc AveragePositive(values []int) float64 {\n\ttotal := 0\n\tcount := 0\n\tfor _, v := range values {\n\t\t// skip zero and negative values\n\t\tif v > 0 {\n\t\t\ttotal = total + v\n\t\t\tcount = count + 1\n\t\t}\n\t}\n\tif count == 0 {\n\t\treturn 0\n\t}\n\treturn float64(total) / float64(count)\n}\n",
+    "modified": "package stats\r\n\r\n// AveragePositive returns the average of the positive values.\r\nfunc AveragePositive(values []int) float64 {\r\n\ttotal := 0\r\n\tcount := 0\r\n\tfor _, v := range values {\r\n\t\t// skip zero and negative values\r\n\t\tif v > 0 {\r\n\t\t\ttotal = total + v\r\n\t\t\tcount = count + 1\r\n\t\t}\r\n\t}\r\n\tif count == 0 {\r\n\t\treturn 0\r\n\t}\r\n\treturn float64(total) / float64(count)\r\n}\r\n"
+  },
+  {
+    "id": "TC18",
+    "language": "Go",
+    "transformation": "change the filename, identical source",
+    "original_filename": "go.go",
+    "modified_filename": "submission_go_v2.go",
+    "original": "package stats\n\n// AveragePositive returns the average of the positive values.\nfunc AveragePositive(values []int) float64 {\n\ttotal := 0\n\tcount := 0\n\tfor _, v := range values {\n\t\t// skip zero and negative values\n\t\tif v > 0 {\n\t\t\ttotal = total + v\n\t\t\tcount = count + 1\n\t\t}\n\t}\n\tif count == 0 {\n\t\treturn 0\n\t}\n\treturn float64(total) / float64(count)\n}\n",
+    "modified": "package stats\n\n// AveragePositive returns the average of the positive values.\nfunc AveragePositive(values []int) float64 {\n\ttotal := 0\n\tcount := 0\n\tfor _, v := range values {\n\t\t// skip zero and negative values\n\t\tif v > 0 {\n\t\t\ttotal = total + v\n\t\t\tcount = count + 1\n\t\t}\n\t}\n\tif count == 0 {\n\t\treturn 0\n\t}\n\treturn float64(total) / float64(count)\n}\n"
+  },
+  {
+    "id": "TC08",
+    "language": "PHP",
+    "transformation": "identical copy (baseline)",
+    "original_filename": "php.php",
+    "modified_filename": "php.php",
+    "original": "<?php\n// Average of the positive values in an array.\nfunction averagePositive(array $values) {\n    $total = 0;\n    $count = 0;\n    foreach ($values as $v) {\n        // skip zero and negative values\n        if ($v > 0) {\n            $total = $total + $v;\n            $count = $count + 1;\n        }\n    }\n    if ($count == 0) {\n        return 0;\n    }\n    return $total / $count;\n}\n",
+    "modified": "<?php\n// Average of the positive values in an array.\nfunction averagePositive(array $values) {\n    $total = 0;\n    $count = 0;\n    foreach ($values as $v) {\n        // skip zero and negative values\n        if ($v > 0) {\n            $total = $total + $v;\n            $count = $count + 1;\n        }\n    }\n    if ($count == 0) {\n        return 0;\n    }\n    return $total / $count;\n}\n"
+  },
+  {
+    "id": "TC10",
+    "language": "PHP",
+    "transformation": "change indentation",
+    "original_filename": "php.php",
+    "modified_filename": "php.php",
+    "original": "<?php\n// Average of the positive values in an array.\nfunction averagePositive(array $values) {\n    $total = 0;\n    $count = 0;\n    foreach ($values as $v) {\n        // skip zero and negative values\n        if ($v > 0) {\n            $total = $total + $v;\n            $count = $count + 1;\n        }\n    }\n    if ($count == 0) {\n        return 0;\n    }\n    return $total / $count;\n}\n",
+    "modified": "<?php\n// Average of the positive values in an array.\nfunction averagePositive(array $values) {\n  $total = 0;\n  $count = 0;\n  foreach ($values as $v) {\n    // skip zero and negative values\n    if ($v > 0) {\n      $total = $total + $v;\n      $count = $count + 1;\n    }\n  }\n  if ($count == 0) {\n    return 0;\n  }\n  return $total / $count;\n}\n"
+  },
+  {
+    "id": "TC11",
+    "language": "PHP",
+    "transformation": "add blank lines",
+    "original_filename": "php.php",
+    "modified_filename": "php.php",
+    "original": "<?php\n// Average of the positive values in an array.\nfunction averagePositive(array $values) {\n    $total = 0;\n    $count = 0;\n    foreach ($values as $v) {\n        // skip zero and negative values\n        if ($v > 0) {\n            $total = $total + $v;\n            $count = $count + 1;\n        }\n    }\n    if ($count == 0) {\n        return 0;\n    }\n    return $total / $count;\n}\n",
+    "modified": "<?php\n\n// Average of the positive values in an array.\n\nfunction averagePositive(array $values) {\n\n    $total = 0;\n\n    $count = 0;\n\n    foreach ($values as $v) {\n\n        // skip zero and negative values\n\n        if ($v > 0) {\n\n            $total = $total + $v;\n\n            $count = $count + 1;\n\n        }\n\n    }\n\n    if ($count == 0) {\n\n        return 0;\n\n    }\n\n    return $total / $count;\n\n}\n\n"
+  },
+  {
+    "id": "TC12",
+    "language": "PHP",
+    "transformation": "change spaces around operators",
+    "original_filename": "php.php",
+    "modified_filename": "php.php",
+    "original": "<?php\n// Average of the positive values in an array.\nfunction averagePositive(array $values) {\n    $total = 0;\n    $count = 0;\n    foreach ($values as $v) {\n        // skip zero and negative values\n        if ($v > 0) {\n            $total = $total + $v;\n            $count = $count + 1;\n        }\n    }\n    if ($count == 0) {\n        return 0;\n    }\n    return $total / $count;\n}\n",
+    "modified": "<?php\n// Average of the positive values in an array.\nfunction averagePositive(array $values) {\n    $total=0;\n    $count=0;\n    foreach ($values as $v) {\n        // skip zero and negative values\n        if ($v>0) {\n            $total=$total+$v;\n            $count=$count+1;\n        }\n    }\n    if ($count==0) {\n        return 0;\n    }\n    return $total/$count;\n}\n"
+  },
+  {
+    "id": "TC13",
+    "language": "PHP",
+    "transformation": "change spaces around commas and parentheses",
+    "original_filename": "php.php",
+    "modified_filename": "php.php",
+    "original": "<?php\n// Average of the positive values in an array.\nfunction averagePositive(array $values) {\n    $total = 0;\n    $count = 0;\n    foreach ($values as $v) {\n        // skip zero and negative values\n        if ($v > 0) {\n            $total = $total + $v;\n            $count = $count + 1;\n        }\n    }\n    if ($count == 0) {\n        return 0;\n    }\n    return $total / $count;\n}\n",
+    "modified": "<?php\n// Average of the positive values in an array.\nfunction averagePositive( array $values ) {\n    $total = 0;\n    $count = 0;\n    foreach ( $values as $v ) {\n        // skip zero and negative values\n        if ( $v > 0 ) {\n            $total = $total + $v;\n            $count = $count + 1;\n        }\n    }\n    if ( $count == 0 ) {\n        return 0;\n    }\n    return $total / $count;\n}\n"
+  },
+  {
+    "id": "TC14",
+    "language": "PHP",
+    "transformation": "add comments to one submission",
+    "original_filename": "php.php",
+    "modified_filename": "php.php",
+    "original": "<?php\n// Average of the positive values in an array.\nfunction averagePositive(array $values) {\n    $total = 0;\n    $count = 0;\n    foreach ($values as $v) {\n        // skip zero and negative values\n        if ($v > 0) {\n            $total = $total + $v;\n            $count = $count + 1;\n        }\n    }\n    if ($count == 0) {\n        return 0;\n    }\n    return $total / $count;\n}\n",
+    "modified": "<?php\n// Student submission for the statistics exercise.\n// Written and tested by the student.\n// Average of the positive values in an array.\nfunction averagePositive(array $values) {\n    $total = 0;\n    $count = 0;\n    // the next statement is explained here\n    foreach ($values as $v) {\n        // skip zero and negative values\n        // the next statement is explained here\n        if ($v > 0) {\n            $total = $total + $v;\n            $count = $count + 1;\n        }\n    }\n    // the next statement is explained here\n    if ($count == 0) {\n        return 0;\n    }\n    return $total / $count;\n}\n"
+  },
+  {
+    "id": "TC15",
+    "language": "PHP",
+    "transformation": "change existing comments",
+    "original_filename": "php.php",
+    "modified_filename": "php.php",
+    "original": "<?php\n// Average of the positive values in an array.\nfunction averagePositive(array $values) {\n    $total = 0;\n    $count = 0;\n    foreach ($values as $v) {\n        // skip zero and negative values\n        if ($v > 0) {\n            $total = $total + $v;\n            $count = $count + 1;\n        }\n    }\n    if ($count == 0) {\n        return 0;\n    }\n    return $total / $count;\n}\n",
+    "modified": "<?php\n// Computes a mean over strictly positive inputs only.\nfunction averagePositive(array $values) {\n    $total = 0;\n    $count = 0;\n    foreach ($values as $v) {\n        // ignore anything that is not greater than zero\n        if ($v > 0) {\n            $total = $total + $v;\n            $count = $count + 1;\n        }\n    }\n    if ($count == 0) {\n        return 0;\n    }\n    return $total / $count;\n}\n"
+  },
+  {
+    "id": "TC16",
+    "language": "PHP",
+    "transformation": "remove comments from one submission",
+    "original_filename": "php.php",
+    "modified_filename": "php.php",
+    "original": "<?php\n// Average of the positive values in an array.\nfunction averagePositive(array $values) {\n    $total = 0;\n    $count = 0;\n    foreach ($values as $v) {\n        // skip zero and negative values\n        if ($v > 0) {\n            $total = $total + $v;\n            $count = $count + 1;\n        }\n    }\n    if ($count == 0) {\n        return 0;\n    }\n    return $total / $count;\n}\n",
+    "modified": "<?php\nfunction averagePositive(array $values) {\n    $total = 0;\n    $count = 0;\n    foreach ($values as $v) {\n        if ($v > 0) {\n            $total = $total + $v;\n            $count = $count + 1;\n        }\n    }\n    if ($count == 0) {\n        return 0;\n    }\n    return $total / $count;\n}\n"
+  },
+  {
+    "id": "TC17",
+    "language": "PHP",
+    "transformation": "change line endings (LF -> CRLF)",
+    "original_filename": "php.php",
+    "modified_filename": "php.php",
+    "original": "<?php\n// Average of the positive values in an array.\nfunction averagePositive(array $values) {\n    $total = 0;\n    $count = 0;\n    foreach ($values as $v) {\n        // skip zero and negative values\n        if ($v > 0) {\n            $total = $total + $v;\n            $count = $count + 1;\n        }\n    }\n    if ($count == 0) {\n        return 0;\n    }\n    return $total / $count;\n}\n",
+    "modified": "<?php\r\n// Average of the positive values in an array.\r\nfunction averagePositive(array $values) {\r\n    $total = 0;\r\n    $count = 0;\r\n    foreach ($values as $v) {\r\n        // skip zero and negative values\r\n        if ($v > 0) {\r\n            $total = $total + $v;\r\n            $count = $count + 1;\r\n        }\r\n    }\r\n    if ($count == 0) {\r\n        return 0;\r\n    }\r\n    return $total / $count;\r\n}\r\n"
+  },
+  {
+    "id": "TC18",
+    "language": "PHP",
+    "transformation": "change the filename, identical source",
+    "original_filename": "php.php",
+    "modified_filename": "submission_php_v2.php",
+    "original": "<?php\n// Average of the positive values in an array.\nfunction averagePositive(array $values) {\n    $total = 0;\n    $count = 0;\n    foreach ($values as $v) {\n        // skip zero and negative values\n        if ($v > 0) {\n            $total = $total + $v;\n            $count = $count + 1;\n        }\n    }\n    if ($count == 0) {\n        return 0;\n    }\n    return $total / $count;\n}\n",
+    "modified": "<?php\n// Average of the positive values in an array.\nfunction averagePositive(array $values) {\n    $total = 0;\n    $count = 0;\n    foreach ($values as $v) {\n        // skip zero and negative values\n        if ($v > 0) {\n            $total = $total + $v;\n            $count = $count + 1;\n        }\n    }\n    if ($count == 0) {\n        return 0;\n    }\n    return $total / $count;\n}\n"
+  },
+  {
+    "id": "TC09",
+    "language": "Ruby",
+    "transformation": "identical copy (baseline)",
+    "original_filename": "ruby.rb",
+    "modified_filename": "ruby.rb",
+    "original": "# Average of the positive values in a list.\ndef average_positive(values)\n  total = 0\n  count = 0\n  values.each do |v|\n    # skip zero and negative values\n    if v > 0\n      total = total + v\n      count = count + 1\n    end\n  end\n  return 0 if count == 0\n  total.to_f / count\nend\n",
+    "modified": "# Average of the positive values in a list.\ndef average_positive(values)\n  total = 0\n  count = 0\n  values.each do |v|\n    # skip zero and negative values\n    if v > 0\n      total = total + v\n      count = count + 1\n    end\n  end\n  return 0 if count == 0\n  total.to_f / count\nend\n"
+  },
+  {
+    "id": "TC10",
+    "language": "Ruby",
+    "transformation": "change indentation",
+    "original_filename": "ruby.rb",
+    "modified_filename": "ruby.rb",
+    "original": "# Average of the positive values in a list.\ndef average_positive(values)\n  total = 0\n  count = 0\n  values.each do |v|\n    # skip zero and negative values\n    if v > 0\n      total = total + v\n      count = count + 1\n    end\n  end\n  return 0 if count == 0\n  total.to_f / count\nend\n",
+    "modified": "# Average of the positive values in a list.\ndef average_positive(values)\n    total = 0\n    count = 0\n    values.each do |v|\n        # skip zero and negative values\n        if v > 0\n            total = total + v\n            count = count + 1\n        end\n    end\n    return 0 if count == 0\n    total.to_f / count\nend\n"
+  },
+  {
+    "id": "TC11",
+    "language": "Ruby",
+    "transformation": "add blank lines",
+    "original_filename": "ruby.rb",
+    "modified_filename": "ruby.rb",
+    "original": "# Average of the positive values in a list.\ndef average_positive(values)\n  total = 0\n  count = 0\n  values.each do |v|\n    # skip zero and negative values\n    if v > 0\n      total = total + v\n      count = count + 1\n    end\n  end\n  return 0 if count == 0\n  total.to_f / count\nend\n",
+    "modified": "# Average of the positive values in a list.\n\ndef average_positive(values)\n\n  total = 0\n\n  count = 0\n\n  values.each do |v|\n\n    # skip zero and negative values\n\n    if v > 0\n\n      total = total + v\n\n      count = count + 1\n\n    end\n\n  end\n\n  return 0 if count == 0\n\n  total.to_f / count\n\nend\n\n"
+  },
+  {
+    "id": "TC12",
+    "language": "Ruby",
+    "transformation": "change spaces around operators",
+    "original_filename": "ruby.rb",
+    "modified_filename": "ruby.rb",
+    "original": "# Average of the positive values in a list.\ndef average_positive(values)\n  total = 0\n  count = 0\n  values.each do |v|\n    # skip zero and negative values\n    if v > 0\n      total = total + v\n      count = count + 1\n    end\n  end\n  return 0 if count == 0\n  total.to_f / count\nend\n",
+    "modified": "# Average of the positive values in a list.\ndef average_positive(values)\n  total=0\n  count=0\n  values.each do |v|\n    # skip zero and negative values\n    if v>0\n      total=total+v\n      count=count+1\n    end\n  end\n  return 0 if count==0\n  total.to_f/count\nend\n"
+  },
+  {
+    "id": "TC13",
+    "language": "Ruby",
+    "transformation": "change spaces around commas and parentheses",
+    "original_filename": "ruby.rb",
+    "modified_filename": "ruby.rb",
+    "original": "# Average of the positive values in a list.\ndef average_positive(values)\n  total = 0\n  count = 0\n  values.each do |v|\n    # skip zero and negative values\n    if v > 0\n      total = total + v\n      count = count + 1\n    end\n  end\n  return 0 if count == 0\n  total.to_f / count\nend\n",
+    "modified": "# Average of the positive values in a list.\ndef average_positive( values )\n  total = 0\n  count = 0\n  values.each do |v|\n    # skip zero and negative values\n    if v > 0\n      total = total + v\n      count = count + 1\n    end\n  end\n  return 0 if count == 0\n  total.to_f / count\nend\n"
+  },
+  {
+    "id": "TC14",
+    "language": "Ruby",
+    "transformation": "add comments to one submission",
+    "original_filename": "ruby.rb",
+    "modified_filename": "ruby.rb",
+    "original": "# Average of the positive values in a list.\ndef average_positive(values)\n  total = 0\n  count = 0\n  values.each do |v|\n    # skip zero and negative values\n    if v > 0\n      total = total + v\n      count = count + 1\n    end\n  end\n  return 0 if count == 0\n  total.to_f / count\nend\n",
+    "modified": "# Student submission for the statistics exercise.\n# Written and tested by the student.\n# Average of the positive values in a list.\ndef average_positive(values)\n  total = 0\n  count = 0\n  # the next statement is explained here\n  values.each do |v|\n    # skip zero and negative values\n    # the next statement is explained here\n    if v > 0\n      total = total + v\n      count = count + 1\n    end\n  end\n  return 0 if count == 0\n  total.to_f / count\nend\n"
+  },
+  {
+    "id": "TC15",
+    "language": "Ruby",
+    "transformation": "change existing comments",
+    "original_filename": "ruby.rb",
+    "modified_filename": "ruby.rb",
+    "original": "# Average of the positive values in a list.\ndef average_positive(values)\n  total = 0\n  count = 0\n  values.each do |v|\n    # skip zero and negative values\n    if v > 0\n      total = total + v\n      count = count + 1\n    end\n  end\n  return 0 if count == 0\n  total.to_f / count\nend\n",
+    "modified": "# Computes a mean over strictly positive inputs only.\ndef average_positive(values)\n  total = 0\n  count = 0\n  values.each do |v|\n    # ignore anything that is not greater than zero\n    if v > 0\n      total = total + v\n      count = count + 1\n    end\n  end\n  return 0 if count == 0\n  total.to_f / count\nend\n"
+  },
+  {
+    "id": "TC16",
+    "language": "Ruby",
+    "transformation": "remove comments from one submission",
+    "original_filename": "ruby.rb",
+    "modified_filename": "ruby.rb",
+    "original": "# Average of the positive values in a list.\ndef average_positive(values)\n  total = 0\n  count = 0\n  values.each do |v|\n    # skip zero and negative values\n    if v > 0\n      total = total + v\n      count = count + 1\n    end\n  end\n  return 0 if count == 0\n  total.to_f / count\nend\n",
+    "modified": "def average_positive(values)\n  total = 0\n  count = 0\n  values.each do |v|\n    if v > 0\n      total = total + v\n      count = count + 1\n    end\n  end\n  return 0 if count == 0\n  total.to_f / count\nend\n"
+  },
+  {
+    "id": "TC17",
+    "language": "Ruby",
+    "transformation": "change line endings (LF -> CRLF)",
+    "original_filename": "ruby.rb",
+    "modified_filename": "ruby.rb",
+    "original": "# Average of the positive values in a list.\ndef average_positive(values)\n  total = 0\n  count = 0\n  values.each do |v|\n    # skip zero and negative values\n    if v > 0\n      total = total + v\n      count = count + 1\n    end\n  end\n  return 0 if count == 0\n  total.to_f / count\nend\n",
+    "modified": "# Average of the positive values in a list.\r\ndef average_positive(values)\r\n  total = 0\r\n  count = 0\r\n  values.each do |v|\r\n    # skip zero and negative values\r\n    if v > 0\r\n      total = total + v\r\n      count = count + 1\r\n    end\r\n  end\r\n  return 0 if count == 0\r\n  total.to_f / count\r\nend\r\n"
+  },
+  {
+    "id": "TC18",
+    "language": "Ruby",
+    "transformation": "change the filename, identical source",
+    "original_filename": "ruby.rb",
+    "modified_filename": "submission_ruby_v2.rb",
+    "original": "# Average of the positive values in a list.\ndef average_positive(values)\n  total = 0\n  count = 0\n  values.each do |v|\n    # skip zero and negative values\n    if v > 0\n      total = total + v\n      count = count + 1\n    end\n  end\n  return 0 if count == 0\n  total.to_f / count\nend\n",
+    "modified": "# Average of the positive values in a list.\ndef average_positive(values)\n  total = 0\n  count = 0\n  values.each do |v|\n    # skip zero and negative values\n    if v > 0\n      total = total + v\n      count = count + 1\n    end\n  end\n  return 0 if count == 0\n  total.to_f / count\nend\n"
+  }
+]

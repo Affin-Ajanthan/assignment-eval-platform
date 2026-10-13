@@ -345,3 +345,66 @@ def grade_file(path):
 ''',
 }
 INDEPENDENT_SOLUTIONS = {k: textwrap.dedent(v) for k, v in INDEPENDENT_SOLUTIONS.items()}
+
+
+# C / C++ / C# samples (languages added by unixcoder-base-nine).
+C_SORT = """
+#include <stdio.h>
+/* bubble sort an array of ints in place */
+void sort(int *a, int n) {
+    for (int i = 0; i < n - 1; i++)
+        for (int j = 0; j < n - i - 1; j++)
+            if (a[j] > a[j + 1]) { int t = a[j]; a[j] = a[j + 1]; a[j + 1] = t; }
+}
+int main(void) { int a[] = {5, 2, 9, 1}; sort(a, 4); for (int i = 0; i < 4; i++) printf("%d ", a[i]); return 0; }
+"""
+# Same algorithm, renamed and restructured (while loops, swapped flag, helper).
+C_SORT_COPY = """
+#include <stdio.h>
+static void swap(int *x, int *y) { int tmp = *x; *x = *y; *y = tmp; }
+void order_values(int *vals, int count) {
+    int changed = 1, pass = 0;
+    while (changed) {
+        changed = 0;
+        int k = 0;
+        while (k < count - pass - 1) {
+            if (vals[k] > vals[k + 1]) { swap(&vals[k], &vals[k + 1]); changed = 1; }
+            k++;
+        }
+        pass++;
+    }
+}
+int main(void) { int vals[] = {5, 2, 9, 1}; order_values(vals, 4); for (int k = 0; k < 4; k++) printf("%d ", vals[k]); return 0; }
+"""
+CPP_STACK = """
+#include <iostream>
+#include <vector>
+#include <stdexcept>
+template <typename T> class Stack {
+    std::vector<T> items;
+public:
+    void push(const T& v) { items.push_back(v); }
+    T pop() { if (items.empty()) throw std::runtime_error("empty"); T v = items.back(); items.pop_back(); return v; }
+    bool empty() const { return items.empty(); }
+};
+int main() { Stack<int> s; s.push(1); s.push(2); std::cout << s.pop() << std::endl; }
+"""
+CS_GRADES = """
+using System; using System.Collections.Generic; using System.IO; using System.Linq;
+class Grades {
+    static Dictionary<string, double> LoadScores(string path) {
+        var scores = new Dictionary<string, double>();
+        foreach (var line in File.ReadAllLines(path)) { var parts = line.Trim().Split(','); scores[parts[0]] = double.Parse(parts[1]); }
+        return scores;
+    }
+    static string LetterGrade(double score) {
+        if (score >= 90) return "A"; else if (score >= 80) return "B"; else if (score >= 70) return "C"; else if (score >= 60) return "D";
+        return "F";
+    }
+    static void Main(string[] args) {
+        var scores = LoadScores(args[0]);
+        foreach (var kv in scores.OrderBy(k => k.Key)) Console.WriteLine($"{kv.Key} {kv.Value} {LetterGrade(kv.Value)}");
+        Console.WriteLine("class average: " + scores.Values.Average());
+    }
+}
+"""
