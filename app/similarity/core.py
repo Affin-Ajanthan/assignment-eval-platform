@@ -19,6 +19,7 @@ caveats also called out in the platform plan's Risks section.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import keyword
 import re
@@ -123,10 +124,19 @@ def normalize_tokens(source: str, filename: str = "") -> list[str]:
 # Winnowing fingerprints (Schleimer, Wilkerson & Aiken, 2003)
 # --------------------------------------------------------------------------
 
+def _stable_hash(gram: list[str]) -> int:
+    """64-bit hash that is the same in every process. Python's built-in
+    ``hash()`` of strings is randomized per process (PYTHONHASHSEED), which
+    changes which k-grams winnowing selects and so made the same two files
+    score differently from one run to the next."""
+    digest = hashlib.blake2b("".join(gram).encode("utf-8"), digest_size=8).digest()
+    return int.from_bytes(digest, "big")
+
+
 def _kgram_hashes(tokens: list[str], k: int) -> list[int]:
     if len(tokens) < k:
-        return [hash(tuple(tokens))] if tokens else []
-    return [hash(tuple(tokens[i:i + k])) for i in range(len(tokens) - k + 1)]
+        return [_stable_hash(tokens)] if tokens else []
+    return [_stable_hash(tokens[i:i + k]) for i in range(len(tokens) - k + 1)]
 
 
 def winnow(hashes: list[int], window_size: int) -> set[int]:
@@ -169,6 +179,27 @@ def fingerprint_source(submission_id: str, filename: str, source: str,
         filename=filename,
         token_count=len(tokens),
         hashes=winnow(kgram_hashes, window_size),
+    )
+
+
+def subtract_starter(fp: Fingerprint, starter: Fingerprint | None) -> Fingerprint:
+    """Drop instructor starter-code fingerprints from one file's fingerprint.
+
+    Code every student was given is not evidence of copying, but it alone
+    pushes containment over the flag threshold for independent solutions.
+    Only files with the starter's extension are touched: that's what makes
+    both go through the same normalizer in `normalize_tokens`, so their
+    hashes are comparable. `token_count` is left as-is (it describes the
+    file, not the comparison)."""
+    if starter is None or not starter.hashes:
+        return fp
+    if Path(fp.filename).suffix.lower() != Path(starter.filename).suffix.lower():
+        return fp
+    return Fingerprint(
+        submission_id=fp.submission_id,
+        filename=fp.filename,
+        token_count=fp.token_count,
+        hashes=fp.hashes - starter.hashes,
     )
 
 

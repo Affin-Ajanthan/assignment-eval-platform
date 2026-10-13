@@ -162,7 +162,8 @@ Winnowing fingerprints (Jaccard + containment) catch literal and
 renamed copies, but a copy that's been rewritten -- functions
 reordered, loops restructured -- can share few k-grams with its
 source. `app/similarity/semantic.py` adds Microsoft's
-`microsoft/unixcoder-base` as an extra signal:
+`microsoft/unixcoder-base-nine` (9 languages: Python, Java, JavaScript, PHP,
+Ruby, Go, C, C++, C#; pinned to one revision) as an extra signal:
 
 - Each submission's code is normalized (comments stripped,
   identifiers anonymized), split into overlapping 512-token chunks
@@ -191,6 +192,36 @@ Thresholds were calibrated by hand on a small sample (renamed or
 restructured copies scored 0.82-0.91; five independently written
 solutions to the same task scored up to 0.78), so check them against
 a real cohort before relying on them.
+
+### Report similarity (PDF)
+
+`POST /subjects/{id}/assignments/{name}/check-report-similarity`, the
+"Check report similarity" button in the instructor's Similarity check
+card, compares the PDF reports of one assignment pairwise
+(`app/similarity/report_similarity.py`):
+
+1. **Extract** each page's text with PyMuPDF.
+2. **Clean**: drop page-number lines and running headers/footers (lines
+   near the top or bottom of a page, digits ignored, repeated on at least
+   half the pages), rejoin hyphenated words, collapse whitespace.
+3. **Winnowing over words** (6-word k-grams, window 5): Jaccard and
+   containment, plus the actual **matching passages**: identical runs of
+   10+ words, shown side by side. Fingerprints found in most reports
+   (the assignment brief, a template) are ignored.
+4. **Semantic**: all-MiniLM-L6-v2 embeddings of ~120-word chunks; each
+   chunk is matched to its most similar chunk in the other report, in
+   both directions, so one copied or paraphrased section scores high.
+5. **Combined flag**: "high" for identical passages (Jaccard >= 0.30 or
+   containment >= 0.40); "review" for very similar meaning without them
+   (>= 0.85, raised by the same cohort-outlier rule as code once there
+   are 10+ pairs).
+
+Results are a review signal only: nothing is stored, so report
+similarity never changes a mark. DOCX reports, scanned PDFs (no text
+layer) and reports under 50 words are listed as not compared. The
+semantic part shares the MiniLM model with cross-modal consistency, so
+`CROSS_MODAL_SEMANTIC=0` turns it off too. The thresholds are
+**uncalibrated**; check them against real reports before relying on them.
 
 ### Cross-modal semantic consistency (MiniLM)
 
@@ -445,3 +476,13 @@ rejection), covering the same flow the automated backend tests cover.
   model on first use; without it (or without `faster-whisper`
   installed), the pipeline degrades to an empty transcript
   automatically rather than failing.
+
+
+
+
+Role	Email	Password
+Admin	admin@school.local	            Admin@123
+Instructor	 instructor@school.local	Instructor@123
+Student 1	student1@school.local	       Student1@123
+Student 2	student2@school.local      	Student2@123
+Student 3	student3@school.local	      Student3@123

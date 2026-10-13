@@ -21,6 +21,8 @@ type FormState = {
   dueTime: string;
   rubricId: string; // "" = no rubric
   types: SubmissionType[];
+  starterCode: string; // "" = no starter code
+  starterFilename: string;
 };
 
 const TYPE_OPTIONS: { value: SubmissionType; label: string; hint: string }[] = [
@@ -36,9 +38,20 @@ function toggleType(current: SubmissionType[], t: SubmissionType): SubmissionTyp
 }
 
 const EMPTY: FormState = {
-  name: "", description: "", fromDate: "", fromTime: "", dueDate: "", dueTime: "", rubricId: "",
+  name: "",
+  description: "",
+  fromDate: "",
+  fromTime: "",
+  dueDate: "",
+  dueTime: "",
+  rubricId: "",
   types: ["code", "report", "video"],
+  starterCode: "",
+  starterFilename: "",
 };
+
+// Must match the backend's _CODE_EXTENSIONS (app/main.py).
+const CODE_EXTENSIONS = [".py", ".java", ".js", ".c", ".cpp", ".cc", ".cxx", ".hh", ".hxx", ".h", ".hpp", ".cs", ".go", ".rb", ".php"];
 
 const input = "mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm";
 
@@ -78,6 +91,8 @@ export default function AssignmentsSection({
       dueTime: due.time,
       rubricId: a.rubric_id ? String(a.rubric_id) : "",
       types: a.submission_types,
+      starterCode: a.starter_code,
+      starterFilename: a.starter_code_filename,
     });
   }
 
@@ -99,6 +114,14 @@ export default function AssignmentsSection({
     if (due <= from) {
       return setMsg({ text: "The submission deadline must be later than the available-from date and time.", kind: "error" });
     }
+    const hasStarter = form.starterCode.trim() !== "";
+    const starterExt = form.starterFilename.trim().toLowerCase().match(/\.[a-z0-9]+$/)?.[0] ?? "";
+    if (hasStarter && !CODE_EXTENSIONS.includes(starterExt)) {
+      return setMsg({
+        text: `Give the starter code a file name with a code extension (${CODE_EXTENSIONS.join(", ")}), e.g. starter.py.`,
+        kind: "error",
+      });
+    }
 
     if (form.types.length === 0) return setMsg({ text: "Choose at least one submission type.", kind: "error" });
     const body = {
@@ -108,6 +131,8 @@ export default function AssignmentsSection({
       deadline: due.toISOString(),
       rubric_id: form.rubricId ? parseInt(form.rubricId, 10) : null,
       submission_types: form.types,
+      starter_code: hasStarter ? form.starterCode : "",
+      starter_code_filename: hasStarter ? form.starterFilename.trim() : "",
     };
     setSaving(true);
     try {
@@ -280,6 +305,32 @@ export default function AssignmentsSection({
           </p>
         )}
 
+        <label className="mt-3 block text-sm font-semibold" htmlFor="assignment-starter-code">
+          Starter code (optional)
+        </label>
+        <p className="text-xs text-gray-600">
+          Code you give every student. It is left out of the token similarity check, so students aren&apos;t flagged
+          for sharing it. Only compared against submitted files with the same extension. Not shown to students.
+        </p>
+        <input
+          aria-label="Starter code file name"
+          maxLength={200}
+          value={form.starterFilename}
+          onChange={(e) => set("starterFilename", e.target.value)}
+          placeholder="starter.py"
+          className={input}
+        />
+        <textarea
+          id="assignment-starter-code"
+          rows={6}
+          maxLength={200000}
+          value={form.starterCode}
+          onChange={(e) => set("starterCode", e.target.value)}
+          placeholder="Paste the starter code here..."
+          spellCheck={false}
+          className={`${input} font-mono`}
+        />
+
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="submit"
@@ -341,6 +392,12 @@ export default function AssignmentsSection({
                 <dd>{formatDateTime(a.deadline)}</dd>
                 <dt className="font-semibold">Rubric</dt>
                 <dd>{a.rubric_name ? `${a.rubric_name} (${a.max_points} pts)` : "None selected"}</dd>
+                <dt className="font-semibold">Starter code</dt>
+                <dd>
+                  {a.starter_code
+                    ? `${a.starter_code_filename} (${a.starter_code.split("\n").length} lines, excluded from similarity)`
+                    : "None"}
+                </dd>
                 <dt className="font-semibold">Submissions</dt>
                 <dd>
                   {a.submission_count} ({a.graded_count} graded)

@@ -147,6 +147,11 @@ class Assignment(Base):
     # Subset of SUBMISSION_TYPES; NULL (assignments made before this option
     # existed) accepts every type.
     submission_types = Column(JSON, nullable=True)
+    # Optional code handed out to every student. Its Winnowing fingerprints
+    # are excluded from the token similarity check (files with the same
+    # extension as starter_code_filename only). Instructor-only.
+    starter_code = Column(String, nullable=True)
+    starter_code_filename = Column(String, nullable=True)
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
