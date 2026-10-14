@@ -485,6 +485,9 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3:4b")
 # and Ollama silently drops the start of an over-long prompt. 8192 covers the
 # current input caps with room to spare.
 OLLAMA_NUM_CTX = int(os.environ.get("OLLAMA_NUM_CTX", "8192"))
+# Longest reply allowed per grading call. The JSON reply is a few hundred tokens;
+# without a cap, a runaway reply keeps the call going until the request times out.
+OLLAMA_NUM_PREDICT = int(os.environ.get("OLLAMA_NUM_PREDICT", "2000"))
 
 
 def _ollama_post(url: str, payload: dict, timeout: float) -> dict:
@@ -549,18 +552,28 @@ class OllamaRubricGrader(RubricGrader):
         self.timeout = timeout
 
     def _ask(self, prompt: str) -> list:
-        response = self.post(f"{self.url}/api/chat", {
-            "model": self.model,
-            "messages": [{"role": "user", "content": prompt}],
-            "stream": False,
-            "think": False,
-            "format": _ollama_response_schema(),
-            "options": {"temperature": 0, "num_ctx": OLLAMA_NUM_CTX},
-        }, self.timeout)
-        try:
-            return json.loads(response["message"]["content"])["criteria"]
-        except (KeyError, TypeError, ValueError) as exc:
-            raise RuntimeError(f"Ollama response was not the expected JSON: {exc}") from exc
+        """One grading call. A timeout, connection error or malformed reply is retried
+        once, so a single bad reply does not fail the whole submission."""
+        last_error: Exception | None = None
+        for _ in range(2):
+            try:
+                response = self.post(f"{self.url}/api/chat", {
+                    "model": self.model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "stream": False,
+                    "think": False,
+                    "format": _ollama_response_schema(),
+                    "options": {"temperature": 0, "num_ctx": OLLAMA_NUM_CTX,
+                                "num_predict": OLLAMA_NUM_PREDICT},
+                }, self.timeout)
+            except (TimeoutError, OSError) as exc:  # includes urllib timeouts and HTTP 500s
+                last_error = exc
+                continue
+            try:
+                return json.loads(response["message"]["content"])["criteria"]
+            except (KeyError, TypeError, ValueError) as exc:
+                last_error = RuntimeError(f"Ollama response was not the expected JSON: {exc}")
+        raise last_error
 
     @staticmethod
     def _to_results(criteria: list[Criterion], entries: list) -> list[CriterionResult]:

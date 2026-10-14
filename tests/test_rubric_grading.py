@@ -140,6 +140,40 @@ def test_ollama_grader_bad_json_raises_runtime_error():
         grader.grade([Criterion(name="X", max_points=10)], _evidence())
 
 
+def test_ollama_grader_caps_reply_length():
+    post = _FakePost([{"name": "X", "score": 10, "justification": "ok"}])
+    OllamaRubricGrader(post=post).grade([Criterion(name="X", max_points=10)], _evidence())
+    assert post.calls[0][1]["options"]["num_predict"] == rubric_grading.OLLAMA_NUM_PREDICT
+
+
+def test_ollama_grader_retries_a_timeout_once():
+    attempts = []
+    good = {"message": {"content": json.dumps({"criteria": [
+        {"name": "X", "checks_total": 1, "checks_met": 1, "checks_partly": 0, "justification": "ok"}]})}}
+
+    def flaky(url, payload, timeout):
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise TimeoutError("timed out")
+        return good
+
+    result = OllamaRubricGrader(post=flaky).grade([Criterion(name="X", max_points=10)], _evidence())
+    assert len(attempts) == 2
+    assert result.criteria[0].score == 10.0
+
+
+def test_ollama_grader_gives_up_after_two_timeouts():
+    attempts = []
+
+    def always_timeout(url, payload, timeout):
+        attempts.append(1)
+        raise TimeoutError("timed out")
+
+    with pytest.raises(TimeoutError):
+        OllamaRubricGrader(post=always_timeout).grade([Criterion(name="X", max_points=10)], _evidence())
+    assert len(attempts) == 2
+
+
 def test_build_default_grader_prefers_ollama_when_available(monkeypatch):
     monkeypatch.setenv("GRADER_BACKEND", "auto")
     monkeypatch.setattr(rubric_grading, "_ollama_available", lambda *a, **k: True)

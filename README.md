@@ -455,7 +455,9 @@ rejection), covering the same flow the automated backend tests cover.
   gets a review flag so the instructor checks the marks for those
   criteria. Each grading call requests a context window of
   `OLLAMA_NUM_CTX` tokens (default 8192) so the prompt is not silently
-  cut off by Ollama. qwen3:4b also tended to grade strong
+  cut off by Ollama, and a reply of at most `OLLAMA_NUM_PREDICT` tokens
+  (default 2000). A timed-out or malformed reply is retried once before
+  the submission is marked failed. qwen3:4b also tended to grade strong
   answers slightly strictly in our evaluation (Mohler short-answer set,
   2,273 answers: MAE 0.82 marks out of 5, 81% within 1 mark, versus
   2.43 / 18% for a keyword baseline); keep instructor override as the
