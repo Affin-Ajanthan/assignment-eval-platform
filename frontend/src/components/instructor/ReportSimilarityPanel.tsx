@@ -76,6 +76,8 @@ export default function ReportSimilarityPanel({
       <p className="mt-1 text-sm text-gray-600">
         Compares the PDF reports of the selected assignment: identical passages and similar meaning. Page numbers,
         running headers/footers and text that appears in most reports (such as the assignment brief) are ignored.
+        Upload the assignment&apos;s question paper or report template as a &ldquo;Report template (PDF)&rdquo; on
+        the assignment, and its text is cut out of every report before comparing.
       </p>
       <button
         type="button"
@@ -208,6 +210,10 @@ export default function ReportSimilarityPanel({
             reports&rdquo;, never an automatic finding of misconduct, and report results never change marks.
           </p>
           <p className="mt-1 text-xs text-gray-500">
+            {result.template_filename &&
+              `Template "${result.template_filename}" cut out of reports (${Object.values(
+                result.template_words_removed
+              ).reduce((sum, n) => sum + n, 0)} words in total) · `}
             {result.common_fingerprints_excluded > 0 &&
               `${result.common_fingerprints_excluded} fingerprint(s) shared by most reports ignored · `}
             {result.semantic.status === "ok" && `Semantic model: ${result.semantic.model}`}

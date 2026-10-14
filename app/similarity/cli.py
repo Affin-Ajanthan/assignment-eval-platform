@@ -28,6 +28,7 @@ from pathlib import Path
 from .ai_heuristics import score_source
 from .core import Fingerprint, compare_all, fingerprint_source
 from .python_cleanup import names_in
+from ..notebook import read_code
 from .semantic import (
     apply_semantic_signal,
     get_semantic_service,
@@ -35,7 +36,7 @@ from .semantic import (
     submissions_needing_semantic,
 )
 
-CODE_EXTENSIONS = {".py", ".java", ".js", ".ts", ".c", ".cpp", ".h", ".hpp", ".cs", ".go", ".rb"}
+CODE_EXTENSIONS = {".py", ".java", ".js", ".ts", ".c", ".cpp", ".h", ".hpp", ".cs", ".go", ".rb", ".ipynb"}
 
 
 def _iter_student_dirs(root: Path):
@@ -55,8 +56,8 @@ def build_fingerprints(submissions_dir: Path) -> dict[str, Fingerprint]:
     for student_dir in _iter_student_dirs(submissions_dir):
         merged = Fingerprint(submission_id=student_dir.name, filename="(all files)", token_count=0)
         for file_path in _iter_code_files(student_dir):
-            source = file_path.read_text(encoding="utf-8", errors="ignore")
-            fp = fingerprint_source(student_dir.name, file_path.name, source)
+            name, source = read_code(file_path)
+            fp = fingerprint_source(student_dir.name, name, source)
             merged.hashes |= fp.hashes
             merged.token_count += fp.token_count
         fingerprints[student_dir.name] = merged
@@ -66,11 +67,11 @@ def build_fingerprints(submissions_dir: Path) -> dict[str, Fingerprint]:
 def build_semantic_sources(submissions_dir: Path) -> dict[str, str]:
     out = {}
     for student_dir in _iter_student_dirs(submissions_dir):
-        files = [(p, p.read_text(encoding="utf-8", errors="ignore")) for p in _iter_code_files(student_dir)]
-        py_names = {p: names_in(src) for p, src in files if p.suffix.lower() == ".py"}
+        files = [(p, *read_code(p)) for p in _iter_code_files(student_dir)]
+        py_names = {p: names_in(src) for p, _, src in files}
         out[student_dir.name] = "\n".join(
-            normalize_code(src, p.name, set().union(*(n for other, n in py_names.items() if other != p)))
-            for p, src in files
+            normalize_code(src, name, set().union(*(n for other, n in py_names.items() if other != p)))
+            for p, name, src in files
         )
     return out
 
@@ -79,7 +80,7 @@ def build_ai_scores(submissions_dir: Path):
     scores = []
     for student_dir in _iter_student_dirs(submissions_dir):
         combined_source = "\n".join(
-            path.read_text(encoding="utf-8", errors="ignore")
+            read_code(path)[1]
             for path in _iter_code_files(student_dir)
         )
         if combined_source.strip():

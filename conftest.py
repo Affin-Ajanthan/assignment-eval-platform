@@ -1,16 +1,34 @@
+import atexit
 import os
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT))
+# Test modules import their shared helpers by plain name (`from helpers
+# import ...`, `from semantic_samples import ...`).
+sys.path.insert(1, str(ROOT / "tests"))
 
-# Start every test session from a clean database. User emails and
-# subject codes are unique-constrained, so leftover data from a
-# previous run (or from manually poking at the API, e.g. during a
-# live UI walkthrough) would otherwise make account-creation tests
-# fail with "already exists" errors that have nothing to do with the
-# code under test.
+# Every test session gets its own empty database and uploads folder in a
+# temporary directory (removed at the end). The app reads PORTAL_DATA_DIR
+# when app.db is first imported, which is below this line, so the real
+# portal.db and uploads/ in the project folder are never opened, changed or
+# deleted by tests. (User emails and subject codes are unique-constrained,
+# which is why each session starts empty.)
+_TEST_DATA_DIR = tempfile.mkdtemp(prefix="portal-tests-")
+os.environ["PORTAL_DATA_DIR"] = _TEST_DATA_DIR
+
+
+def _remove_test_data_dir():
+    # On Windows the SQLite file can't be deleted while a connection is open.
+    if "app.db" in sys.modules:
+        sys.modules["app.db"].engine.dispose()
+    shutil.rmtree(_TEST_DATA_DIR, ignore_errors=True)
+
+
+atexit.register(_remove_test_data_dir)
 # Keep the default UniXcoder service off for the test session so the
 # ordinary API tests never download or load a ~500 MB model. Tests that
 # exercise semantic similarity inject their own service (a fake encoder,
@@ -23,10 +41,6 @@ os.environ["CROSS_MODAL_SEMANTIC"] = "0"
 os.environ["GRADER_BACKEND"] = "heuristic"
 # And the Fast-DetectGPT scoring model (reports fall back to the style heuristic).
 os.environ["AI_TEXT_DETECTION"] = "0"
-
-_portal_db = ROOT / "portal.db"
-if _portal_db.exists():
-    _portal_db.unlink()
 
 # Bootstrap the default admin account directly, rather than relying on
 # app.main's `@app.on_event("startup")` handler -- a bare
@@ -48,3 +62,8 @@ try:
     bootstrap_admin(_db)
 finally:
     _db.close()
+
+
+def pytest_unconfigure(config):
+    """Remove this session's temporary database and uploads at the end."""
+    _remove_test_data_dir()

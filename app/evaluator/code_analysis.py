@@ -20,6 +20,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..notebook import NOTEBOOK_SUFFIX, read_code
+
 _SNAKE_CASE_RE = re.compile(r"^_{0,2}[a-z][a-z0-9_]*$")
 _DECISION_NODES = (
     ast.If, ast.For, ast.While, ast.Try, ast.With, ast.Assert,
@@ -151,13 +153,13 @@ def analyze_generic(source: str, filename: str) -> CodeReport:
 
 def analyze_file(path: Path) -> CodeReport:
     path = Path(path)
-    source = path.read_text(encoding="utf-8", errors="ignore")
-    if path.suffix.lower() == ".py":
+    name, source = read_code(path)  # a notebook's code cells are analyzed as Python
+    if name.lower().endswith(".py"):
         return analyze_python(source, filename=path.name)
     return analyze_generic(source, filename=path.name)
 
 
-_CODE_EXTENSIONS = {".py", ".java", ".js", ".ts", ".c", ".cpp", ".go", ".rb"}
+_CODE_EXTENSIONS = {".py", ".java", ".js", ".ts", ".c", ".cpp", ".go", ".rb", NOTEBOOK_SUFFIX}
 
 
 def read_sources(directory: Path, extensions: set[str] | None = None,
@@ -173,7 +175,7 @@ def read_sources(directory: Path, extensions: set[str] | None = None,
         if remaining <= 0:
             break
         if path.is_file() and path.suffix.lower() in extensions:
-            text = path.read_text(encoding="utf-8", errors="ignore")
+            text = read_code(path)[1]
             limit = min(max_chars_per_file, remaining)
             if len(text) > limit:
                 text = text[:limit] + "\n... [truncated]"

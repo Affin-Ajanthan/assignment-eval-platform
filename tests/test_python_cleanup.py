@@ -123,9 +123,10 @@ def test_multiline_statements_and_unicode_are_cut_exactly():
     assert clean(code) == "def f(): 名前 = 'ü' print(名前)"
 
 
-def test_non_python_files_are_not_touched():
-    js = "let unused = 5;\nconsole.log(1);"
-    assert "5" in normalize_code(js, "a.js")
+def test_languages_without_a_cleanup_are_not_touched():
+    # Python, Java and JavaScript have a cleanup (see also test_ts_cleanup); C does not yet.
+    c_code = "int main() {\n    int unused = 5;\n    return 0;\n}"
+    assert "5" in normalize_code(c_code, "main.c")
 
 
 def test_read_only_method_calls_are_removed_mutating_ones_kept():
