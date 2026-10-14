@@ -314,6 +314,62 @@ _SCORING_SCALE = (
 )
 
 
+# Prompt budgets in characters. They bound the prompt size (num_ctx is 8192
+# tokens); which parts fill them depends on the criteria, not on position.
+CODE_BUDGET = 8000
+REPORT_BUDGET = 6000
+TRANSCRIPT_BUDGET = 3000
+_CHUNK_MAX = 800
+_OMITTED_NOTE = "[... parts omitted for length; they did not match the criteria most closely ...]"
+
+
+def _chunks(text: str) -> list[str]:
+    """Blank-line paragraphs; a paragraph longer than _CHUNK_MAX is split by line,
+    and a single over-long line is cut into pieces."""
+    pieces: list[str] = []
+    for para in re.split(r"\n\s*\n", text):
+        if not para.strip():
+            continue
+        current = ""
+        for line in para.split("\n"):
+            while len(line) > _CHUNK_MAX:
+                if current:
+                    pieces.append(current)
+                    current = ""
+                pieces.append(line[:_CHUNK_MAX])
+                line = line[_CHUNK_MAX:]
+            if current and len(current) + 1 + len(line) > _CHUNK_MAX:
+                pieces.append(current)
+                current = line
+            else:
+                current = f"{current}\n{line}" if current else line
+        if current:
+            pieces.append(current)
+    return pieces
+
+
+def _relevant_text(text: str, criteria: list[Criterion], budget: int) -> str:
+    """The whole text when it fits the budget. Otherwise the passages that share the
+    most words with the criteria, in their original order, until the budget is full."""
+    if len(text) <= budget:
+        return text
+    pieces = _chunks(text)
+    terms: set[str] = set()
+    for criterion in criteria:
+        terms |= _keywords(f"{criterion.name} {criterion.description}")
+    # Ties go to the earlier passage, so with no overlap the start of the text is kept.
+    ranked = sorted(range(len(pieces)), key=lambda i: (-len(terms & _keywords(pieces[i])), i))
+    chosen: set[int] = set()
+    used = 0
+    for i in ranked:
+        cost = len(pieces[i]) + 2
+        if used + cost <= budget:
+            chosen.add(i)
+            used += cost
+    kept = "\n\n".join(pieces[i] for i in sorted(chosen))
+    return f"{kept}\n\n{_OMITTED_NOTE}" if len(chosen) < len(pieces) else kept
+
+
 def _build_prompt(criteria: list[Criterion], evidence: Evidence) -> str:
     criteria_desc = "\n".join(
         f"- {c.name} (max {c.max_points} points): {c.description}" for c in criteria
@@ -324,9 +380,10 @@ def _build_prompt(criteria: list[Criterion], evidence: Evidence) -> str:
         f"issues: {'; '.join(r.issues) or 'none'}"
         for r in evidence.code_reports
     ) or "  (no code submitted)"
-    source_code = "\n\n".join(
+    source_text = "\n\n".join(
         f"--- {name} ---\n{text}" for name, text in evidence.code_sources.items()
-    ) or "(source code not available)"
+    )
+    source_code = _relevant_text(source_text, criteria, CODE_BUDGET) if source_text else "(source code not available)"
     # The EXECUTION RESULT heading appears only when there is a real run; with
     # none, a plain note is used (an empty heading made the small model write
     # "verified by the provided execution result").
@@ -335,8 +392,10 @@ def _build_prompt(criteria: list[Criterion], evidence: Evidence) -> str:
         if evidence.code_execution
         else "No run of the code is available -- judge the code by reading it.\n\n"
     )
-    report_text = evidence.report.content.text[:4000] if evidence.report else "(no report submitted)"
-    transcript = evidence.video_transcript[:2000] or "(no video transcript available)"
+    report_text = (_relevant_text(evidence.report.content.text, criteria, REPORT_BUDGET)
+                   if evidence.report else "(no report submitted)")
+    transcript = (_relevant_text(evidence.video_transcript, criteria, TRANSCRIPT_BUDGET)
+                  or "(no video transcript available)")
     frames = "\n".join(
         f"[{int(seconds) // 60}:{int(seconds) % 60:02d}] {text}" for seconds, text in evidence.video_frames
     ) or "(no frame descriptions available)"
@@ -359,10 +418,10 @@ def _build_prompt(criteria: list[Criterion], evidence: Evidence) -> str:
         + _SCORING_SCALE
         + _evidence_summary(evidence)
         + f"CODE ANALYSIS (structure only -- it says nothing about readability or correctness):\n{code_summary}\n\n"
-        f"SOURCE CODE (truncated):\n{source_code}\n\n"
+        f"SOURCE CODE (passages relevant to the criteria):\n{source_code}\n\n"
         f"{execution}"
-        f"REPORT TEXT (truncated):\n{report_text}\n\n"
-        f"VIDEO TRANSCRIPT (truncated):\n{transcript}\n\n"
+        f"REPORT TEXT (passages relevant to the criteria):\n{report_text}\n\n"
+        f"VIDEO TRANSCRIPT (passages relevant to the criteria):\n{transcript}\n\n"
         "VIDEO FRAMES (a few frames sampled across the video and described by a vision "
         "model -- machine-generated and possibly wrong; use them together with the "
         "transcript, so a video with no speech can still be judged from what is on "
@@ -378,6 +437,11 @@ def _build_prompt(criteria: list[Criterion], evidence: Evidence) -> str:
 
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3:4b")
+# Context window requested for every grading call. Ollama's default is smaller
+# than a full rubric prompt (source + report + transcript can reach ~5k tokens),
+# and Ollama silently drops the start of an over-long prompt. 8192 covers the
+# current input caps with room to spare.
+OLLAMA_NUM_CTX = int(os.environ.get("OLLAMA_NUM_CTX", "8192"))
 
 
 def _ollama_post(url: str, payload: dict, timeout: float) -> dict:
@@ -448,7 +512,7 @@ class OllamaRubricGrader(RubricGrader):
             "stream": False,
             "think": False,
             "format": _ollama_response_schema(),
-            "options": {"temperature": 0},
+            "options": {"temperature": 0, "num_ctx": OLLAMA_NUM_CTX},
         }, self.timeout)
         try:
             return json.loads(response["message"]["content"])["criteria"]

@@ -192,6 +192,11 @@ def analyze_file(path: Path) -> CodeReport:
 _CODE_EXTENSIONS = {".py", ".java", ".js", ".ts", ".c", ".cpp", ".go", ".rb"}
 
 
+# Read whole files (up to this many characters); the grader then picks the
+# passages relevant to each criterion when it builds the prompt.
+FULL_SOURCE_LIMIT = 200_000
+
+
 def read_sources(directory: Path, extensions: set[str] | None = None,
                  max_chars_per_file: int = 4000, max_total_chars: int = 8000) -> dict[str, str]:
     """Source text of every code file under a submission directory, as
@@ -210,7 +215,7 @@ def read_sources(directory: Path, extensions: set[str] | None = None,
             if len(text) > limit:
                 text = text[:limit] + "\n... [truncated]"
             sources[path.relative_to(directory).as_posix()] = text
-            remaining -= limit
+            remaining -= min(len(text), limit)
     return sources
 
 

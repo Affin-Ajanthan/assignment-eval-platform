@@ -7,6 +7,7 @@ from app.evaluator.rubric_grading import (
     Criterion,
     Evidence,
     HeuristicRubricGrader,
+    OLLAMA_NUM_CTX,
     OllamaRubricGrader,
     build_default_grader,
 )
@@ -114,6 +115,7 @@ def test_ollama_grader_parses_json_reply_and_requests_qwen3():
     assert url.endswith("/api/chat")
     assert payload["model"] == "qwen3:4b"
     assert payload["options"]["temperature"] == 0
+    assert payload["options"]["num_ctx"] == OLLAMA_NUM_CTX
     assert payload["think"] is False
 
 
@@ -187,6 +189,41 @@ def test_ollama_grader_sends_source_code_to_the_model():
     OllamaRubricGrader(post=post).grade([Criterion(name="Correctness", max_points=10)], evidence)
     sent = post.calls[0][1]["messages"][0]["content"]
     assert "def bubble_sort(items):" in sent
+
+
+def test_relevant_text_returns_short_text_unchanged():
+    criteria = [Criterion(name="Testing", description="describes tests", max_points=5)]
+    assert rubric_grading._relevant_text("short text", criteria, 1000) == "short text"
+
+
+def test_relevant_text_keeps_the_passage_that_matches_the_criteria():
+    filler = "\n\n".join(f"Background paragraph number {i} about unrelated history." for i in range(60))
+    text = filler + "\n\nWe tested the sorter with an empty list and with 12 random inputs."
+    criteria = [Criterion(name="Testing", description="describes the tests and inputs used", max_points=5)]
+    selected = rubric_grading._relevant_text(text, criteria, 1500)
+    assert "empty list and with 12 random inputs" in selected
+    assert len(selected) <= 1500 + len(rubric_grading._OMITTED_NOTE) + 2
+    assert rubric_grading._OMITTED_NOTE in selected
+
+
+def test_relevant_text_keeps_original_order():
+    paragraphs = [f"Paragraph {i} " + "filler words " * 20 for i in range(30)]
+    paragraphs[25] = "Paragraph 25 explains the stack and its push and pop operations."
+    paragraphs[3] = "Paragraph 3 also explains the stack operations in detail."
+    text = "\n\n".join(paragraphs)
+    criteria = [Criterion(name="Stack", description="explains stack push and pop", max_points=5)]
+    selected = rubric_grading._relevant_text(text, criteria, 1200)
+    assert selected.index("Paragraph 3") < selected.index("Paragraph 25")
+
+
+def test_prompt_reaches_relevant_report_text_beyond_the_old_4000_char_cut():
+    from types import SimpleNamespace
+    filler = "\n\n".join("Unrelated background sentence that goes on and on. " * 10 for _ in range(20))
+    report_text = filler + "\n\nThe deadlock analysis shows that the lock ordering prevents deadlock."
+    evidence = Evidence(report=SimpleNamespace(content=SimpleNamespace(text=report_text)))
+    criteria = [Criterion(name="Deadlock analysis", description="explains why deadlock cannot happen", max_points=5)]
+    prompt = rubric_grading._build_prompt(criteria, evidence)
+    assert "lock ordering prevents deadlock" in prompt
 
 
 # --------------------------------------------------------------------------

@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .code_analysis import CodeReport, analyze_directory, read_sources
+from .code_analysis import FULL_SOURCE_LIMIT, CodeReport, analyze_directory, read_sources
 from .code_execution import ExecutionResult, SandboxUnavailable, run_python_files, sandbox_enabled
 from .cross_modal import ConsistencyResult, check_consistency
 from .document_extraction import ReportExtraction, extract_report_text
@@ -128,7 +128,8 @@ def evaluate_submission(
     grader = grader or build_default_grader()
     evidence = Evidence(
         code_reports=code_reports,
-        code_sources=read_sources(code_dir) if code_dir else {},
+        code_sources=(read_sources(code_dir, max_chars_per_file=FULL_SOURCE_LIMIT,
+                                   max_total_chars=FULL_SOURCE_LIMIT) if code_dir else {}),
         code_execution=code_execution,
         report=report_analysis,
         video_transcript=video_transcript,
