@@ -441,15 +441,21 @@ rejection), covering the same flow the automated backend tests cover.
 
 ## Honest limitations
 
-- The LLM grader (local qwen3:4b) is given code *metrics*
-  (function count, complexity, quality score, issues), the source code
-  (truncated to 4,000 characters per file and 8,000 in total), the report
-  text (first 4,000 characters) and the transcript (first 2,000
-  characters). Anything beyond those limits is not seen, and criteria
-  that need the code's actual behaviour (e.g. "implements bubble sort
-  correctly") can be under-scored. Each grading call requests a context
-  window of `OLLAMA_NUM_CTX` tokens (default 8192) so the prompt is not
-  silently cut off by Ollama. qwen3:4b also tended to grade strong
+- The LLM grader (local qwen3:4b) is given code *metrics* for every
+  file (function count, complexity, quality score, issues) and the
+  text of the submission in limited amounts: 8,000 characters of source
+  code, 6,000 characters of report text and 3,000 characters of
+  transcript. When a submission is longer than its limit, the grader
+  gets the passages that share the most words with the criteria, in
+  their original order, and a note says how many passages were left out
+  and that they exist. Word matching is simple: a passage that describes
+  a criterion in entirely different words can be missed. Criteria that
+  need the code's actual behaviour (e.g. "implements bubble sort
+  correctly") can be under-scored. When any input is cut, the submission
+  gets a review flag so the instructor checks the marks for those
+  criteria. Each grading call requests a context window of
+  `OLLAMA_NUM_CTX` tokens (default 8192) so the prompt is not silently
+  cut off by Ollama. qwen3:4b also tended to grade strong
   answers slightly strictly in our evaluation (Mohler short-answer set,
   2,273 answers: MAE 0.82 marks out of 5, 81% within 1 mark, versus
   2.43 / 18% for a keyword baseline); keep instructor override as the

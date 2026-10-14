@@ -143,6 +143,11 @@ def evaluate_submission(
     grading = grader.grade(criteria, evidence)
 
     review_flags: list[str] = []
+    for label in grading.omitted:
+        review_flags.append(
+            f"{label}: part of it was not shown to the grader because of the length limit -- "
+            "check the marks for the criteria that depend on it"
+        )
     if sandbox_problem:
         review_flags.append(sandbox_problem)
     for run in code_execution:

@@ -202,8 +202,8 @@ def test_relevant_text_keeps_the_passage_that_matches_the_criteria():
     criteria = [Criterion(name="Testing", description="describes the tests and inputs used", max_points=5)]
     selected = rubric_grading._relevant_text(text, criteria, 1500)
     assert "empty list and with 12 random inputs" in selected
-    assert len(selected) <= 1500 + len(rubric_grading._OMITTED_NOTE) + 2
-    assert rubric_grading._OMITTED_NOTE in selected
+    assert len(selected) <= 1500 + 250
+    assert "not shown to you" in selected
 
 
 def test_relevant_text_keeps_original_order():
@@ -214,6 +214,43 @@ def test_relevant_text_keeps_original_order():
     criteria = [Criterion(name="Stack", description="explains stack push and pop", max_points=5)]
     selected = rubric_grading._relevant_text(text, criteria, 1200)
     assert selected.index("Paragraph 3") < selected.index("Paragraph 25")
+
+
+def test_stemming_matches_word_forms():
+    assert rubric_grading._stem("testing") == rubric_grading._stem("tests") == rubric_grading._stem("tested") == "test"
+    assert rubric_grading._stem("inputs") == rubric_grading._stem("input") == "input"
+    assert rubric_grading._stem("describes") == rubric_grading._stem("describe") == "describ"
+    assert rubric_grading._stem("code") == "code"  # too short to trim safely
+
+
+def test_selection_matches_different_word_forms():
+    filler = "\n\n".join(f"Background paragraph {i} about history and goals of the project. " * 3 for i in range(60))
+    text = filler + "\n\nWe tested the sorter on several inputs, including an empty input."
+    criteria = [Criterion(name="Tests", description="describes the test inputs", max_points=5)]
+    selected = rubric_grading._relevant_text(text, criteria, 1500)
+    assert "We tested the sorter on several inputs" in selected
+
+
+def test_omitted_note_says_the_text_exists_and_is_not_missing():
+    text = "\n\n".join(f"Paragraph {i} " + "filler " * 80 for i in range(40))
+    criteria = [Criterion(name="Testing", description="tests", max_points=5)]
+    selected = rubric_grading._relevant_text(text, criteria, 1000)
+    assert "not shown to you" in selected and "do not treat them as missing" in selected
+
+
+def test_cut_inputs_reports_only_inputs_that_were_shortened():
+    long_report = SimpleNamespace(content=SimpleNamespace(text="\n\n".join("filler " * 100 for _ in range(60))))
+    criteria = [Criterion(name="Testing", description="tests", max_points=5)]
+    assert rubric_grading._cut_inputs(criteria, Evidence(report=long_report)) == ["report text"]
+    assert rubric_grading._cut_inputs(criteria, Evidence(video_transcript="short transcript")) == []
+
+
+def test_ollama_grade_result_lists_cut_inputs():
+    long_report = SimpleNamespace(content=SimpleNamespace(text="\n\n".join("filler " * 100 for _ in range(60))))
+    post = _FakePost([{"name": "Testing", "checks_total": 1, "checks_met": 1, "checks_partly": 0, "justification": "ok"}])
+    result = OllamaRubricGrader(post=post).grade(
+        [Criterion(name="Testing", description="tests", max_points=5)], Evidence(report=long_report))
+    assert result.omitted == ["report text"]
 
 
 def test_prompt_reaches_relevant_report_text_beyond_the_old_4000_char_cut():
