@@ -362,7 +362,7 @@ class GradeOut(BaseModel):
 class AutoEvaluateIn(BaseModel):
     rubric_id: int
     # False: grade with the built-in heuristic grader instead of the rubric
-    # model (local Ollama / Claude). Everything else in the pipeline runs.
+    # model (local Ollama). Everything else in the pipeline runs.
     use_rubric_model: bool = True
 
 

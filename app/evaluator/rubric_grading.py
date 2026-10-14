@@ -10,23 +10,15 @@ Two interchangeable graders behind one interface:
   quality score and any similarity/AI-content flags. Fully offline,
   deterministic, no API key needed -- meant as a working baseline and
   a safety net for when no LLM is configured.
-- ``LLMRubricGrader``: sends the rubric + evidence to Claude with a
-  tool-use schema that forces structured {score, justification} output
-  per criterion, exactly as the platform plan's tech-stack table
-  describes ("Claude API with rubric as structured tool-use input").
-  Takes an injected client so it can be unit-tested without a real API
-  key or network call (see tests/test_rubric_grading.py).
-
-- ``OllamaRubricGrader``: the same rubric prompt sent to a local model
-  served by Ollama (default ``qwen3:4b``) with a JSON-schema constrained
-  reply. Free, offline, and nothing leaves the machine.
+- ``OllamaRubricGrader``: the rubric prompt sent to a local model served
+  by Ollama (default ``qwen3:4b``) with a JSON-schema constrained reply.
+  Free, offline, and nothing leaves the machine.
 
 ``build_default_grader()`` prefers the local Ollama model when the server
-is reachable and the model is installed, then the Claude grader when
-``ANTHROPIC_API_KEY`` is set and the ``anthropic`` package is installed,
-and falls back to the heuristic grader otherwise -- so the rest of the
-pipeline never has to know which one is in use. Set ``GRADER_BACKEND`` to
-``ollama``, ``claude`` or ``heuristic`` to force one.
+is reachable and the model is installed, and falls back to the heuristic
+grader otherwise -- so the rest of the pipeline never has to know which
+one is in use. Set ``GRADER_BACKEND`` to ``ollama`` or ``heuristic`` to
+force one.
 """
 
 from __future__ import annotations
@@ -170,7 +162,7 @@ class HeuristicRubricGrader(RubricGrader):
                 reasons.append(f"blended with code quality score {evidence.avg_code_quality:.0f}/100")
 
             if any(term in label for term in ("originality", "plagiarism", "academic integrity", "authentic")):
-                # Same rule as the LLM graders: flags never change marks. They are
+                # Same rule as the Ollama grader: flags never change marks. They are
                 # review prompts for the instructor, who decides what they mean.
                 if evidence.similarity_flagged:
                     reasons.append("similarity checker flagged this submission -- for instructor review, score not changed")
@@ -186,36 +178,6 @@ class HeuristicRubricGrader(RubricGrader):
                 justification="; ".join(reasons),
             ))
         return GradingResult(criteria=results, grader=self.name)
-
-
-# --------------------------------------------------------------------------
-# LLM grader (Claude, structured tool-use)
-# --------------------------------------------------------------------------
-
-
-def _build_grading_tool() -> dict:
-    return {
-        "name": "submit_grades",
-        "description": "Submit a score and one-sentence justification for every rubric criterion.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "criteria": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string"},
-                            "score": {"type": "number"},
-                            "justification": {"type": "string"},
-                        },
-                        "required": ["name", "score", "justification"],
-                    },
-                }
-            },
-            "required": ["criteria"],
-        },
-    }
 
 
 # Hand-written calibration examples (not taken from any evaluation data).
@@ -410,68 +372,6 @@ def _build_prompt(criteria: list[Criterion], evidence: Evidence) -> str:
     )
 
 
-class LLMRubricGrader(RubricGrader):
-    """Grades via the Claude API using a tool-use call that forces
-    structured {name, score, justification} output per criterion.
-
-    `client` is any object exposing `.messages.create(**kwargs)` with
-    the same shape as `anthropic.Anthropic().messages`  -- inject a
-    real `anthropic.Anthropic()` in production, or a fake in tests.
-    """
-
-    name = "llm"
-
-    def __init__(self, client=None, model: str = "claude-sonnet-4-5-20250929"):
-        self.client = client
-        self.model = model
-
-    def grade(self, criteria: list[Criterion], evidence: Evidence) -> GradingResult:
-        if self.client is None:
-            raise RuntimeError(
-                "LLMRubricGrader needs a client. Pass client=anthropic.Anthropic() "
-                "(requires the ANTHROPIC_API_KEY environment variable), or use "
-                "build_default_grader() to fall back to HeuristicRubricGrader "
-                "automatically when no key is configured."
-            )
-
-        tool = _build_grading_tool()
-        prompt = _build_prompt(criteria, evidence)
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=2048,
-            tools=[tool],
-            tool_choice={"type": "tool", "name": "submit_grades"},
-            messages=[{"role": "user", "content": prompt}],
-        )
-
-        tool_use = next(
-            (block for block in response.content if getattr(block, "type", None) == "tool_use"),
-            None,
-        )
-        if tool_use is None:
-            raise RuntimeError("LLM response did not include a submit_grades tool call")
-
-        payload = tool_use.input
-        by_name = {c["name"]: c for c in payload["criteria"]}
-        max_points_by_name = {c.name: c.max_points for c in criteria}
-
-        results = []
-        for criterion in criteria:
-            entry = by_name.get(criterion.name)
-            if entry is None:
-                results.append(CriterionResult(
-                    name=criterion.name, score=0.0, max_points=criterion.max_points,
-                    justification="LLM did not return a score for this criterion",
-                ))
-                continue
-            score = max(0.0, min(float(entry["score"]), max_points_by_name[criterion.name]))
-            results.append(CriterionResult(
-                name=criterion.name, score=score, max_points=criterion.max_points,
-                justification=entry.get("justification", ""),
-            ))
-        return GradingResult(criteria=results, grader=self.name)
-
-
 # --------------------------------------------------------------------------
 # Local LLM grader (Ollama, default qwen3:4b)
 # --------------------------------------------------------------------------
@@ -525,8 +425,8 @@ _MISSING_NOTE = "LLM did not return a score for this criterion"
 
 class OllamaRubricGrader(RubricGrader):
     """Grades with a local Ollama model (qwen3:4b by default), asking for
-    JSON that matches the same {criteria: [{name, score, justification}]}
-    shape the Claude grader uses.
+    JSON that matches the {criteria: [{name, checks_total, checks_met,
+    checks_partly, justification}]} shape.
 
     `post` is any callable ``(url, payload, timeout) -> dict``; inject a
     fake in tests so no Ollama server is needed.
@@ -635,22 +535,12 @@ def _ollama_available(url: str = OLLAMA_URL, model: str = OLLAMA_MODEL) -> bool:
 
 
 def build_default_grader() -> RubricGrader:
-    """Local Ollama model if reachable, else Claude if ANTHROPIC_API_KEY is
-    set and the anthropic package is importable, else the heuristic grader.
-    ``GRADER_BACKEND`` (ollama | claude | heuristic) forces one."""
+    """Local Ollama model if reachable, else the heuristic grader.
+    ``GRADER_BACKEND`` (ollama | heuristic) forces one."""
     backend = os.environ.get("GRADER_BACKEND", "auto").lower()
     if backend == "heuristic":
         return HeuristicRubricGrader()
 
     if backend in ("auto", "ollama") and _ollama_available():
         return OllamaRubricGrader()
-
-    if backend in ("auto", "claude"):
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        if api_key:
-            try:
-                import anthropic
-            except ImportError:
-                return HeuristicRubricGrader()
-            return LLMRubricGrader(client=anthropic.Anthropic(api_key=api_key))
     return HeuristicRubricGrader()

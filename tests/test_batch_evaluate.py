@@ -123,7 +123,7 @@ def test_batch_is_instructor_only():
 # ---- rubric model on/off switch ------------------------------------------
 
 def _fake_rubric_model(monkeypatch):
-    """Stand in for the rubric model (Ollama / Claude) with a grader that
+    """Stand in for the rubric model (Ollama) with a grader that
     reports its own name, so the tests can see which grader actually ran."""
     import app.evaluator.pipeline as pipeline
     from app.evaluator.rubric_grading import HeuristicRubricGrader

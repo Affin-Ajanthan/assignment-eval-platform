@@ -9,8 +9,8 @@ Implements the remaining pieces of the platform plan beyond Phase 1
   score it for AI-generated-text style signals (Phase 2).
 - ``code_analysis`` -- static analysis of submitted code (Phase 2/3).
 - ``rubric_grading`` -- score code + report evidence against an
-  instructor rubric, either heuristically (offline, default) or via an
-  LLM when ``ANTHROPIC_API_KEY`` is configured (Phase 3).
+  instructor rubric, either heuristically (offline, default) or via a
+  local Ollama model when it is running (Phase 3).
 - ``video_analysis`` -- transcribe a presentation video and analyze its
   frames for scene changes / screen-recording likelihood (Phase 4).
 - ``cross_modal`` -- check whether the code, report and video all

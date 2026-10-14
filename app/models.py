@@ -306,7 +306,7 @@ class AutoEvaluation(Base):
     review_flags = Column(JSON, nullable=False)
     # [{"name":.., "score":.., "max_points":.., "justification":..}, ...]
     criterion_breakdown = Column(JSON, nullable=False)
-    grader = Column(String, nullable=False)  # "heuristic" | "llm"
+    grader = Column(String, nullable=False)  # "heuristic" | "ollama"
     similarity_flagged = Column(Boolean, default=False)
     code_ai_flagged = Column(Boolean, default=False)
     report_ai_signal = Column(String, nullable=True)  # "low" | "medium" | "high"

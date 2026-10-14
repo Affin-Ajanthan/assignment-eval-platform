@@ -1,7 +1,7 @@
 """
 Optional sandboxed execution of student Python code.
 
-The LLM graders can only *read* code, so they cannot tell whether it runs.
+The LLM grader can only *read* code, so it cannot tell whether it runs.
 This module runs each ``.py`` file in a throw-away Docker container and
 reports the real exit code / stdout / stderr, which the grading prompt then
 presents as an EXECUTION RESULT the model may cite.

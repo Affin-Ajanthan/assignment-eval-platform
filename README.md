@@ -27,7 +27,7 @@ app/
   evaluator/            the multi-modal evaluator
     report_analysis.py   PDF/DOCX text+image extraction, AI-text heuristic
     code_analysis.py     static analysis (complexity, docstrings, style)
-    rubric_grading.py    heuristic grader (fallback) + local Ollama grader (qwen3:4b) + Claude grader
+    rubric_grading.py    heuristic grader (fallback) + local Ollama grader (qwen3:4b)
     video_analysis.py    frame/scene analysis + pluggable transcription
     cross_modal.py       code/report/video consistency check (keyword overlap)
     semantic_consistency.py  same check by meaning (MiniLM embeddings)
@@ -355,18 +355,16 @@ those, both are small interfaces with:
     1. the **local Ollama model `qwen3:4b`** when the Ollama server is
        reachable and the model is installed (`ollama pull qwen3:4b`) --
        free, offline, nothing leaves the machine;
-    2. **Claude**, when `ANTHROPIC_API_KEY` is set;
-    3. the keyword-overlap heuristic grader.
+    2. the keyword-overlap heuristic grader, when Ollama is not available.
 
     `GRADER_FEWSHOT=on` adds six hand-written calibration examples to the
     grading prompt. It is **off by default**: on 299 human-graded short
     answers it made the small model worse (mean error 1.54 -> 1.87 marks of
     5) because it more often claimed "no answer was provided".
 
-    Force one with `GRADER_BACKEND=ollama|claude|heuristic`; change the
-    local model or server with `OLLAMA_MODEL` / `OLLAMA_URL`. The grader
-    used is stored with every auto-evaluation (`ollama`, `llm`,
-    `heuristic`).
+    Force one with `GRADER_BACKEND=ollama|heuristic`; change the local
+    model or server with `OLLAMA_MODEL` / `OLLAMA_URL`. The grader used is
+    stored with every auto-evaluation (`ollama` or `heuristic`).
   - **Video transcription** -- install `faster-whisper`: Whisper `small`
     runs on CUDA (float16) when an NVIDIA GPU is available and on CPU
     (int8) otherwise; a failed GPU load retries once on CPU. It needs
@@ -386,7 +384,7 @@ those, both are small interfaces with:
     be wrong; if the step fails, a review flag says so and grading
     continues on the transcript alone. It costs roughly one model call
     per frame.
-  - **Running the code (optional, off by default)** -- the LLM graders can
+  - **Running the code (optional, off by default)** -- the LLM grader can
     only read code. Set `CODE_SANDBOX=docker` and each submission's `.py`
     files (at most 3) are run in a throw-away Docker container (no network,
     read-only filesystem, code mounted read-only, all capabilities dropped,
@@ -414,8 +412,7 @@ python -m pytest tests/ -v
 
 66 tests pass offline (accounts/roles/subject-scoping, report/code
 analysis, similarity fingerprinting, rubric grading -- both the
-heuristic grader, the Claude grader tested against a fake Anthropic
-client and the Ollama grader against a fake HTTP post, so no API key,
+heuristic grader and the Ollama grader against a fake HTTP post, so no
 Ollama server or network call is needed. `conftest.py` sets
 `GRADER_BACKEND=heuristic` so ordinary tests never call a real model --
 video frame
@@ -444,7 +441,7 @@ rejection), covering the same flow the automated backend tests cover.
 
 ## Honest limitations
 
-- The LLM graders (local qwen3:4b and Claude) are given code *metrics*
+- The LLM grader (local qwen3:4b) is given code *metrics*
   (function count, complexity, quality score, issues), the report text
   and the transcript -- not the source code itself -- so criteria that
   need the code's actual behaviour (e.g. "implements bubble sort
