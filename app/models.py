@@ -228,6 +228,12 @@ class Submission(Base):
         return self.grades[-1] if self.grades else None
 
     @property
+    def submitted_types(self) -> list[str]:
+        """Which kinds of file were uploaded: any of code, report, video."""
+        return [kind for kind, path in (("code", self.code_path), ("report", self.report_path),
+                                        ("video", self.video_path)) if path]
+
+    @property
     def final_mark(self) -> float | None:
         grade = self.latest_grade
         return grade.total_score if grade else None

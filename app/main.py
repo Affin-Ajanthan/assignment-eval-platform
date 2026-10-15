@@ -337,6 +337,8 @@ class SubmissionOut(BaseModel):
     # grading information this response carries.
     final_mark: Optional[float] = None
     max_mark: Optional[float] = None
+    # Kinds of file uploaded: a subset of code, report, video.
+    submitted_types: list[str] = []
 
     model_config = ConfigDict(from_attributes=True)
 

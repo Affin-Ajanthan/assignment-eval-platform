@@ -121,6 +121,8 @@ export interface Submission {
   status: "submitted" | "graded";
   final_mark: number | null;
   max_mark: number | null;
+  /** Kinds of file uploaded, in this order: code, report, video. */
+  submitted_types: ("code" | "report" | "video")[];
 }
 
 export interface Grade {
