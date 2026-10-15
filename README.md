@@ -27,7 +27,7 @@ app/
   evaluator/            the multi-modal evaluator
     report_analysis.py   PDF/DOCX text+image extraction, AI-text heuristic
     code_analysis.py     static analysis (complexity, docstrings, style)
-    rubric_grading.py    heuristic grader (fallback) + local Ollama grader (qwen3:4b)
+    rubric_grading.py    heuristic grader (fallback) + local Ollama grader (qwen3:8b)
     video_analysis.py    frame/scene analysis + pluggable transcription
     cross_modal.py       code/report/video consistency check (keyword overlap)
     semantic_consistency.py  same check by meaning (MiniLM embeddings)
@@ -354,8 +354,8 @@ those, both are small interfaces with:
   cost, and
 - a **real backend that's picked up automatically** once available:
   - **Rubric grading** -- `build_default_grader()` picks, in order:
-    1. the **local Ollama model `qwen3:4b`** when the Ollama server is
-       reachable and the model is installed (`ollama pull qwen3:4b`) --
+    1. the **local Ollama model `qwen3:8b`** when the Ollama server is
+       reachable and the model is installed (`ollama pull qwen3:8b`) --
        free, offline, nothing leaves the machine;
     2. the keyword-overlap heuristic grader, when Ollama is not available.
 
@@ -380,7 +380,7 @@ those, both are small interfaces with:
     spread across the video are downscaled and described by it, and the
     descriptions go to the grader next to the transcript, so a silent
     video can still be judged from what is on screen. It is **off by
-    default**, so only `qwen3:4b` is used; enable it with `VIDEO_VISION=auto`
+    default**, so only the grading model is used; enable it with `VIDEO_VISION=auto`
     (it then runs only if the model is installed).
     The descriptions are machine-generated and the grader is told they may
     be wrong; if the step fails, a review flag says so and grading
@@ -443,7 +443,7 @@ rejection), covering the same flow the automated backend tests cover.
 
 ## Honest limitations
 
-- The LLM grader (local qwen3:4b) is given code *metrics* for every
+- The LLM grader (local qwen3:8b) is given code *metrics* for every
   file (function count, complexity, quality score, issues) and the
   text of the submission in limited amounts: 8,000 characters of source
   code, 6,000 characters of report text and 3,000 characters of
@@ -459,7 +459,7 @@ rejection), covering the same flow the automated backend tests cover.
   `OLLAMA_NUM_CTX` tokens (default 8192) so the prompt is not silently
   cut off by Ollama, and a reply of at most `OLLAMA_NUM_PREDICT` tokens
   (default 2000). A timed-out or malformed reply is retried once before
-  the submission is marked failed. qwen3:4b also tended to grade strong
+  the submission is marked failed. In our evaluation, qwen3:4b tended to grade strong
   answers slightly strictly in our evaluation (Mohler short-answer set,
   2,273 answers: MAE 0.82 marks out of 5, 81% within 1 mark, versus
   2.43 / 18% for a keyword baseline); keep instructor override as the

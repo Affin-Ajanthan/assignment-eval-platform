@@ -113,7 +113,7 @@ def test_ollama_grader_parses_json_reply_and_requests_qwen3():
     assert [c.score for c in result.criteria] == [50, 35]
     url, payload = post.calls[0]
     assert url.endswith("/api/chat")
-    assert payload["model"] == "qwen3:4b"
+    assert payload["model"] == "qwen3:8b"
     assert payload["options"]["temperature"] == 0
     assert payload["options"]["num_ctx"] == OLLAMA_NUM_CTX
     assert payload["think"] is False
@@ -345,10 +345,10 @@ def test_ran_code_detector_catches_overclaims_and_allows_honest_wording():
 
 @pytest.mark.slow
 def test_real_model_does_not_claim_to_have_run_the_code():
-    """Live check against the local qwen3:4b: code containing a demo call
+    """Live check against the local qwen3:8b: code containing a demo call
     (`print(bubble_sort([...]))`) used to make it write 'as verified by ...'."""
     if not rubric_grading._ollama_available():
-        pytest.skip("Ollama / qwen3:4b not available")
+        pytest.skip("Ollama / qwen3:8b not available")
     evidence = Evidence(code_reports=[analyze_python(DEMO_CODE, "solution.py")],
                         code_sources={"solution.py": DEMO_CODE})
     result = OllamaRubricGrader().grade(

@@ -109,7 +109,7 @@ def test_describer_raises_when_every_frame_fails():
 def test_default_describer_is_off_unless_enabled_and_installed(monkeypatch):
     monkeypatch.setattr(va, "_ollama_available", lambda *a, **k: True)
     monkeypatch.delenv("VIDEO_VISION", raising=False)
-    assert build_default_describer() is None                       # default: only qwen3:4b is used
+    assert build_default_describer() is None                       # default: only the grading model is used
     monkeypatch.setenv("VIDEO_VISION", "off")
     assert build_default_describer() is None                       # explicitly off
     monkeypatch.setenv("VIDEO_VISION", "auto")

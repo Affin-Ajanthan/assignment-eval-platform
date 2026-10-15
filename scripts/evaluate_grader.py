@@ -132,7 +132,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("csv", type=Path)
     parser.add_argument("--backend", choices=["ollama", "heuristic"], default="ollama")
-    parser.add_argument("--model", default=None, help="Ollama model (default: OLLAMA_MODEL / qwen3:4b)")
+    parser.add_argument("--model", default=None, help="Ollama model (default: OLLAMA_MODEL / qwen3:8b)")
     parser.add_argument("--calibrate", action="store_true",
                         help="fit a linear correction on the first half, report on the second half")
     args = parser.parse_args()

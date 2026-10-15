@@ -26,7 +26,7 @@ download at all, so it always runs for real.
 Vision: a few sampled frames are described by a small local vision model
 (Ollama, default ``qwen3-vl:4b``) so a video with no speech can still be
 graded from what is on screen. Opt-in (``VIDEO_VISION=auto``), so by default
-only qwen3:4b is used. A failure never breaks the analysis.
+only the grading model is used. A failure never breaks the analysis.
 """
 
 from __future__ import annotations
@@ -318,7 +318,7 @@ class OllamaFrameDescriber(FrameDescriber):
 
 
 def build_default_describer() -> FrameDescriber | None:
-    """None (no frame descriptions) by default, so only qwen3:4b is used.
+    """None (no frame descriptions) by default, so only the grading model is used.
     With VIDEO_VISION=auto (or on) the Ollama vision describer is used when
     the vision model is installed."""
     if os.environ.get("VIDEO_VISION", "off").strip().lower() not in ("auto", "on"):

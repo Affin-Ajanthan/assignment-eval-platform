@@ -11,7 +11,7 @@ Two interchangeable graders behind one interface:
   deterministic, no API key needed -- meant as a working baseline and
   a safety net for when no LLM is configured.
 - ``OllamaRubricGrader``: the rubric prompt sent to a local model served
-  by Ollama (default ``qwen3:4b``) with a JSON-schema constrained reply.
+  by Ollama (default ``qwen3:8b``) with a JSON-schema constrained reply.
   Free, offline, and nothing leaves the machine.
 
 ``build_default_grader()`` prefers the local Ollama model when the server
@@ -475,11 +475,11 @@ def _build_prompt(criteria: list[Criterion], evidence: Evidence) -> str:
 
 
 # --------------------------------------------------------------------------
-# Local LLM grader (Ollama, default qwen3:4b)
+# Local LLM grader (Ollama, default qwen3:8b)
 # --------------------------------------------------------------------------
 
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3:4b")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3:8b")
 # Context window requested for every grading call. Ollama's default is smaller
 # than a full rubric prompt (source + report + transcript can reach ~5k tokens),
 # and Ollama silently drops the start of an over-long prompt. 8192 covers the
@@ -534,7 +534,7 @@ _MISSING_NOTE = "LLM did not return a score for this criterion"
 
 
 class OllamaRubricGrader(RubricGrader):
-    """Grades with a local Ollama model (qwen3:4b by default), asking for
+    """Grades with a local Ollama model (qwen3:8b by default), asking for
     JSON that matches the {criteria: [{name, checks_total, checks_met,
     checks_partly, justification}]} shape.
 
