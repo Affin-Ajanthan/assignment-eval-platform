@@ -543,6 +543,11 @@ class BatchAutoEvaluateIn(BaseModel):
     use_rubric_model: bool = True
 
 
+def _ai_flagged(code_ai_flagged: bool, report_ai_signal: Optional[str]) -> bool:
+    """AI-content review flag: the code or report signal is high. Never changes marks."""
+    return bool(code_ai_flagged) or report_ai_signal == "high"
+
+
 class BatchEvaluationItemOut(BaseModel):
     submission_id: int
     student_name: str
@@ -553,6 +558,9 @@ class BatchEvaluationItemOut(BaseModel):
     model: Optional[str] = None
     review_flags: list[str] = []
     error: Optional[str] = None
+    # Review flags shown as their own table columns; None when the submission failed.
+    similarity_flagged: Optional[bool] = None
+    ai_flagged: Optional[bool] = None
 
 
 class BatchAutoEvaluateOut(BaseModel):
@@ -2241,24 +2249,32 @@ def auto_evaluate_assignment(
     if not submissions:
         raise HTTPException(404, "No submissions found for this assignment")
 
-    already_done: set[int] = set()
+    # Latest stored evaluation per submission. A skipped submission is not re-run,
+    # but its stored marks and flags still go into the table.
+    stored: dict[int, AutoEvaluation] = {}
     if payload.skip_already_evaluated:
-        already_done = {
-            row[0]
-            for row in db.query(AutoEvaluation.submission_id)
+        stored_rows = (
+            db.query(AutoEvaluation)
             .filter(
                 AutoEvaluation.rubric_id == rubric.id,
                 AutoEvaluation.submission_id.in_([s.id for s in submissions]),
             )
+            .order_by(AutoEvaluation.id)
             .all()
-        }
+        )
+        stored = {row.submission_id: row for row in stored_rows}  # later rows overwrite earlier ones
 
     results: list[BatchEvaluationItemOut] = []
     for submission in submissions:
         name = submission.student_name
-        if submission.id in already_done:
+        if submission.id in stored:
+            prev = stored[submission.id]
             results.append(BatchEvaluationItemOut(
-                submission_id=submission.id, student_name=name, status="skipped"))
+                submission_id=submission.id, student_name=name, status="skipped",
+                recommended_score=prev.recommended_score, recommended_max=prev.recommended_max,
+                grader=prev.grader, model=prev.model, review_flags=list(prev.review_flags or []),
+                similarity_flagged=prev.similarity_flagged,
+                ai_flagged=_ai_flagged(prev.code_ai_flagged, prev.report_ai_signal)))
             continue
         try:
             ev = _run_auto_evaluation(db, submission, rubric, use_rubric_model=payload.use_rubric_model)
@@ -2271,7 +2287,9 @@ def auto_evaluate_assignment(
         results.append(BatchEvaluationItemOut(
             submission_id=submission.id, student_name=name, status="evaluated",
             recommended_score=ev.recommended_score, recommended_max=ev.recommended_max,
-            grader=ev.grader, model=ev.model, review_flags=list(ev.review_flags or [])))
+            grader=ev.grader, model=ev.model, review_flags=list(ev.review_flags or []),
+            similarity_flagged=ev.similarity_flagged,
+            ai_flagged=_ai_flagged(ev.code_ai_flagged, ev.report_ai_signal)))
 
     def _count(status: str) -> int:
         return sum(1 for r in results if r.status == status)

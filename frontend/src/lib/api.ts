@@ -218,6 +218,10 @@ export interface BatchEvaluationItem {
   model: string | null;
   review_flags: string[];
   error: string | null;
+  /** Similarity flag (overlap with another submission); null when the submission failed. */
+  similarity_flagged: boolean | null;
+  /** AI-content review flag (code or report); never changes marks. Null when the submission failed. */
+  ai_flagged: boolean | null;
 }
 
 export interface BatchEvaluationResult {

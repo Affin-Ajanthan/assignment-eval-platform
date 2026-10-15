@@ -59,7 +59,8 @@ def _batch_result(subject_id):
             {"submission_id": 1, "student_name": "Alice", "status": "evaluated", "recommended_score": 8,
              "recommended_max": 10, "grader": "heuristic", "review_flags": [], "error": None},
             {"submission_id": 2, "student_name": "Bob", "status": "evaluated", "recommended_score": 5,
-             "recommended_max": 10, "grader": "heuristic", "review_flags": ["Similarity flag"], "error": None},
+             "recommended_max": 10, "grader": "heuristic", "review_flags": ["Similarity flag"], "error": None,
+             "similarity_flagged": True, "ai_flagged": False},
             {"submission_id": 3, "student_name": "Chamath", "status": "failed", "recommended_score": None,
              "recommended_max": None, "grader": None, "review_flags": [], "error": "RuntimeError: boom"},
         ],
@@ -104,8 +105,9 @@ def test_batch_evaluation_export():
     results = wb["Results"]
     assert [results.cell(row=r, column=2).value for r in (2, 3, 4)] == ["Alice", "Bob", "Chamath"]
     assert results["F2"].value == 0.8 and results["F2"].number_format == "0%"
-    assert results["H3"].value == "Similarity flag"
-    assert results["C4"].value == "Failed" and "boom" in results["I4"].value
+    assert results["G3"].value == "Flagged" and results["H3"].value == "No flag"   # similarity, AI detection
+    assert results["J3"].value == "Similarity flag"                                # review flags text
+    assert results["C4"].value == "Failed" and "boom" in results["K4"].value
     summary = {row[0]: row[1] for row in wb["Summary"].iter_rows(values_only=True) if row and row[0]}
     assert summary["Rubric"] == "Rubric #999999" and summary["Average recommended score"] == "65%"
 

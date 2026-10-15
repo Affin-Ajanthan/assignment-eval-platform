@@ -166,6 +166,11 @@ def report_similarity_xlsx(result, subject_name: str) -> bytes:
     return _bytes(wb)
 
 
+def _flag_text(flagged):
+    """Flag column text; blank when unknown (a failed submission)."""
+    return "" if flagged is None else "Flagged" if flagged else "No flag"
+
+
 def batch_evaluation_xlsx(result, subject_name: str, rubric_name: str) -> bytes:
     """Evaluate a whole assignment -> Summary + Results."""
     wb = Workbook()
@@ -187,12 +192,14 @@ def batch_evaluation_xlsx(result, subject_name: str, rubric_name: str) -> bytes:
         pct = (r.recommended_score / r.recommended_max
                if r.recommended_score is not None and r.recommended_max else None)
         rows.append([r.submission_id, r.student_name, r.status.capitalize(), r.recommended_score,
-                     r.recommended_max, pct, r.grader or "", "; ".join(r.review_flags), r.error or ""])
+                     r.recommended_max, pct, _flag_text(r.similarity_flagged), _flag_text(r.ai_flagged),
+                     r.grader or "", "; ".join(r.review_flags), r.error or ""])
         fills.append(_FAILED_FILL if r.status == "failed" else _REVIEW_FILL if r.review_flags else None)
     _table(wb.create_sheet("Results"),
-           ["Submission", "Student", "Status", "Recommended score", "Out of", "Percent", "Grader",
-            "Review flags", "Error"],
-           rows, formats={6: _PERCENT}, fills=fills, widths=[12, 24, 11, 12, 9, 9, 12, 60, 40])
+           ["Submission", "Student", "Status", "Recommended score", "Out of", "Percent",
+            "Similarity flag", "AI detection flag", "Grader", "Review flags", "Error"],
+           rows, formats={6: _PERCENT}, fills=fills,
+           widths=[12, 24, 11, 12, 9, 9, 15, 17, 12, 60, 40])
     ws = wb["Results"]
     ws.append([])
     ws.append(["Automated scores are a second opinion; the instructor's manual grade always counts."])
