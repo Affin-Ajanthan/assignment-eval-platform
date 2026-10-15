@@ -111,6 +111,8 @@ class GradingResult:
     # Inputs that were too long to show the grader in full, e.g. ["report text"].
     # Their marks may depend on parts the grader never saw, so the pipeline flags them.
     omitted: list[str] = field(default_factory=list)
+    # Ollama model that produced the marks (e.g. "qwen3:8b"); None for the heuristic grader.
+    model: str | None = None
 
     @property
     def total_score(self) -> float:
@@ -641,7 +643,8 @@ class OllamaRubricGrader(RubricGrader):
                     results[i] = retried[i]
                 else:
                     results[i].justification += _STILL_WRONG_NOTE
-        return GradingResult(criteria=results, grader=self.name, omitted=_cut_inputs(criteria, evidence))
+        return GradingResult(criteria=results, grader=self.name, omitted=_cut_inputs(criteria, evidence),
+                             model=self.model)
 
 
 def _ollama_available(url: str = OLLAMA_URL, model: str = OLLAMA_MODEL) -> bool:

@@ -523,7 +523,7 @@ export default function InstructorPage() {
                 <div className="mt-4">
                   <h3 className="font-bold">
                     Recommended score: {autoevalResult.recommended_score} / {autoevalResult.recommended_max} (
-                    {autoevalResult.grader} grader)
+                    {autoevalResult.model ? `${autoevalResult.grader}, model ${autoevalResult.model}` : autoevalResult.grader} grader)
                   </h3>
                   <div className="mt-2">
                     <strong className="text-sm">Review flags:</strong>

@@ -187,7 +187,9 @@ export default function BatchEvaluateSection({
                   <td className="border border-gray-200 px-3 py-1.5">
                     {r.recommended_score === null ? "—" : formatMark(r.recommended_score, r.recommended_max)}
                   </td>
-                  <td className="border border-gray-200 px-3 py-1.5">{r.grader ?? "—"}</td>
+                  <td className="border border-gray-200 px-3 py-1.5">
+                    {r.grader ? (r.model ? `${r.grader}, ${r.model}` : r.grader) : "—"}
+                  </td>
                   <td className="border border-gray-200 px-3 py-1.5 text-xs">
                     {r.error && <div className="text-red-700">{r.error}</div>}
                     {r.review_flags.map((f) => (

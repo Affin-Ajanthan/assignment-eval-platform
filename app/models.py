@@ -307,6 +307,7 @@ class AutoEvaluation(Base):
     # [{"name":.., "score":.., "max_points":.., "justification":..}, ...]
     criterion_breakdown = Column(JSON, nullable=False)
     grader = Column(String, nullable=False)  # "heuristic" | "ollama"
+    model = Column(String, nullable=True)  # Ollama model name, e.g. "qwen3:8b"; NULL for the heuristic grader
     similarity_flagged = Column(Boolean, default=False)
     code_ai_flagged = Column(Boolean, default=False)
     report_ai_signal = Column(String, nullable=True)  # "low" | "medium" | "high"

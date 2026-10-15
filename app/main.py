@@ -108,7 +108,7 @@ Base.metadata.create_all(bind=engine)
 add_missing_columns("similarity_flags", {
     "semantic_similarity": "FLOAT", "flag_level": "VARCHAR", "flag_reason": "VARCHAR",
 })
-add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON", "ai_signals": "JSON"})
+add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON", "ai_signals": "JSON", "model": "VARCHAR"})
 # Submissions made before assignments existed keep assignment_id NULL (and
 # their free-text assignment_name); nothing else about them changes.
 add_missing_columns("submissions", {"assignment_id": "INTEGER REFERENCES assignments(id)"})
@@ -426,6 +426,7 @@ class AutoEvaluationOut(BaseModel):
     review_flags: list[str]
     criterion_breakdown: list[dict]
     grader: str
+    model: Optional[str] = None
     similarity_flagged: bool
     code_ai_flagged: bool
     report_ai_signal: Optional[str]
@@ -549,6 +550,7 @@ class BatchEvaluationItemOut(BaseModel):
     recommended_score: Optional[float] = None
     recommended_max: Optional[float] = None
     grader: Optional[str] = None
+    model: Optional[str] = None
     review_flags: list[str] = []
     error: Optional[str] = None
 
@@ -2169,6 +2171,7 @@ def _run_auto_evaluation(
             for c in result.grading.criteria
         ],
         grader=result.grading.grader,
+        model=result.grading.model,
         similarity_flagged=result.similarity_flagged,
         code_ai_flagged=result.code_ai_flagged,
         report_ai_signal=result.report_analysis.ai_text.signal if result.report_analysis else None,
@@ -2268,7 +2271,7 @@ def auto_evaluate_assignment(
         results.append(BatchEvaluationItemOut(
             submission_id=submission.id, student_name=name, status="evaluated",
             recommended_score=ev.recommended_score, recommended_max=ev.recommended_max,
-            grader=ev.grader, review_flags=list(ev.review_flags or [])))
+            grader=ev.grader, model=ev.model, review_flags=list(ev.review_flags or [])))
 
     def _count(status: str) -> int:
         return sum(1 for r in results if r.status == status)

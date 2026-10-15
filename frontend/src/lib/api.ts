@@ -214,6 +214,8 @@ export interface BatchEvaluationItem {
   recommended_score: number | null;
   recommended_max: number | null;
   grader: string | null;
+  /** Ollama model that produced the marks; null for the heuristic grader. */
+  model: string | null;
   review_flags: string[];
   error: string | null;
 }
@@ -246,6 +248,8 @@ export interface AutoEvaluation {
   review_flags: string[];
   criterion_breakdown: { name: string; score: number; max_points: number; justification: string }[];
   grader: string;
+  /** Ollama model that produced the marks; null for the heuristic grader or older results. */
+  model?: string | null;
   similarity_flagged: boolean;
   code_ai_flagged: boolean;
   report_ai_signal: string | null;
