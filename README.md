@@ -316,11 +316,13 @@ rejected upload leaves no files behind.
 
 `app/evaluator/ai_text_detection.py` can estimate whether report text looks
 machine-generated using Fast-DetectGPT (Bao et al., ICLR 2024) with a
-small local language model, `Qwen/Qwen2.5-0.5B` by default (about 1 GB,
-downloaded once, CPU-only). **It is off by default**: on a small
-calibration sample it did no better than the style heuristic (AI and
-human scores overlapped heavily), so the heuristic remains the default.
-Set `AI_TEXT_DETECTION=1` to try it, ideally against real student reports.
+small local language model, `Qwen/Qwen2.5-1.5B` by default (about 3 GB,
+downloaded once). **It is on by default** as the planned upgrade from the
+style heuristic. Caution: on a small calibration sample the 0.5B version
+did no better than the style heuristic, and the 1.5B version's scores
+still overlapped heavily between AI and human text. Its false-flag rate
+on real student reports has not been measured. Set `AI_TEXT_DETECTION=0`
+to return to the style heuristic.
 
 - A language model scores how "expected" each word is. AI-written text
   keeps choosing the model's most likely words; human text is spikier.

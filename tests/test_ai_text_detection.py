@@ -133,11 +133,11 @@ def test_disabled_by_env(monkeypatch):
     assert detector.detect(LONG_TEXT) is None and not created
 
 
-def test_off_by_default_and_opt_in(monkeypatch):
+def test_on_by_default_and_can_be_switched_off(monkeypatch):
     monkeypatch.delenv("AI_TEXT_DETECTION", raising=False)
-    assert AITextDetector(scorer_factory=lambda: FakeScorer()).enabled is False
-    monkeypatch.setenv("AI_TEXT_DETECTION", "1")
     assert AITextDetector(scorer_factory=lambda: FakeScorer()).enabled is True
+    monkeypatch.setenv("AI_TEXT_DETECTION", "0")
+    assert AITextDetector(scorer_factory=lambda: FakeScorer()).enabled is False
 
 
 def test_ai_signals_never_lower_the_suggested_score(tmp_path, installed):
