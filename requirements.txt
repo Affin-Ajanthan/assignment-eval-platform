@@ -36,11 +36,17 @@ markitdown[pdf,docx]>=0.1.8,<0.2
 # --- Excel downloads of similarity and evaluation results (app/exports.py)
 openpyxl>=3.1
 
-# --- Java/JavaScript parsing for the dead-code cleanup before the semantic
+# --- Java/JavaScript/C/C++/C#/Go/Ruby/PHP parsing for the dead-code cleanup before the semantic
 # check (app/similarity/ts_cleanup.py). Small prebuilt wheels, no compiler needed.
 tree-sitter>=0.25,<0.26
 tree-sitter-java>=0.23,<0.24
 tree-sitter-javascript>=0.25,<0.26
+tree-sitter-c>=0.24,<0.25
+tree-sitter-cpp>=0.23,<0.24
+tree-sitter-c-sharp>=0.23,<0.24
+tree-sitter-go>=0.25,<0.26
+tree-sitter-ruby>=0.23,<0.24
+tree-sitter-php>=0.25,<0.26
 
 # --- Testing ---
 pytest>=7

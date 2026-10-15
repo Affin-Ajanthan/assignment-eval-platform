@@ -28062,7 +28062,7 @@ func ScarceItems(shop *StockBook, threshold int) []string {
   return flagged
 }
 "
-TC10,Go,rename all identifiers + change formatting,production,True,True,True,0.9962310791015625,1.0,0.0037689208984375,False,PASS,,"['CLASS', 'FIELD', 'M_ADD', 'M_REMOVE', 'P_NAME', 'P_QTY', 'P_INV', 'P_LIMIT', 'L_CURRENT', 'L_TOTAL', 'L_RESULT', 'F_TOTAL', 'F_LOW', 'LOOP_KEY', 'LOOP_COUNT', 'LOOP_PRODUCT', 'LOOP_AMOUNT', 'N_FUNC', 'N_PARAM']","package inventory
+TC10,Go,rename all identifiers + change formatting,production,True,True,True,0.9963786602020264,1.0,0.003621339797973633,False,PASS,,"['CLASS', 'FIELD', 'M_ADD', 'M_REMOVE', 'P_NAME', 'P_QTY', 'P_INV', 'P_LIMIT', 'L_CURRENT', 'L_TOTAL', 'L_RESULT', 'F_TOTAL', 'F_LOW', 'LOOP_KEY', 'LOOP_COUNT', 'LOOP_PRODUCT', 'LOOP_AMOUNT', 'N_FUNC', 'N_PARAM']","package inventory
 
 // Inventory tracking for a small shop.
 type Inventory struct {
@@ -29578,7 +29578,7 @@ func AveragePositive(values []int) float64 {
 	return float64(total) / float64(count)
 }
 "
-UNRELATED,Go,unrelated program (control),production,True,True,True,0.4517011046409607,1.0,0.5482988953590393,False,PASS,inventory program vs averaging program,[],"package inventory
+UNRELATED,Go,unrelated program (control),production,True,True,True,0.45983922481536865,1.0,0.5401607751846313,False,PASS,inventory program vs averaging program,[],"package inventory
 
 // Inventory tracking for a small shop.
 type Inventory struct {

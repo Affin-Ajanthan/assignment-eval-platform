@@ -124,9 +124,9 @@ def test_multiline_statements_and_unicode_are_cut_exactly():
 
 
 def test_languages_without_a_cleanup_are_not_touched():
-    # Python, Java and JavaScript have a cleanup (see also test_ts_cleanup); C does not yet.
-    c_code = "int main() {\n    int unused = 5;\n    return 0;\n}"
-    assert "5" in normalize_code(c_code, "main.c")
+    # Every accepted language has a cleanup (see test_ts_cleanup); other files are left alone.
+    kotlin = "fun main() {\n    val unused = 5\n}"
+    assert "5" in normalize_code(kotlin, "Main.kt")
 
 
 def test_read_only_method_calls_are_removed_mutating_ones_kept():

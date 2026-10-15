@@ -15,15 +15,23 @@ const pct = (x: number) => `${(x * 100).toFixed(0)}%`;
  */
 export default function ReportSimilarityPanel({
   subjectId,
-  assignmentName,
+  assignmentNames,
 }: {
   subjectId: number | null;
-  assignmentName: string;
+  assignmentNames: string[];
 }) {
+  // Its own choice of assignment, independent of the code similarity check above.
+  const [assignmentName, setAssignmentName] = useState("");
   const [result, setResult] = useState<ReportSimilarityResult | null>(null);
   const [msg, setMsg] = useState<MessageState>(null);
   const [running, setRunning] = useState(false);
   const [openPair, setOpenPair] = useState<string | null>(null);
+
+  // Keep the selection valid as the subject's assignments change.
+  useEffect(() => {
+    if (assignmentNames.length && !assignmentNames.includes(assignmentName)) setAssignmentName(assignmentNames[0]);
+    if (!assignmentNames.length) setAssignmentName("");
+  }, [assignmentNames, assignmentName]);
 
   // A result belongs to one assignment: clear it when the selection changes.
   useEffect(() => {
@@ -79,10 +87,27 @@ export default function ReportSimilarityPanel({
         Upload the assignment&apos;s question paper or report template as a &ldquo;Report template (PDF)&rdquo; on
         the assignment, and its text is cut out of every report before comparing.
       </p>
+      <label className="mt-3 block text-sm font-semibold" htmlFor="report-similarity-assignment">
+        Assignment
+      </label>
+      <select
+        id="report-similarity-assignment"
+        value={assignmentName}
+        disabled={running}
+        onChange={(e) => setAssignmentName(e.target.value)}
+        className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+      >
+        {assignmentNames.length === 0 && <option value="">No assignments with submissions yet</option>}
+        {assignmentNames.map((a) => (
+          <option key={a} value={a}>
+            {a}
+          </option>
+        ))}
+      </select>
       <button
         type="button"
         onClick={run}
-        disabled={running}
+        disabled={running || !assignmentName}
         className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
       >
         {running ? "Comparing reports..." : "Check report similarity"}
