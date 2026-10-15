@@ -1,5 +1,6 @@
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).parent
@@ -25,10 +26,15 @@ os.environ["GRADER_BACKEND"] = "heuristic"
 os.environ["VIDEO_VISION"] = "off"
 # And the Fast-DetectGPT scoring model (reports fall back to the style heuristic).
 os.environ["AI_TEXT_DETECTION"] = "0"
+# The local demo accounts are for manual use, not for the test database.
+os.environ["DEMO_DATA"] = "off"
 
-_portal_db = ROOT / "portal.db"
-if _portal_db.exists():
-    _portal_db.unlink()
+# The tests use their own throwaway database. Never point them at the real
+# portal.db: this file used to be deleted at the start of every run.
+_test_db = Path(tempfile.gettempdir()) / "portal-pytest.db"
+if _test_db.exists():
+    _test_db.unlink()
+os.environ["PORTAL_DB_PATH"] = str(_test_db)
 
 # Bootstrap the default admin account directly, rather than relying on
 # app.main's `@app.on_event("startup")` handler -- a bare

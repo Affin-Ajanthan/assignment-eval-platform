@@ -45,6 +45,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from .demo_data import demo_data_enabled, seed_demo_data
 from .auth import (
     bootstrap_admin,
     create_session,
@@ -583,6 +584,8 @@ async def _lifespan(_app: FastAPI):
     db = next(get_db())
     try:
         bootstrap_admin(db)
+        if demo_data_enabled():
+            seed_demo_data(db)
     finally:
         db.close()
     # Load UniXcoder once, in the background, so startup isn't blocked

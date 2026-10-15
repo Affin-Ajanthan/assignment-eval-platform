@@ -7,6 +7,7 @@ that live alongside the source rather than inside the Python package.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from sqlalchemy import create_engine
@@ -16,7 +17,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
-DATABASE_URL = f"sqlite:///{BASE_DIR / 'portal.db'}"
+# PORTAL_DB_PATH lets the tests use a throwaway database; normally it is unset.
+DB_FILE = Path(os.environ.get("PORTAL_DB_PATH") or BASE_DIR / "portal.db")
+DATABASE_URL = f"sqlite:///{DB_FILE}"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
