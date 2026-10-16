@@ -15,7 +15,47 @@ client = TestClient(fastapi_app)
 def test_health():
     r = client.get("/health")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok"}
+    assert r.json()["status"] == "ok"
+
+
+def _health_detector(detector):
+    from app.evaluator.ai_text_detection import set_ai_text_detector
+
+    set_ai_text_detector(detector)
+    try:
+        return client.get("/health").json()["ai_text_detector"]
+    finally:
+        set_ai_text_detector(None)
+
+
+def test_health_shows_ai_detector_disabled():
+    from app.evaluator.ai_text_detection import AITextDetector
+
+    info = _health_detector(AITextDetector(enabled=False))
+    assert info["status"] == "disabled" and info["fallback_to_heuristic"] is True
+    assert info["error"] is None and info["model"]
+
+
+def test_health_shows_ai_detector_ready():
+    from app.evaluator.ai_text_detection import AITextDetector
+
+    detector = AITextDetector(scorer_factory=lambda: object(), enabled=True)
+    assert detector.load()
+    info = _health_detector(detector)
+    assert info["status"] == "ready" and info["fallback_to_heuristic"] is False
+
+
+def test_health_shows_ai_detector_unavailable_without_leaking_the_message():
+    from app.evaluator.ai_text_detection import AITextDetector
+
+    def broken():
+        raise OSError(r"C:\secret\path\model.safetensors not found")
+
+    detector = AITextDetector(scorer_factory=broken, enabled=True)
+    detector.load()
+    info = _health_detector(detector)
+    assert info["status"] == "unavailable" and info["fallback_to_heuristic"] is True
+    assert info["error"] == "OSError"  # type only, not the path
 
 
 def test_create_and_list_rubric():

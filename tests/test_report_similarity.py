@@ -129,11 +129,40 @@ def test_short_shared_phrases_are_not_passages():
     assert rs.matching_passages(a, b)[0] == []
 
 
-def test_text_in_most_reports_is_ignored():
-    reports = [rs.tokenize(str(i), f"{BRIEF} {body}") for i, body in enumerate([ORIGINAL, HONEST, HONEST_2])]
+OWN_WORDS = (
+    "My approach keeps the parsing separate from the printing so each function has one job, and I tested "
+    "the edge cases by hand with an empty file, a file with only invalid rows and a file with duplicate names."
+)
+
+
+def test_text_in_more_than_half_of_the_reports_is_ignored():
+    bodies = [ORIGINAL, HONEST, HONEST_2, OWN_WORDS]  # the brief is in all 4 reports
+    reports = [rs.tokenize(str(i), f"{BRIEF} {body}") for i, body in enumerate(bodies)]
     assert rs.remove_common_fingerprints(reports) > 0
     a, b = reports[1], reports[2]
     assert not (set(a.fingerprints) & set(b.fingerprints))  # the brief no longer links them
+
+
+def test_three_reports_are_too_few_to_guess_the_brief():
+    reports = [rs.tokenize(str(i), f"{BRIEF} {body}") for i, body in enumerate([ORIGINAL, HONEST, HONEST_2])]
+    assert rs.remove_common_fingerprints(reports) == 0
+
+
+def test_a_group_of_three_copiers_in_a_class_of_six_is_not_hidden():
+    # Exactly half the class shares the same answers: that is a group, not the brief.
+    copied = ORIGINAL
+    texts = {"c1": copied, "c2": copied + " Done.", "c3": "Summary. " + copied,
+             "h1": HONEST, "h2": HONEST_2, "h3": OWN_WORDS}
+    result = rs.compare_reports(texts)
+    assert result.common_fingerprints_excluded == 0
+    flagged = {frozenset((p.submission_a, p.submission_b)) for p in result.pairs if p.flag_level == "high"}
+    assert flagged == {frozenset(("c1", "c2")), frozenset(("c1", "c3")), frozenset(("c2", "c3"))}
+
+
+def test_with_a_template_the_most_reports_rule_is_off():
+    texts = {str(i): f"{BRIEF} {body}" for i, body in enumerate([ORIGINAL, HONEST, HONEST_2, OWN_WORDS])}
+    assert rs.compare_reports(texts).common_fingerprints_excluded > 0
+    assert rs.compare_reports(texts, template_text=BRIEF).common_fingerprints_excluded == 0
 
 
 def test_fingerprints_are_stable_across_calls():

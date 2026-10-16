@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch, Assignment, BatchEvaluationResult, Rubric } from "@/lib/api";
+import { AISignal, apiFetch, Assignment, BatchEvaluationResult, Rubric } from "@/lib/api";
+import { methodLabel } from "@/components/AISignalsPanel";
 import { formatMark } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
 import DownloadExcelButton from "@/components/instructor/DownloadExcelButton";
@@ -20,6 +21,22 @@ function FlagBadge({ flagged }: { flagged: boolean | null }) {
     <span className="rounded bg-yellow-50 px-2 py-0.5 text-xs font-semibold text-yellow-800">⚑ Flagged</span>
   ) : (
     <span className="rounded bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-800">No flag</span>
+  );
+}
+
+/**
+ * "Report: High 73 · Fast-DetectGPT (Qwen2.5-1.5B)". A report scored by the
+ * style heuristic is marked, since that only happens when the model is off
+ * or failed to load.
+ */
+function AISignalLine({ label, signal, report }: { label: string; signal: AISignal | null; report?: boolean }) {
+  if (!signal) return null;
+  const heuristic = !signal.method.startsWith("fast-detectgpt:");
+  return (
+    <div className="mt-1 text-xs text-gray-600">
+      {label}: <span className="capitalize">{signal.signal}</span> {signal.score} · {methodLabel(signal.method)}
+      {report && heuristic && <span className="text-red-700"> (model not used)</span>}
+    </div>
   );
 }
 
@@ -204,6 +221,8 @@ export default function BatchEvaluateSection({
                   </td>
                   <td className="border border-gray-200 px-3 py-1.5">
                     <FlagBadge flagged={r.ai_flagged} />
+                    <AISignalLine label="Report" signal={r.ai_signals?.report ?? null} report />
+                    <AISignalLine label="Code" signal={r.ai_signals?.code ?? null} />
                   </td>
                   <td className="border border-gray-200 px-3 py-1.5">
                     {r.grader ? (r.model ? `${r.grader}, ${r.model}` : r.grader) : "—"}

@@ -13,9 +13,14 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+PROJECT_DIR = Path(__file__).resolve().parent.parent
+# Where portal.db and uploads/ live; stored submission paths are relative to
+# it. The project folder unless PORTAL_DATA_DIR says otherwise -- the test
+# suite (conftest.py) points it at a temporary folder so a test run can never
+# touch the real database or uploaded files.
+BASE_DIR = Path(os.environ.get("PORTAL_DATA_DIR") or PROJECT_DIR).resolve()
 UPLOAD_DIR = BASE_DIR / "uploads"
-UPLOAD_DIR.mkdir(exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # PORTAL_DB_PATH lets the tests use a throwaway database; normally it is unset.
 DB_FILE = Path(os.environ.get("PORTAL_DB_PATH") or BASE_DIR / "portal.db")

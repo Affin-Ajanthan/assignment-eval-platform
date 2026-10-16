@@ -44,10 +44,21 @@ SEMANTIC_REVIEW_FLOOR = 0.85
 SEMANTIC_OUTLIER_Z = 2.0
 SEMANTIC_MIN_COHORT_PAIRS = 10
 
-# Fingerprints found in this many reports are the assignment's own text
-# (question brief, template headings) rather than copying between students.
-COMMON_MIN_REPORTS = 3
+# Without a template PDF, fingerprints found in MORE than half of the reports
+# (and in at least COMMON_MIN_REPORTS of them) are taken to be the assignment's
+# own text (question brief, template headings) rather than copying. "At least
+# half" was too loose: in a class of 6, three students sharing their answers
+# counted as "half" and hid each other. With a template uploaded this rule is
+# off -- the template is the exact list of what to ignore.
+COMMON_MIN_REPORTS = 4
 COMMON_SHARE = 0.5
+
+# Instructor's template PDF (question paper, report template): every run of at
+# least this many consecutive words in a report that also appears in the
+# template is cut out before comparing. Shorter runs are ordinary phrasing.
+TEMPLATE_MIN_WORDS = 8
+# Reports must still have this much of their own text left to be compared.
+TEMPLATE_MIN_REMAINING = 30
 
 
 # --------------------------------------------------------------------------
@@ -152,13 +163,14 @@ def winnow_words(words: list[str], k: int = WORD_K, window: int = WINDOW) -> dic
 
 
 def remove_common_fingerprints(reports: list[ReportText]) -> int:
-    """Drop fingerprints present in many reports (the assignment brief or a
-    template everyone was given). Returns how many distinct ones were dropped."""
+    """Drop fingerprints present in more than half of the reports, and in at
+    least COMMON_MIN_REPORTS of them (the assignment brief everyone pasted).
+    Returns how many distinct ones were dropped."""
     n = len(reports)
     if n < COMMON_MIN_REPORTS:
         return 0
     counts = Counter(h for r in reports for h in r.fingerprints)
-    common = {h for h, c in counts.items() if c >= max(COMMON_MIN_REPORTS, math.ceil(n * COMMON_SHARE))}
+    common = {h for h, c in counts.items() if c > n * COMMON_SHARE and c >= COMMON_MIN_REPORTS}
     for r in reports:
         for h in common:
             r.fingerprints.pop(h, None)
@@ -269,14 +281,59 @@ class ReportComparison:
     semantic_pairs_compared: int = 0
     cohort_median: float | None = None
     review_threshold: float | None = None
+    # Words cut from each report because they match the template PDF.
+    template_words_removed: dict[str, int] = field(default_factory=dict)
 
 
-def compare_reports(texts: dict[str, str], service=None) -> ReportComparison:
+def remove_template_text(text: str, template: str) -> tuple[str, int]:
+    """`text` without every run of TEMPLATE_MIN_WORDS+ consecutive words that
+    also appears in `template` (case and punctuation ignored). Returns the
+    remaining text and how many words were cut."""
+    words = [(m.group().lower(), m.span()) for m in re.finditer(r"\w+", text)]
+    template_words = [w.lower() for w in re.findall(r"\w+", template)]
+    k = WORD_K
+    if len(words) < k or len(template_words) < k:
+        return text, 0
+    template_grams = {_stable_hash(template_words[i:i + k]) for i in range(len(template_words) - k + 1)}
+    covered = [False] * len(words)
+    for i in range(len(words) - k + 1):
+        if _stable_hash([w for w, _ in words[i:i + k]]) in template_grams:
+            for j in range(i, i + k):
+                covered[j] = True
+    # Keep only runs long enough to be the template rather than a common phrase.
+    runs, start = [], None
+    for i, flag in enumerate(covered + [False]):
+        if flag and start is None:
+            start = i
+        elif not flag and start is not None:
+            if i - start >= TEMPLATE_MIN_WORDS:
+                runs.append((start, i))
+            start = None
+    if not runs:
+        return text, 0
+    pieces, last = [], 0
+    for first, end in runs:
+        pieces.append(text[last:words[first][1][0]])
+        last = words[end - 1][1][1]
+    pieces.append(text[last:])
+    return " ".join(" ".join(pieces).split()), sum(end - first for first, end in runs)
+
+
+def compare_reports(texts: dict[str, str], service=None, template_text: str | None = None) -> ReportComparison:
     """Compare every pair of cleaned report texts. ``service`` is the
     shared sentence-embedding service (None skips the semantic signal).
-    Never raises because the model failed: the text results stand alone."""
+    ``template_text``: the instructor's template PDF text, cut out of every
+    report first. Never raises because the model failed: the text results
+    stand alone."""
+    removed: dict[str, int] = {}
+    if template_text:
+        texts = dict(texts)
+        for sid, text in texts.items():
+            texts[sid], removed[sid] = remove_template_text(text, template_text)
     reports = [tokenize(sid, text) for sid, text in texts.items()]
-    common = remove_common_fingerprints(reports)
+    # A template states exactly what everyone was given; guessing it from
+    # "text in most reports" would only risk hiding a group of copiers.
+    common = 0 if template_text else remove_common_fingerprints(reports)
 
     pairs: list[ReportPair] = []
     for a, b in combinations(reports, 2):
@@ -298,7 +355,8 @@ def compare_reports(texts: dict[str, str], service=None) -> ReportComparison:
                                 f"report's text also appears word-for-word in the other")
         pairs.append(pair)
 
-    result = ReportComparison(pairs=pairs, common_fingerprints_excluded=common, semantic_status="disabled")
+    result = ReportComparison(pairs=pairs, common_fingerprints_excluded=common, semantic_status="disabled",
+                              template_words_removed=removed)
     if service is None or not service.load():
         if service is not None:
             result.semantic_status = service.status

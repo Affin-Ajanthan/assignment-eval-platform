@@ -57,10 +57,16 @@ def _batch_result(subject_id):
         "total": 3, "evaluated": 2, "skipped": 0, "failed": 1,
         "results": [
             {"submission_id": 1, "student_name": "Alice", "status": "evaluated", "recommended_score": 8,
-             "recommended_max": 10, "grader": "heuristic", "review_flags": [], "error": None},
+             "recommended_max": 10, "grader": "heuristic", "review_flags": [], "error": None,
+             "ai_signals": {
+                 "report": {"signal": "high", "score": 73, "method": "fast-detectgpt:Qwen2.5-1.5B", "reasons": []},
+                 "code": {"signal": "low", "score": 12, "method": "style-heuristic", "reasons": []}}},
             {"submission_id": 2, "student_name": "Bob", "status": "evaluated", "recommended_score": 5,
              "recommended_max": 10, "grader": "heuristic", "review_flags": ["Similarity flag"], "error": None,
-             "similarity_flagged": True, "ai_flagged": False},
+             "similarity_flagged": True, "ai_flagged": False,
+             "ai_signals": {
+                 "report": {"signal": "low", "score": 5, "method": "style-heuristic", "reasons": []},
+                 "code": None}},
             {"submission_id": 3, "student_name": "Chamath", "status": "failed", "recommended_score": None,
              "recommended_max": None, "grader": None, "review_flags": [], "error": "RuntimeError: boom"},
         ],
@@ -106,8 +112,13 @@ def test_batch_evaluation_export():
     assert [results.cell(row=r, column=2).value for r in (2, 3, 4)] == ["Alice", "Bob", "Chamath"]
     assert results["F2"].value == 0.8 and results["F2"].number_format == "0%"
     assert results["G3"].value == "Flagged" and results["H3"].value == "No flag"   # similarity, AI detection
-    assert results["J3"].value == "Similarity flag"                                # review flags text
-    assert results["C4"].value == "Failed" and "boom" in results["K4"].value
+    assert results["M3"].value == "Similarity flag"                                # review flags text
+    assert results["C4"].value == "Failed" and "boom" in results["N4"].value
+    # report AI signal, method, code AI signal
+    assert [results[c + "2"].value for c in "IJK"] == ["High (73/100)", "Fast-DetectGPT (Qwen2.5-1.5B)",
+                                                        "Low (12/100)"]
+    assert results["J3"].value == "Style heuristic (model not used)" and results["K3"].value in (None, "")
+    assert results["I4"].value in (None, "")  # failed: no signal
     summary = {row[0]: row[1] for row in wb["Summary"].iter_rows(values_only=True) if row and row[0]}
     assert summary["Rubric"] == "Rubric #999999" and summary["Average recommended score"] == "65%"
 
