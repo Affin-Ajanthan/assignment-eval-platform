@@ -121,6 +121,8 @@ export interface Submission {
   status: "submitted" | "graded";
   final_mark: number | null;
   max_mark: number | null;
+  /** Kinds of file uploaded, in this order: code, report, video. */
+  submitted_types: ("code" | "report" | "video")[];
 }
 
 export interface Grade {
@@ -214,8 +216,14 @@ export interface BatchEvaluationItem {
   recommended_score: number | null;
   recommended_max: number | null;
   grader: string | null;
+  /** Ollama model that produced the marks; null for the heuristic grader. */
+  model: string | null;
   review_flags: string[];
   error: string | null;
+  /** Similarity flag (overlap with another submission); null when the submission failed. */
+  similarity_flagged: boolean | null;
+  /** AI-content review flag (code or report); never changes marks. Null when the submission failed. */
+  ai_flagged: boolean | null;
 }
 
 export interface BatchEvaluationResult {
@@ -246,6 +254,8 @@ export interface AutoEvaluation {
   review_flags: string[];
   criterion_breakdown: { name: string; score: number; max_points: number; justification: string }[];
   grader: string;
+  /** Ollama model that produced the marks; null for the heuristic grader or older results. */
+  model?: string | null;
   similarity_flagged: boolean;
   code_ai_flagged: boolean;
   report_ai_signal: string | null;

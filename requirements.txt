@@ -49,8 +49,6 @@ httpx>=0.27
 faster-whisper>=1.0
 
 # --- Optional: real LLM rubric grading (app/evaluator/rubric_grading.py).
-# Local: OllamaRubricGrader uses qwen3:4b via a running Ollama server
-# (install Ollama, then `ollama pull qwen3:4b`) -- no extra Python package.
-# Cloud: LLMRubricGrader needs ANTHROPIC_API_KEY set. With neither, the app
-# falls back to HeuristicRubricGrader automatically.
-anthropic>=0.34
+# OllamaRubricGrader uses qwen3:4b via a running Ollama server (install
+# Ollama, then `ollama pull qwen3:4b`) -- no extra Python package. Without
+# it, the app falls back to HeuristicRubricGrader automatically.

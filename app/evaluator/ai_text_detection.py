@@ -43,11 +43,13 @@ older package documentation; mean chunk curvature):
 The ranges overlap heavily (Fast-DetectGPT works best when the scoring
 model resembles the model that wrote the text; modern assistants differ a
 lot from small Qwen models), and on this sample it did no better than the
-style heuristic. It is therefore OFF by default.
+style heuristic on that sample. It is ON by default anyway, as the planned
+upgrade, with Qwen2.5-1.5B as the scoring model. That choice is NOT yet
+validated on labelled student work: check the false-flag rate on real
+reports before relying on it.
 
-Configuration: ``AI_TEXT_DETECTION=1`` enables the model (otherwise the
-style heuristic is used); ``AI_TEXT_DETECTOR_MODEL`` picks another causal
-LM (base models work best).
+Configuration: ``AI_TEXT_DETECTION=0`` switches back to the style heuristic;
+``AI_TEXT_DETECTOR_MODEL`` picks another causal LM (base models work best).
 """
 
 from __future__ import annotations
@@ -63,7 +65,7 @@ from typing import Callable, Protocol
 
 log = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "Qwen/Qwen2.5-0.5B"
+DEFAULT_MODEL = "Qwen/Qwen2.5-1.5B"
 CHUNK_TOKENS = 256
 MIN_TOKENS = 120
 DEFAULT_MAX_CHUNKS = 8
@@ -80,9 +82,10 @@ def _env_float(name: str, default: float) -> float:
 
 
 def _enabled() -> bool:
-    # OFF unless AI_TEXT_DETECTION=1: on the calibration sample it did no
-    # better than the style heuristic (see module docstring).
-    return os.environ.get("AI_TEXT_DETECTION", "0").strip().lower() in {"1", "true", "yes", "on"}
+    # ON by default (the upgrade from the style heuristic). If the model cannot be
+    # loaded, the style heuristic is used instead, so reports are never unscored.
+    # AI_TEXT_DETECTION=0 switches back to the style heuristic only.
+    return os.environ.get("AI_TEXT_DETECTION", "1").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def model_name() -> str:

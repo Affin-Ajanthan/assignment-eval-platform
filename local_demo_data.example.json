@@ -1,0 +1,9 @@
+{
+  "password": "change-me",
+  "subject": {"name": "Example Subject", "code": "EX101"},
+  "instructor": {"email": "instructor@example.com", "name": "Example Instructor"},
+  "students": [
+    {"email": "student1@example.com", "name": "Example Student 1"},
+    {"email": "student2@example.com", "name": "Example Student 2"}
+  ]
+}

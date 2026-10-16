@@ -1,5 +1,3 @@
-from dataclasses import dataclass, field
-
 import json
 
 import pytest
@@ -9,7 +7,7 @@ from app.evaluator.rubric_grading import (
     Criterion,
     Evidence,
     HeuristicRubricGrader,
-    LLMRubricGrader,
+    OLLAMA_NUM_CTX,
     OllamaRubricGrader,
     build_default_grader,
 )
@@ -77,84 +75,8 @@ def test_heuristic_grader_blends_code_quality_score():
     assert result.criteria[0].score >= 5  # good code (quality score 100/100) should score at least half
 
 
-# --------------------------------------------------------------------------
-# LLM grader -- tested with a fake client, no real network/API key needed.
-# --------------------------------------------------------------------------
-
-
-@dataclass
-class _FakeToolUseBlock:
-    input: dict
-    type: str = "tool_use"
-
-
-@dataclass
-class _FakeResponse:
-    content: list = field(default_factory=list)
-
-
-class _FakeMessages:
-    def __init__(self, payload):
-        self._payload = payload
-        self.last_call_kwargs = None
-
-    def create(self, **kwargs):
-        self.last_call_kwargs = kwargs
-        return _FakeResponse(content=[_FakeToolUseBlock(input=self._payload)])
-
-
-class _FakeAnthropicClient:
-    def __init__(self, payload):
-        self.messages = _FakeMessages(payload)
-
-
-def test_llm_grader_parses_tool_use_response():
-    payload = {
-        "criteria": [
-            {"name": "Correctness", "score": 55, "justification": "Implements the algorithm correctly."},
-            {"name": "Code quality", "score": 30, "justification": "Well documented."},
-        ]
-    }
-    client = _FakeAnthropicClient(payload)
-    grader = LLMRubricGrader(client=client)
-    criteria = [
-        Criterion(name="Correctness", description="", max_points=60),
-        Criterion(name="Code quality", description="", max_points=40),
-    ]
-    result = grader.grade(criteria, _evidence())
-
-    assert result.grader == "llm"
-    assert result.criteria[0].score == 55
-    assert result.criteria[1].score == 30
-    assert client.messages.last_call_kwargs["tool_choice"]["name"] == "submit_grades"
-
-
-def test_llm_grader_clamps_score_to_max_points():
-    payload = {"criteria": [{"name": "Only", "score": 999, "justification": "way over"}]}
-    client = _FakeAnthropicClient(payload)
-    grader = LLMRubricGrader(client=client)
-    result = grader.grade([Criterion(name="Only", max_points=10)], _evidence())
-    assert result.criteria[0].score == 10
-
-
-def test_llm_grader_handles_missing_criterion_in_response():
-    payload = {"criteria": []}
-    client = _FakeAnthropicClient(payload)
-    grader = LLMRubricGrader(client=client)
-    result = grader.grade([Criterion(name="Missing", max_points=10)], _evidence())
-    assert result.criteria[0].score == 0.0
-    assert "did not return" in result.criteria[0].justification
-
-
-def test_llm_grader_without_client_raises_helpful_error():
-    grader = LLMRubricGrader(client=None)
-    with pytest.raises(RuntimeError, match="needs a client"):
-        grader.grade([Criterion(name="X", max_points=10)], _evidence())
-
-
-def test_build_default_grader_falls_back_to_heuristic_without_api_key(monkeypatch):
+def test_build_default_grader_falls_back_to_heuristic_without_ollama(monkeypatch):
     monkeypatch.setenv("GRADER_BACKEND", "auto")
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setattr(rubric_grading, "_ollama_available", lambda *a, **k: False)
     grader = build_default_grader()
     assert isinstance(grader, HeuristicRubricGrader)
@@ -191,8 +113,9 @@ def test_ollama_grader_parses_json_reply_and_requests_qwen3():
     assert [c.score for c in result.criteria] == [50, 35]
     url, payload = post.calls[0]
     assert url.endswith("/api/chat")
-    assert payload["model"] == "qwen3:4b"
+    assert payload["model"] == "qwen3:8b"
     assert payload["options"]["temperature"] == 0
+    assert payload["options"]["num_ctx"] == OLLAMA_NUM_CTX
     assert payload["think"] is False
 
 
@@ -215,6 +138,40 @@ def test_ollama_grader_bad_json_raises_runtime_error():
     grader = OllamaRubricGrader(post=lambda *a: {"message": {"content": "not json"}})
     with pytest.raises(RuntimeError, match="expected JSON"):
         grader.grade([Criterion(name="X", max_points=10)], _evidence())
+
+
+def test_ollama_grader_caps_reply_length():
+    post = _FakePost([{"name": "X", "score": 10, "justification": "ok"}])
+    OllamaRubricGrader(post=post).grade([Criterion(name="X", max_points=10)], _evidence())
+    assert post.calls[0][1]["options"]["num_predict"] == rubric_grading.OLLAMA_NUM_PREDICT
+
+
+def test_ollama_grader_retries_a_timeout_once():
+    attempts = []
+    good = {"message": {"content": json.dumps({"criteria": [
+        {"name": "X", "checks_total": 1, "checks_met": 1, "checks_partly": 0, "justification": "ok"}]})}}
+
+    def flaky(url, payload, timeout):
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise TimeoutError("timed out")
+        return good
+
+    result = OllamaRubricGrader(post=flaky).grade([Criterion(name="X", max_points=10)], _evidence())
+    assert len(attempts) == 2
+    assert result.criteria[0].score == 10.0
+
+
+def test_ollama_grader_gives_up_after_two_timeouts():
+    attempts = []
+
+    def always_timeout(url, payload, timeout):
+        attempts.append(1)
+        raise TimeoutError("timed out")
+
+    with pytest.raises(TimeoutError):
+        OllamaRubricGrader(post=always_timeout).grade([Criterion(name="X", max_points=10)], _evidence())
+    assert len(attempts) == 2
 
 
 def test_build_default_grader_prefers_ollama_when_available(monkeypatch):
@@ -268,6 +225,78 @@ def test_ollama_grader_sends_source_code_to_the_model():
     assert "def bubble_sort(items):" in sent
 
 
+def test_relevant_text_returns_short_text_unchanged():
+    criteria = [Criterion(name="Testing", description="describes tests", max_points=5)]
+    assert rubric_grading._relevant_text("short text", criteria, 1000) == "short text"
+
+
+def test_relevant_text_keeps_the_passage_that_matches_the_criteria():
+    filler = "\n\n".join(f"Background paragraph number {i} about unrelated history." for i in range(60))
+    text = filler + "\n\nWe tested the sorter with an empty list and with 12 random inputs."
+    criteria = [Criterion(name="Testing", description="describes the tests and inputs used", max_points=5)]
+    selected = rubric_grading._relevant_text(text, criteria, 1500)
+    assert "empty list and with 12 random inputs" in selected
+    assert len(selected) <= 1500 + 250
+    assert "not shown to you" in selected
+
+
+def test_relevant_text_keeps_original_order():
+    paragraphs = [f"Paragraph {i} " + "filler words " * 20 for i in range(30)]
+    paragraphs[25] = "Paragraph 25 explains the stack and its push and pop operations."
+    paragraphs[3] = "Paragraph 3 also explains the stack operations in detail."
+    text = "\n\n".join(paragraphs)
+    criteria = [Criterion(name="Stack", description="explains stack push and pop", max_points=5)]
+    selected = rubric_grading._relevant_text(text, criteria, 1200)
+    assert selected.index("Paragraph 3") < selected.index("Paragraph 25")
+
+
+def test_stemming_matches_word_forms():
+    assert rubric_grading._stem("testing") == rubric_grading._stem("tests") == rubric_grading._stem("tested") == "test"
+    assert rubric_grading._stem("inputs") == rubric_grading._stem("input") == "input"
+    assert rubric_grading._stem("describes") == rubric_grading._stem("describe") == "describ"
+    assert rubric_grading._stem("code") == "code"  # too short to trim safely
+
+
+def test_selection_matches_different_word_forms():
+    filler = "\n\n".join(f"Background paragraph {i} about history and goals of the project. " * 3 for i in range(60))
+    text = filler + "\n\nWe tested the sorter on several inputs, including an empty input."
+    criteria = [Criterion(name="Tests", description="describes the test inputs", max_points=5)]
+    selected = rubric_grading._relevant_text(text, criteria, 1500)
+    assert "We tested the sorter on several inputs" in selected
+
+
+def test_omitted_note_says_the_text_exists_and_is_not_missing():
+    text = "\n\n".join(f"Paragraph {i} " + "filler " * 80 for i in range(40))
+    criteria = [Criterion(name="Testing", description="tests", max_points=5)]
+    selected = rubric_grading._relevant_text(text, criteria, 1000)
+    assert "not shown to you" in selected and "do not treat them as missing" in selected
+
+
+def test_cut_inputs_reports_only_inputs_that_were_shortened():
+    long_report = SimpleNamespace(content=SimpleNamespace(text="\n\n".join("filler " * 100 for _ in range(60))))
+    criteria = [Criterion(name="Testing", description="tests", max_points=5)]
+    assert rubric_grading._cut_inputs(criteria, Evidence(report=long_report)) == ["report text"]
+    assert rubric_grading._cut_inputs(criteria, Evidence(video_transcript="short transcript")) == []
+
+
+def test_ollama_grade_result_lists_cut_inputs():
+    long_report = SimpleNamespace(content=SimpleNamespace(text="\n\n".join("filler " * 100 for _ in range(60))))
+    post = _FakePost([{"name": "Testing", "checks_total": 1, "checks_met": 1, "checks_partly": 0, "justification": "ok"}])
+    result = OllamaRubricGrader(post=post).grade(
+        [Criterion(name="Testing", description="tests", max_points=5)], Evidence(report=long_report))
+    assert result.omitted == ["report text"]
+
+
+def test_prompt_reaches_relevant_report_text_beyond_the_old_4000_char_cut():
+    from types import SimpleNamespace
+    filler = "\n\n".join("Unrelated background sentence that goes on and on. " * 10 for _ in range(20))
+    report_text = filler + "\n\nThe deadlock analysis shows that the lock ordering prevents deadlock."
+    evidence = Evidence(report=SimpleNamespace(content=SimpleNamespace(text=report_text)))
+    criteria = [Criterion(name="Deadlock analysis", description="explains why deadlock cannot happen", max_points=5)]
+    prompt = rubric_grading._build_prompt(criteria, evidence)
+    assert "lock ordering prevents deadlock" in prompt
+
+
 # --------------------------------------------------------------------------
 # The grader cannot run code, so it must not claim to have.
 # --------------------------------------------------------------------------
@@ -316,10 +345,10 @@ def test_ran_code_detector_catches_overclaims_and_allows_honest_wording():
 
 @pytest.mark.slow
 def test_real_model_does_not_claim_to_have_run_the_code():
-    """Live check against the local qwen3:4b: code containing a demo call
+    """Live check against the local qwen3:8b: code containing a demo call
     (`print(bubble_sort([...]))`) used to make it write 'as verified by ...'."""
     if not rubric_grading._ollama_available():
-        pytest.skip("Ollama / qwen3:4b not available")
+        pytest.skip("Ollama / qwen3:8b not available")
     evidence = Evidence(code_reports=[analyze_python(DEMO_CODE, "solution.py")],
                         code_sources={"solution.py": DEMO_CODE})
     result = OllamaRubricGrader().grade(
@@ -351,16 +380,13 @@ def test_no_grader_changes_marks_because_of_review_flags(flags):
     keyword = HeuristicRubricGrader()
     assert keyword.grade(criteria, flagged).total_score == keyword.grade(criteria, plain).total_score == 20
 
-    # LLM graders: the prompt must not depend on the flag at all, so whatever
+    # LLM grader: the prompt must not depend on the flag at all, so whatever
     # the model returns, the flag cannot move the marks.
     assert rubric_grading._build_prompt(criteria, flagged) == rubric_grading._build_prompt(criteria, plain)
 
     reply = [{"name": "Academic integrity", "score": 17, "justification": "ok"}]
     ollama = OllamaRubricGrader(post=_FakePost(reply))
     assert ollama.grade(criteria, flagged).total_score == ollama.grade(criteria, plain).total_score == 17
-
-    claude = LLMRubricGrader(client=_FakeAnthropicClient({"criteria": reply}))
-    assert claude.grade(criteria, flagged).total_score == claude.grade(criteria, plain).total_score == 17
 
 
 # --------------------------------------------------------------------------

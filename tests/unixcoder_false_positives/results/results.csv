@@ -1,5 +1,5 @@
 id,language,relationship,why_similar,production,raw,jaccard,containment,token_flag,shared_lines,flag@0.5,flag@0.6,flag@0.7,flag@0.75,flag@0.8,flag@0.85,flag@0.9,flag@0.95,a,b
-TC06,Python,"same algorithm (binary search), written independently",the binary-search algorithm has one canonical shape (low/high/mid loop),0.9321384429931641,0.6542153358459473,0.2,0.34782608695652173,False,0.18181818181818182,True,True,True,True,True,True,True,False,"def binary_search(sorted_items, wanted):
+TC06,Python,"same algorithm (binary search), written independently",the binary-search algorithm has one canonical shape (low/high/mid loop),0.9321384429931641,0.6542151570320129,0.2,0.34782608695652173,False,0.18181818181818182,True,True,True,True,True,True,True,False,"def binary_search(sorted_items, wanted):
     low, high = 0, len(sorted_items) - 1
     while low <= high:
         mid = (low + high) // 2
@@ -22,14 +22,14 @@ TC06,Python,"same algorithm (binary search), written independently",the binary-s
         return left
     return -1
 "
-TC14,Python,"very short programs, same beginner exercise (even/odd), written separately",tiny programs for a common exercise have very few possible shapes,0.921846866607666,0.8950497508049011,0.0,0.0,False,0.0,True,True,True,True,True,True,True,False,"def is_even(number):
+TC14,Python,"very short programs, same beginner exercise (even/odd), written separately",tiny programs for a common exercise have very few possible shapes,0.921846866607666,0.8950498104095459,0.0,0.0,False,0.0,True,True,True,True,True,True,True,False,"def is_even(number):
     return number % 2 == 0
 ","def is_even(n):
     if n % 2:
         return False
     return True
 "
-TC17,Python,instructor starter code + independent student logic,most of each file is the identical instructor-provided starter code,0.899418830871582,0.9488511085510254,0.5957446808510638,0.8,True,0.9411764705882353,True,True,True,True,True,True,False,False,"# CS101 Assignment 3 - Library fines
+TC17,Python,instructor starter code + independent student logic,most of each file is the identical instructor-provided starter code,0.8994187712669373,0.9488511085510254,0.5957446808510638,0.8,True,0.9411764705882353,True,True,True,True,True,True,False,False,"# CS101 Assignment 3 - Library fines
 # DO NOT MODIFY read_input() or main(); implement calculate_fine().
 
 def read_input():
@@ -84,7 +84,7 @@ def main():
 if __name__ == ""__main__"":
     main()
 "
-TC03,Python,"same task (average), different implementation",same task; both accumulate a sum over a list,0.8506114482879639,0.757294237613678,0.10526315789473684,0.2,False,0.2,True,True,True,True,True,True,False,False,"def average(numbers):
+TC03,Python,"same task (average), different implementation",same task; both accumulate a sum over a list,0.8506114482879639,0.7572940587997437,0.10526315789473684,0.2,False,0.2,True,True,True,True,True,True,False,False,"def average(numbers):
     total = 0
     count = 0
     for n in numbers:
@@ -97,7 +97,7 @@ TC03,Python,"same task (average), different implementation",same task; both accu
         mean += (value - mean) / index
     return mean
 "
-TC04,Python,"same task (sorting), different algorithms",same task and output; both are loop-heavy list manipulation,0.8306249380111694,0.5235532522201538,0.0,0.0,False,0.14285714285714285,True,True,True,True,True,False,False,False,"def sort_list(items):
+TC04,Python,"same task (sorting), different algorithms",same task and output; both are loop-heavy list manipulation,0.8306249380111694,0.5235534906387329,0.0,0.0,False,0.14285714285714285,True,True,True,True,True,False,False,False,"def sort_list(items):
     result = list(items)
     for i in range(1, len(result)):
         key = result[i]
@@ -115,7 +115,7 @@ TC04,Python,"same task (sorting), different algorithms",same task and output; bo
     larger = [x for x in items[1:] if x >= pivot]
     return sort_list(smaller) + [pivot] + sort_list(larger)
 "
-TC20,Python,"same nested-loop structure, different functionality",identical nested for-loop/if/counter skeleton,0.8207206726074219,0.5135315656661987,0.5833333333333334,0.7777777777777778,True,0.7142857142857143,True,True,True,True,True,False,False,False,"def count_pairs_with_sum(values, target):
+TC20,Python,"same nested-loop structure, different functionality",identical nested for-loop/if/counter skeleton,0.8207212090492249,0.5135324597358704,0.5833333333333334,0.7777777777777778,True,0.7142857142857143,True,True,True,True,True,False,False,False,"def count_pairs_with_sum(values, target):
     count = 0
     for i in range(len(values)):
         for j in range(i + 1, len(values)):
@@ -130,7 +130,7 @@ TC20,Python,"same nested-loop structure, different functionality",identical nest
                 count += 1
     return count
 "
-TC13,Python,different tasks with the same exception-handling structure,same try/with open/except FileNotFoundError/except ValueError skeleton,0.7768547534942627,0.491161972284317,0.5161290322580645,0.6956521739130435,False,0.4,True,True,True,True,False,False,False,False,"def sum_numbers_in_file(path):
+TC13,Python,different tasks with the same exception-handling structure,same try/with open/except FileNotFoundError/except ValueError skeleton,0.7768545746803284,0.49116188287734985,0.5161290322580645,0.6956521739130435,False,0.4,True,True,True,True,False,False,False,False,"def sum_numbers_in_file(path):
     try:
         with open(path) as handle:
             return sum(float(line) for line in handle if line.strip())
@@ -151,7 +151,7 @@ TC13,Python,different tasks with the same exception-handling structure,same try/
         print(""file is not text"")
         return 0
 "
-TC11,Java,different tasks sharing class/main/Scanner boilerplate,"identical class declaration, main method and Scanner setup",0.7392373085021973,0.3553306460380554,0.28888888888888886,0.5416666666666666,False,0.7,True,True,True,False,False,False,False,False,"import java.util.Scanner;
+TC11,Java,different tasks sharing class/main/Scanner boilerplate,"identical class declaration, main method and Scanner setup",0.739237368106842,0.35533082485198975,0.28888888888888886,0.5416666666666666,False,0.7,True,True,True,False,False,False,False,False,"import java.util.Scanner;
 
 public class Main {
     public static void main(String[] args) {
@@ -179,7 +179,7 @@ public class Main {
     }
 }
 "
-TC02,Python,"same task (maximum), manual vs standard library",same function signature and purpose; very short,0.7088874578475952,0.7612054944038391,0.0,0.0,False,0.5,True,True,True,False,False,False,False,False,"def largest(values):
+TC02,Python,"same task (maximum), manual vs standard library",same function signature and purpose; very short,0.7088875770568848,0.76120525598526,0.0,0.0,False,0.5,True,True,True,False,False,False,False,False,"def largest(values):
     if not values:
         return None
     best = values[0]
@@ -190,7 +190,7 @@ TC02,Python,"same task (maximum), manual vs standard library",same function sign
 ","def largest(values):
     return max(values, default=None)
 "
-TC07,Python,"same string problem (palindrome), different approach",same task; both normalise case and compare characters,0.7052246928215027,0.7254873514175415,0.029411764705882353,0.09090909090909091,False,0.25,True,True,True,False,False,False,False,False,"def is_palindrome(text):
+TC07,Python,"same string problem (palindrome), different approach",same task; both normalise case and compare characters,0.7052242159843445,0.7254873514175415,0.029411764705882353,0.09090909090909091,False,0.25,True,True,True,False,False,False,False,False,"def is_palindrome(text):
     i, j = 0, len(text) - 1
     while i < j:
         if not text[i].isalnum():
@@ -210,7 +210,7 @@ def is_palindrome(text):
     cleaned = re.sub(r""[^a-z0-9]"", """", text.lower())
     return cleaned == cleaned[::-1]
 "
-TC05,Python,"same task (search), linear vs binary",same task; both loop and compare against a target,0.6881798505783081,0.610293984413147,0.06060606060606061,0.2222222222222222,False,0.4,True,True,False,False,False,False,False,False,"def find_index(items, target):
+TC05,Python,"same task (search), linear vs binary",same task; both loop and compare against a target,0.6881793737411499,0.6102936863899231,0.06060606060606061,0.2222222222222222,False,0.4,True,True,False,False,False,False,False,False,"def find_index(items, target):
     for position, item in enumerate(items):
         if item == target:
             return position
@@ -241,7 +241,7 @@ TC01,Python,"same task (maximum), different algorithm",same task; both iterate o
     right = largest(values[middle:])
     return left if left >= right else right
 "
-TC12,Python,different tasks using the same standard-library modules,both lean on collections.Counter/defaultdict and itertools,0.6067929267883301,0.5798048973083496,0.21621621621621623,0.38095238095238093,False,0.3333333333333333,True,True,False,False,False,False,False,False,"from collections import Counter, defaultdict
+TC12,Python,different tasks using the same standard-library modules,both lean on collections.Counter/defaultdict and itertools,0.6067930459976196,0.5798050165176392,0.21621621621621623,0.38095238095238093,False,0.3333333333333333,True,True,False,False,False,False,False,False,"from collections import Counter, defaultdict
 from itertools import chain
 
 
@@ -259,7 +259,7 @@ def top_bigrams(sentences, n):
     pairs = Counter(zip(words, words[1:]))
     return pairs.most_common(n)
 "
-TC08,Python,"same array problem (second largest), different approach",same task; both track the largest values of a list,0.580567479133606,0.7376446723937988,0.06451612903225806,0.16666666666666666,False,0.3333333333333333,True,False,False,False,False,False,False,False,"def second_largest(values):
+TC08,Python,"same array problem (second largest), different approach",same task; both track the largest values of a list,0.5805684328079224,0.7376447319984436,0.06451612903225806,0.16666666666666666,False,0.3333333333333333,True,False,False,False,False,False,False,False,"def second_largest(values):
     first = second = None
     for v in values:
         if first is None or v > first:
@@ -271,7 +271,7 @@ TC08,Python,"same array problem (second largest), different approach",same task;
     distinct = sorted(set(values), reverse=True)
     return distinct[1] if len(distinct) > 1 else None
 "
-TC19,Python,different logic under the same step-by-step comments,identical comment outline (removed by normalisation),0.5718899965286255,0.633459210395813,0.12121212121212122,0.2857142857142857,False,0.5,True,False,False,False,False,False,False,False,"def analyse(scores):
+TC19,Python,different logic under the same step-by-step comments,identical comment outline (removed by normalisation),0.5718899965286255,0.6334595084190369,0.12121212121212122,0.2857142857142857,False,0.5,True,False,False,False,False,False,False,False,"def analyse(scores):
     # Step 1: read and validate the data
     valid = [s for s in scores if 0 <= s <= 100]
     # Step 2: process the data
@@ -289,7 +289,7 @@ TC19,Python,different logic under the same step-by-step comments,identical comme
     # Step 3: produce the output
     return ranking[:3]
 "
-TC16,Python,different tasks with the same function name,both define and call `process(data)` (names removed by normalisation),0.45575442910194397,0.3136192560195923,0.0625,0.14285714285714285,False,0.25,False,False,False,False,False,False,False,False,"def process(data):
+TC16,Python,different tasks with the same function name,both define and call `process(data)` (names removed by normalisation),0.45575472712516785,0.31361982226371765,0.0625,0.14285714285714285,False,0.25,False,False,False,False,False,False,False,False,"def process(data):
     words = data.split()
     return "" "".join(w.capitalize() for w in words)
 
@@ -302,7 +302,7 @@ print(process(""hello student world""))
 
 print(process([3, -1, 4]))
 "
-TC15,Python,different tasks with the same variable names,shares names like values/total/count/result (removed by normalisation),0.44008177518844604,0.4274992346763611,0.12,0.21428571428571427,False,0.2,False,False,False,False,False,False,False,False,"def order_total(values):
+TC15,Python,different tasks with the same variable names,shares names like values/total/count/result (removed by normalisation),0.44008180499076843,0.42749926447868347,0.12,0.21428571428571427,False,0.2,False,False,False,False,False,False,False,False,"def order_total(values):
     total = 0
     count = 0
     for item in values:
@@ -316,7 +316,7 @@ TC15,Python,different tasks with the same variable names,shares names like value
     result = {""range"": total, ""freezing_days"": count}
     return result
 "
-TC10,Python,different tasks sharing the same import block,identical import statements at the top of both files,0.38590186834335327,0.2994718551635742,0.14285714285714285,0.2631578947368421,False,0.5,False,False,False,False,False,False,False,False,"import json
+TC10,Python,different tasks sharing the same import block,identical import statements at the top of both files,0.3859023451805115,0.2994723916053772,0.14285714285714285,0.2631578947368421,False,0.5,False,False,False,False,False,False,False,False,"import json
 import math
 import os
 import sys
@@ -340,7 +340,7 @@ def circle_report(radius):
     circumference = 2 * math.pi * radius
     return json.dumps({""area"": round(area, 2), ""circumference"": round(circumference, 2)})
 "
-TC18,JavaScript,different apps sharing Express framework boilerplate,"identical Express setup: require, app, middleware, listen",0.33901745080947876,0.28127142786979675,0.3333333333333333,0.5,False,0.46153846153846156,False,False,False,False,False,False,False,False,"const express = require('express');
+TC18,JavaScript,different apps sharing Express framework boilerplate,"identical Express setup: require, app, middleware, listen",0.33901873230934143,0.2812725901603699,0.3333333333333333,0.5,False,0.46153846153846156,False,False,False,False,False,False,False,False,"const express = require('express');
 const app = express();
 app.use(express.json());
 
@@ -371,7 +371,7 @@ app.get('/convert/:celsius', (req, res) => {
 
 app.listen(3000, () => console.log('Listening on port 3000'));
 "
-TC09,Python,different tasks (FizzBuzz vs grade bands) using common loops/conditions,both are a for loop over a range/list with an if/elif/else chain,0.27346235513687134,0.23558297753334045,0.32,0.5333333333333333,False,0.08333333333333333,False,False,False,False,False,False,False,False,"def fizzbuzz(limit):
+TC09,Python,different tasks (FizzBuzz vs grade bands) using common loops/conditions,both are a for loop over a range/list with an if/elif/else chain,0.27346205711364746,0.23558340966701508,0.32,0.5333333333333333,False,0.08333333333333333,False,False,False,False,False,False,False,False,"def fizzbuzz(limit):
     lines = []
     for n in range(1, limit + 1):
         if n % 15 == 0:

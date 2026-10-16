@@ -228,6 +228,12 @@ class Submission(Base):
         return self.grades[-1] if self.grades else None
 
     @property
+    def submitted_types(self) -> list[str]:
+        """Which kinds of file were uploaded: any of code, report, video."""
+        return [kind for kind, path in (("code", self.code_path), ("report", self.report_path),
+                                        ("video", self.video_path)) if path]
+
+    @property
     def final_mark(self) -> float | None:
         grade = self.latest_grade
         return grade.total_score if grade else None
@@ -306,7 +312,8 @@ class AutoEvaluation(Base):
     review_flags = Column(JSON, nullable=False)
     # [{"name":.., "score":.., "max_points":.., "justification":..}, ...]
     criterion_breakdown = Column(JSON, nullable=False)
-    grader = Column(String, nullable=False)  # "heuristic" | "llm"
+    grader = Column(String, nullable=False)  # "heuristic" | "ollama"
+    model = Column(String, nullable=True)  # Ollama model name, e.g. "qwen3:8b"; NULL for the heuristic grader
     similarity_flagged = Column(Boolean, default=False)
     code_ai_flagged = Column(Boolean, default=False)
     report_ai_signal = Column(String, nullable=True)  # "low" | "medium" | "high"

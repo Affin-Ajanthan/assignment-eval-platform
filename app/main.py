@@ -45,6 +45,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from .demo_data import demo_data_enabled, seed_demo_data
 from .auth import (
     bootstrap_admin,
     create_session,
@@ -108,7 +109,7 @@ Base.metadata.create_all(bind=engine)
 add_missing_columns("similarity_flags", {
     "semantic_similarity": "FLOAT", "flag_level": "VARCHAR", "flag_reason": "VARCHAR",
 })
-add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON", "ai_signals": "JSON"})
+add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON", "ai_signals": "JSON", "model": "VARCHAR"})
 # Submissions made before assignments existed keep assignment_id NULL (and
 # their free-text assignment_name); nothing else about them changes.
 add_missing_columns("submissions", {"assignment_id": "INTEGER REFERENCES assignments(id)"})
@@ -336,6 +337,8 @@ class SubmissionOut(BaseModel):
     # grading information this response carries.
     final_mark: Optional[float] = None
     max_mark: Optional[float] = None
+    # Kinds of file uploaded: a subset of code, report, video.
+    submitted_types: list[str] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -362,7 +365,7 @@ class GradeOut(BaseModel):
 class AutoEvaluateIn(BaseModel):
     rubric_id: int
     # False: grade with the built-in heuristic grader instead of the rubric
-    # model (local Ollama / Claude). Everything else in the pipeline runs.
+    # model (local Ollama). Everything else in the pipeline runs.
     use_rubric_model: bool = True
 
 
@@ -426,6 +429,7 @@ class AutoEvaluationOut(BaseModel):
     review_flags: list[str]
     criterion_breakdown: list[dict]
     grader: str
+    model: Optional[str] = None
     similarity_flagged: bool
     code_ai_flagged: bool
     report_ai_signal: Optional[str]
@@ -542,6 +546,11 @@ class BatchAutoEvaluateIn(BaseModel):
     use_rubric_model: bool = True
 
 
+def _ai_flagged(code_ai_flagged: bool, report_ai_signal: Optional[str]) -> bool:
+    """AI-content review flag: the code or report signal is high. Never changes marks."""
+    return bool(code_ai_flagged) or report_ai_signal == "high"
+
+
 class BatchEvaluationItemOut(BaseModel):
     submission_id: int
     student_name: str
@@ -549,8 +558,12 @@ class BatchEvaluationItemOut(BaseModel):
     recommended_score: Optional[float] = None
     recommended_max: Optional[float] = None
     grader: Optional[str] = None
+    model: Optional[str] = None
     review_flags: list[str] = []
     error: Optional[str] = None
+    # Review flags shown as their own table columns; None when the submission failed.
+    similarity_flagged: Optional[bool] = None
+    ai_flagged: Optional[bool] = None
 
 
 class BatchAutoEvaluateOut(BaseModel):
@@ -573,6 +586,8 @@ async def _lifespan(_app: FastAPI):
     db = next(get_db())
     try:
         bootstrap_admin(db)
+        if demo_data_enabled():
+            seed_demo_data(db)
     finally:
         db.close()
     # Load UniXcoder once, in the background, so startup isn't blocked
@@ -2169,6 +2184,7 @@ def _run_auto_evaluation(
             for c in result.grading.criteria
         ],
         grader=result.grading.grader,
+        model=result.grading.model,
         similarity_flagged=result.similarity_flagged,
         code_ai_flagged=result.code_ai_flagged,
         report_ai_signal=result.report_analysis.ai_text.signal if result.report_analysis else None,
@@ -2238,24 +2254,32 @@ def auto_evaluate_assignment(
     if not submissions:
         raise HTTPException(404, "No submissions found for this assignment")
 
-    already_done: set[int] = set()
+    # Latest stored evaluation per submission. A skipped submission is not re-run,
+    # but its stored marks and flags still go into the table.
+    stored: dict[int, AutoEvaluation] = {}
     if payload.skip_already_evaluated:
-        already_done = {
-            row[0]
-            for row in db.query(AutoEvaluation.submission_id)
+        stored_rows = (
+            db.query(AutoEvaluation)
             .filter(
                 AutoEvaluation.rubric_id == rubric.id,
                 AutoEvaluation.submission_id.in_([s.id for s in submissions]),
             )
+            .order_by(AutoEvaluation.id)
             .all()
-        }
+        )
+        stored = {row.submission_id: row for row in stored_rows}  # later rows overwrite earlier ones
 
     results: list[BatchEvaluationItemOut] = []
     for submission in submissions:
         name = submission.student_name
-        if submission.id in already_done:
+        if submission.id in stored:
+            prev = stored[submission.id]
             results.append(BatchEvaluationItemOut(
-                submission_id=submission.id, student_name=name, status="skipped"))
+                submission_id=submission.id, student_name=name, status="skipped",
+                recommended_score=prev.recommended_score, recommended_max=prev.recommended_max,
+                grader=prev.grader, model=prev.model, review_flags=list(prev.review_flags or []),
+                similarity_flagged=prev.similarity_flagged,
+                ai_flagged=_ai_flagged(prev.code_ai_flagged, prev.report_ai_signal)))
             continue
         try:
             ev = _run_auto_evaluation(db, submission, rubric, use_rubric_model=payload.use_rubric_model)
@@ -2268,7 +2292,9 @@ def auto_evaluate_assignment(
         results.append(BatchEvaluationItemOut(
             submission_id=submission.id, student_name=name, status="evaluated",
             recommended_score=ev.recommended_score, recommended_max=ev.recommended_max,
-            grader=ev.grader, review_flags=list(ev.review_flags or [])))
+            grader=ev.grader, model=ev.model, review_flags=list(ev.review_flags or []),
+            similarity_flagged=ev.similarity_flagged,
+            ai_flagged=_ai_flagged(ev.code_ai_flagged, ev.report_ai_signal)))
 
     def _count(status: str) -> int:
         return sum(1 for r in results if r.status == status)

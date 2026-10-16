@@ -1,4 +1,5 @@
 portal.db
+local_demo_data.json
 uploads/*
 !uploads/.gitkeep
 __pycache__/
