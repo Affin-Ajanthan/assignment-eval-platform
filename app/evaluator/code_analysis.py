@@ -70,6 +70,30 @@ def _complexity(node: ast.AST) -> int:
     return count
 
 
+def _is_main_guard(node: ast.AST) -> bool:
+    return isinstance(node, ast.If) and "__name__" in ast.dump(node.test)
+
+
+def _has_real_logic(tree: ast.Module) -> bool:
+    """True when the file has at least two statements that do something, ignoring
+    pass, imports, definitions, docstrings, bare/None returns and the main guard."""
+    meaningful = 0
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Pass, ast.Import, ast.ImportFrom, ast.Module,
+                             ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+            continue  # docstring or string-only line
+        if isinstance(node, ast.Return) and (node.value is None or
+                                             (isinstance(node.value, ast.Constant) and node.value.value is None)):
+            continue
+        if _is_main_guard(node):
+            continue
+        if isinstance(node, ast.stmt):
+            meaningful += 1
+    return meaningful >= 2
+
+
 def analyze_python(source: str, filename: str = "<submission>") -> CodeReport:
     report = CodeReport(filename=filename, language="python")
     try:
@@ -124,6 +148,12 @@ def analyze_python(source: str, filename: str = "<submission>") -> CodeReport:
     for f in high_complexity:
         report.issues.append(f"function '{f.name}' has high cyclomatic complexity ({f.complexity})")
 
+    # A file with no real logic (only comments, docstrings, pass, imports, an
+    # empty return or the __name__ guard) must not look "clean" just because it
+    # has no smells: cap its quality score and say why.
+    if not _has_real_logic(tree):
+        report.issues.append("no real logic: only comments, docstrings, pass or empty functions")
+
     # Heuristic 0-100 quality score: start at 100, deduct for smells.
     score = 100
     score -= min(40, len(high_complexity) * 10)
@@ -131,6 +161,8 @@ def analyze_python(source: str, filename: str = "<submission>") -> CodeReport:
     score -= min(15, int((1 - report.docstring_coverage) * 15)) if functions else 0
     score -= min(15, todo_count * 5)
     score -= min(10, len(long_lines))
+    if not _has_real_logic(tree):
+        score = min(score, 10)
     report.quality_score = max(0, score)
 
     return report
@@ -162,6 +194,11 @@ def analyze_file(path: Path) -> CodeReport:
 _CODE_EXTENSIONS = {".py", ".java", ".js", ".ts", ".c", ".cpp", ".go", ".rb", NOTEBOOK_SUFFIX}
 
 
+# Read whole files (up to this many characters); the grader then picks the
+# passages relevant to each criterion when it builds the prompt.
+FULL_SOURCE_LIMIT = 200_000
+
+
 def read_sources(directory: Path, extensions: set[str] | None = None,
                  max_chars_per_file: int = 4000, max_total_chars: int = 8000) -> dict[str, str]:
     """Source text of every code file under a submission directory, as
@@ -180,7 +217,7 @@ def read_sources(directory: Path, extensions: set[str] | None = None,
             if len(text) > limit:
                 text = text[:limit] + "\n... [truncated]"
             sources[path.relative_to(directory).as_posix()] = text
-            remaining -= limit
+            remaining -= min(len(text), limit)
     return sources
 
 

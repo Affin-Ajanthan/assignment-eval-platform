@@ -13,6 +13,16 @@ const STATUS_STYLE: Record<string, string> = {
   failed: "bg-red-50 text-red-700",
 };
 
+/** "⚑ Flagged" for a review flag, "No flag" when clear, "—" when unknown (failed run). */
+function FlagBadge({ flagged }: { flagged: boolean | null }) {
+  if (flagged === null) return <span className="text-gray-400">—</span>;
+  return flagged ? (
+    <span className="rounded bg-yellow-50 px-2 py-0.5 text-xs font-semibold text-yellow-800">⚑ Flagged</span>
+  ) : (
+    <span className="rounded bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-800">No flag</span>
+  );
+}
+
 /**
  * "Evaluate a whole assignment": runs the automated evaluation for every
  * submission of one assignment against one rubric. The backend call is
@@ -168,7 +178,9 @@ export default function BatchEvaluateSection({
               <tr className="bg-gray-50 text-left">
                 <th className="border border-gray-200 px-3 py-1.5">Student</th>
                 <th className="border border-gray-200 px-3 py-1.5">Status</th>
-                <th className="border border-gray-200 px-3 py-1.5">Recommended</th>
+                <th className="border border-gray-200 px-3 py-1.5">Marks</th>
+                <th className="border border-gray-200 px-3 py-1.5">Similarity flag</th>
+                <th className="border border-gray-200 px-3 py-1.5">AI detection flag</th>
                 <th className="border border-gray-200 px-3 py-1.5">Grader</th>
                 <th className="border border-gray-200 px-3 py-1.5">Notes</th>
               </tr>
@@ -187,7 +199,15 @@ export default function BatchEvaluateSection({
                   <td className="border border-gray-200 px-3 py-1.5">
                     {r.recommended_score === null ? "—" : formatMark(r.recommended_score, r.recommended_max)}
                   </td>
-                  <td className="border border-gray-200 px-3 py-1.5">{r.grader ?? "—"}</td>
+                  <td className="border border-gray-200 px-3 py-1.5">
+                    <FlagBadge flagged={r.similarity_flagged} />
+                  </td>
+                  <td className="border border-gray-200 px-3 py-1.5">
+                    <FlagBadge flagged={r.ai_flagged} />
+                  </td>
+                  <td className="border border-gray-200 px-3 py-1.5">
+                    {r.grader ? (r.model ? `${r.grader}, ${r.model}` : r.grader) : "—"}
+                  </td>
                   <td className="border border-gray-200 px-3 py-1.5 text-xs">
                     {r.error && <div className="text-red-700">{r.error}</div>}
                     {r.review_flags.map((f) => (

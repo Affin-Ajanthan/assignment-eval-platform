@@ -27,7 +27,7 @@ app/
   evaluator/            the multi-modal evaluator
     report_analysis.py   PDF/DOCX text+image extraction, AI-text heuristic
     code_analysis.py     static analysis (complexity, docstrings, style)
-    rubric_grading.py    heuristic grader (fallback) + local Ollama grader (qwen3:4b) + Claude grader
+    rubric_grading.py    heuristic grader (fallback) + local Ollama grader (qwen3:8b)
     video_analysis.py    frame/scene analysis + pluggable transcription
     cross_modal.py       code/report/video consistency check (keyword overlap)
     semantic_consistency.py  same check by meaning (MiniLM embeddings)
@@ -132,8 +132,9 @@ logged in.
    /submissions/{id}/auto-evaluate` runs the full pipeline --
    static analysis, AI-text/AI-code heuristics, video frame analysis
    and transcription, cross-modal consistency, and rubric grading --
-   against the chosen rubric, folding in the similarity flag from step
-   4. The result (recommended score, review flags, per-criterion
+   against the chosen rubric. The similarity flag from step 4 is shown
+   as a review flag; it never changes the marks (the same rule for every
+   grader). The result (recommended score, review flags, per-criterion
    breakdown) is stored and shown on the dashboard.
    **Whole assignment at once**: `POST
    /subjects/{id}/assignments/{name}/auto-evaluate` with `{"rubric_id": ...}`
@@ -177,9 +178,9 @@ Ruby, Go, C, C++, C#; pinned to one revision) as an extra signal:
 - A pair the token check didn't flag gets a **"review"** flag when its
   semantic score is at least 0.80 *and* clearly above the rest of
   the cohort (median + 2 robust standard deviations). Token-based flags stay
-  the only **"high"** ones, and a semantic-only flag never caps a score
-  in auto-evaluation -- it's shown as "potential similarity detected
-  -- lecturer review recommended".
+  the only **"high"** ones. No similarity flag changes marks in
+  auto-evaluation, for any grader -- they are shown as review flags
+  ("potential similarity detected -- lecturer review recommended").
 
 The model (~500 MB) downloads once on first use (it's preloaded in
 the background at startup) and is cached by Hugging Face afterwards.
@@ -315,11 +316,13 @@ rejected upload leaves no files behind.
 
 `app/evaluator/ai_text_detection.py` can estimate whether report text looks
 machine-generated using Fast-DetectGPT (Bao et al., ICLR 2024) with a
-small local language model, `Qwen/Qwen2.5-0.5B` by default (about 1 GB,
-downloaded once, CPU-only). **It is off by default**: on a small
-calibration sample it did no better than the style heuristic (AI and
-human scores overlapped heavily), so the heuristic remains the default.
-Set `AI_TEXT_DETECTION=1` to try it, ideally against real student reports.
+small local language model, `Qwen/Qwen2.5-1.5B` by default (about 3 GB,
+downloaded once). **It is on by default** as the planned upgrade from the
+style heuristic. Caution: on a small calibration sample the 0.5B version
+did no better than the style heuristic, and the 1.5B version's scores
+still overlapped heavily between AI and human text. Its false-flag rate
+on real student reports has not been measured. Set `AI_TEXT_DETECTION=0`
+to return to the style heuristic.
 
 - A language model scores how "expected" each word is. AI-written text
   keeps choosing the model's most likely words; human text is spikier.
@@ -351,16 +354,19 @@ those, both are small interfaces with:
   cost, and
 - a **real backend that's picked up automatically** once available:
   - **Rubric grading** -- `build_default_grader()` picks, in order:
-    1. the **local Ollama model `qwen3:4b`** when the Ollama server is
-       reachable and the model is installed (`ollama pull qwen3:4b`) --
+    1. the **local Ollama model `qwen3:8b`** when the Ollama server is
+       reachable and the model is installed (`ollama pull qwen3:8b`) --
        free, offline, nothing leaves the machine;
-    2. **Claude**, when `ANTHROPIC_API_KEY` is set;
-    3. the keyword-overlap heuristic grader.
+    2. the keyword-overlap heuristic grader, when Ollama is not available.
 
-    Force one with `GRADER_BACKEND=ollama|claude|heuristic`; change the
-    local model or server with `OLLAMA_MODEL` / `OLLAMA_URL`. The grader
-    used is stored with every auto-evaluation (`ollama`, `llm`,
-    `heuristic`).
+    `GRADER_FEWSHOT=on` adds six hand-written calibration examples to the
+    grading prompt. It is **off by default**: on 299 human-graded short
+    answers it made the small model worse (mean error 1.54 -> 1.87 marks of
+    5) because it more often claimed "no answer was provided".
+
+    Force one with `GRADER_BACKEND=ollama|heuristic`; change the local
+    model or server with `OLLAMA_MODEL` / `OLLAMA_URL`. The grader used is
+    stored with every auto-evaluation (`ollama` or `heuristic`).
   - **Video transcription** -- install `faster-whisper`: Whisper `small`
     runs on CUDA (float16) when an NVIDIA GPU is available and on CPU
     (int8) otherwise; a failed GPU load retries once on CPU. It needs
@@ -368,6 +374,28 @@ those, both are small interfaces with:
     fails for any reason, the video stage continues with an empty
     transcript (backend `null`, reason kept in `TranscriptionResult.error`)
     and the frame analysis, so an evaluation never crashes on it.
+  - **Video frame descriptions (vision)** -- a video with no speech has an
+    empty transcript. When a local vision model is installed
+    (`ollama pull qwen3-vl:4b`, override with `VISION_MODEL`), 4 frames
+    spread across the video are downscaled and described by it, and the
+    descriptions go to the grader next to the transcript, so a silent
+    video can still be judged from what is on screen. It is **off by
+    default**, so only the grading model is used; enable it with `VIDEO_VISION=auto`
+    (it then runs only if the model is installed).
+    The descriptions are machine-generated and the grader is told they may
+    be wrong; if the step fails, a review flag says so and grading
+    continues on the transcript alone. It costs roughly one model call
+    per frame.
+  - **Running the code (optional, off by default)** -- the LLM grader can
+    only read code. Set `CODE_SANDBOX=docker` and each submission's `.py`
+    files (at most 3) are run in a throw-away Docker container (no network,
+    read-only filesystem, code mounted read-only, all capabilities dropped,
+    unprivileged user, 256 MB / 0.5 CPU / 64 processes, 10 s limit). The
+    real exit code, stdout and stderr go to the grader as an EXECUTION
+    RESULT it may cite, and a crash or timeout adds a review flag. If Docker
+    is not running nothing is executed -- there is no unsandboxed fallback --
+    and a review flag says so. Image: `CODE_SANDBOX_IMAGE`
+    (default `python:3.12-slim`).
 
 The AI-content heuristics (for both code and report text) are
 explicitly style heuristics, not validated classifiers -- there is no
@@ -386,8 +414,7 @@ python -m pytest tests/ -v
 
 66 tests pass offline (accounts/roles/subject-scoping, report/code
 analysis, similarity fingerprinting, rubric grading -- both the
-heuristic grader, the Claude grader tested against a fake Anthropic
-client and the Ollama grader against a fake HTTP post, so no API key,
+heuristic grader and the Ollama grader against a fake HTTP post, so no
 Ollama server or network call is needed. `conftest.py` sets
 `GRADER_BACKEND=heuristic` so ordinary tests never call a real model --
 video frame
@@ -416,11 +443,23 @@ rejection), covering the same flow the automated backend tests cover.
 
 ## Honest limitations
 
-- The LLM graders (local qwen3:4b and Claude) are given code *metrics*
-  (function count, complexity, quality score, issues), the report text
-  and the transcript -- not the source code itself -- so criteria that
+- The LLM grader (local qwen3:8b) is given code *metrics* for every
+  file (function count, complexity, quality score, issues) and the
+  text of the submission in limited amounts: 8,000 characters of source
+  code, 6,000 characters of report text and 3,000 characters of
+  transcript. When a submission is longer than its limit, the grader
+  gets the passages that share the most words with the criteria, in
+  their original order, and a note says how many passages were left out
+  and that they exist. Word matching is simple: a passage that describes
+  a criterion in entirely different words can be missed. Criteria that
   need the code's actual behaviour (e.g. "implements bubble sort
-  correctly") can be under-scored. qwen3:4b also tended to grade strong
+  correctly") can be under-scored. When any input is cut, the submission
+  gets a review flag so the instructor checks the marks for those
+  criteria. Each grading call requests a context window of
+  `OLLAMA_NUM_CTX` tokens (default 8192) so the prompt is not silently
+  cut off by Ollama, and a reply of at most `OLLAMA_NUM_PREDICT` tokens
+  (default 2000). A timed-out or malformed reply is retried once before
+  the submission is marked failed. In our evaluation, qwen3:4b tended to grade strong
   answers slightly strictly in our evaluation (Mohler short-answer set,
   2,273 answers: MAE 0.82 marks out of 5, 81% within 1 mark, versus
   2.43 / 18% for a keyword baseline); keep instructor override as the

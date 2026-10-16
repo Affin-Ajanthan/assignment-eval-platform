@@ -52,6 +52,9 @@ export interface Rubric {
 
 export type AssignmentStatus = "upcoming" | "open" | "closed";
 
+/** File kinds an assignment accepts. */
+export type SubmissionType = "code" | "report" | "video";
+
 /** Instructor view of an assignment. Times are ISO strings with a UTC offset. */
 export interface Assignment {
   id: number;
@@ -65,6 +68,7 @@ export interface Assignment {
   rubric_id: number | null;
   rubric_name: string | null;
   max_points: number | null;
+  submission_types: SubmissionType[];
   submission_count: number;
   graded_count: number;
   created_at: string;
@@ -100,6 +104,7 @@ export interface StudentAssignment {
   available_from: string;
   deadline: string;
   status: "open" | "closed";
+  submission_types: SubmissionType[];
   my_submission: MySubmission | null;
 }
 
@@ -119,6 +124,8 @@ export interface Submission {
   status: "submitted" | "graded";
   final_mark: number | null;
   max_mark: number | null;
+  /** Kinds of file uploaded, in this order: code, report, video. */
+  submitted_types: ("code" | "report" | "video")[];
 }
 
 export interface Grade {
@@ -215,8 +222,14 @@ export interface BatchEvaluationItem {
   recommended_score: number | null;
   recommended_max: number | null;
   grader: string | null;
+  /** Ollama model that produced the marks; null for the heuristic grader. */
+  model: string | null;
   review_flags: string[];
   error: string | null;
+  /** Similarity flag (overlap with another submission); null when the submission failed. */
+  similarity_flagged: boolean | null;
+  /** AI-content review flag (code or report); never changes marks. Null when the submission failed. */
+  ai_flagged: boolean | null;
 }
 
 export interface BatchEvaluationResult {
@@ -247,6 +260,8 @@ export interface AutoEvaluation {
   review_flags: string[];
   criterion_breakdown: { name: string; score: number; max_points: number; justification: string }[];
   grader: string;
+  /** Ollama model that produced the marks; null for the heuristic grader or older results. */
+  model?: string | null;
   similarity_flagged: boolean;
   code_ai_flagged: boolean;
   report_ai_signal: string | null;

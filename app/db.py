@@ -22,7 +22,9 @@ BASE_DIR = Path(os.environ.get("PORTAL_DATA_DIR") or PROJECT_DIR).resolve()
 UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-DATABASE_URL = f"sqlite:///{BASE_DIR / 'portal.db'}"
+# PORTAL_DB_PATH lets the tests use a throwaway database; normally it is unset.
+DB_FILE = Path(os.environ.get("PORTAL_DB_PATH") or BASE_DIR / "portal.db")
+DATABASE_URL = f"sqlite:///{DB_FILE}"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

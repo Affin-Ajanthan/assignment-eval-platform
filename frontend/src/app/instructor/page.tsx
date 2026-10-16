@@ -408,6 +408,7 @@ export default function InstructorPage() {
                 <tr className="bg-gray-50 text-left">
                   <th className="border border-gray-200 px-3 py-1.5">Student</th>
                   <th className="border border-gray-200 px-3 py-1.5">Assignment</th>
+                  <th className="border border-gray-200 px-3 py-1.5">Files submitted</th>
                   <th className="border border-gray-200 px-3 py-1.5">Submitted</th>
                   <th className="border border-gray-200 px-3 py-1.5">Status</th>
                   <th className="border border-gray-200 px-3 py-1.5">Mark</th>
@@ -424,6 +425,19 @@ export default function InstructorPage() {
                       <small className="text-gray-500">{s.student_email}</small>
                     </td>
                     <td className="border border-gray-200 px-3 py-1.5">{s.assignment_name}</td>
+                    <td className="border border-gray-200 px-3 py-1.5">
+                      {s.submitted_types.length === 0 ? (
+                        <span className="text-gray-400">none</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {s.submitted_types.map((kind) => (
+                            <span key={kind} className="rounded bg-blue-50 px-2 py-0.5 text-xs font-semibold capitalize text-blue-800">
+                              {kind}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </td>
                     <td className="border border-gray-200 px-3 py-1.5">{formatDateTime(s.submitted_at)}</td>
                     <td className="border border-gray-200 px-3 py-1.5">
                       <span
@@ -462,7 +476,7 @@ export default function InstructorPage() {
                   </tr>
                   {filesOpenFor === s.id && (
                     <tr>
-                      <td colSpan={6} className="border border-gray-200 bg-white px-3 py-3">
+                      <td colSpan={7} className="border border-gray-200 bg-white px-3 py-3">
                         <p className="mb-2 text-sm font-semibold">Files submitted by {s.student_name}</p>
                         <SubmissionFiles submissionId={s.id} />
                       </td>
@@ -523,7 +537,7 @@ export default function InstructorPage() {
                 <div className="mt-4">
                   <h3 className="font-bold">
                     Recommended score: {autoevalResult.recommended_score} / {autoevalResult.recommended_max} (
-                    {autoevalResult.grader} grader)
+                    {autoevalResult.model ? `${autoevalResult.grader}, model ${autoevalResult.model}` : autoevalResult.grader} grader)
                   </h3>
                   <div className="mt-2">
                     <strong className="text-sm">Review flags:</strong>

@@ -123,7 +123,7 @@ def test_batch_is_instructor_only():
 # ---- rubric model on/off switch ------------------------------------------
 
 def _fake_rubric_model(monkeypatch):
-    """Stand in for the rubric model (Ollama / Claude) with a grader that
+    """Stand in for the rubric model (Ollama) with a grader that
     reports its own name, so the tests can see which grader actually ran."""
     import app.evaluator.pipeline as pipeline
     from app.evaluator.rubric_grading import HeuristicRubricGrader
@@ -153,3 +153,47 @@ def test_rubric_model_switch_on_by_default_and_off_uses_heuristic(monkeypatch):
     single_on = client.post(f"/submissions/{subs[0]['id']}/auto-evaluate",
                             json={"rubric_id": rubric["id"]}, headers=auth_headers(tok))
     assert single_on.json()["grader"] == "fake-model"
+
+
+# ---- similarity and AI-detection flag columns ----------------------------
+
+def _high_ai_signal(monkeypatch):
+    from types import SimpleNamespace
+    monkeypatch.setattr(main, "_score_ai_code", lambda sid, src: SimpleNamespace(
+        signal="high", score=90, reasons=["uniform style"]))
+
+
+def test_batch_rows_carry_similarity_flag(monkeypatch):
+    subject, tok, rubric, assignment, subs = _setup(3, assignment="Similarity Flags")
+    sim = client.post(f"/subjects/{subject['id']}/assignments/{assignment}/check-similarity",
+                      headers=auth_headers(tok))
+    assert sim.status_code == 200, sim.text
+    # three identical solutions: every one is in a flagged pair
+    body = _batch(subject, assignment, tok, rubric["id"]).json()
+    assert {item["similarity_flagged"] for item in body["results"]} == {True}
+
+
+def test_batch_rows_carry_ai_flag_without_changing_marks(monkeypatch):
+    _high_ai_signal(monkeypatch)
+    subject, tok, rubric, assignment, subs = _setup(2, assignment="AI Flags")
+    body = _batch(subject, assignment, tok, rubric["id"]).json()
+    assert {item["ai_flagged"] for item in body["results"]} == {True}
+    assert {item["similarity_flagged"] for item in body["results"]} == {False}
+    # the flag is a review signal only: marks are the grader's own
+    assert all(item["recommended_score"] is not None for item in body["results"])
+
+
+def test_skipped_rows_show_stored_marks_and_flags(monkeypatch):
+    _high_ai_signal(monkeypatch)
+    subject, tok, rubric, assignment, subs = _setup(2, assignment="Resume Flags")
+    first = _batch(subject, assignment, tok, rubric["id"]).json()
+    again = _batch(subject, assignment, tok, rubric["id"], skip_already_evaluated=True).json()
+    assert (again["evaluated"], again["skipped"]) == (0, 2)
+    before = {item["submission_id"]: item for item in first["results"]}
+    for item in again["results"]:
+        prev = before[item["submission_id"]]
+        assert item["status"] == "skipped"
+        assert item["recommended_score"] == prev["recommended_score"]
+        assert item["recommended_max"] == prev["recommended_max"]
+        assert item["grader"] == prev["grader"]
+        assert item["ai_flagged"] is True and item["similarity_flagged"] is False

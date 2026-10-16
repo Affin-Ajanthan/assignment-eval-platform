@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { apiFetch, StudentAssignment, Submission } from "@/lib/api";
+import { apiFetch, StudentAssignment, Submission, SubmissionType } from "@/lib/api";
 import { useRequireRole } from "@/lib/useRequireRole";
 import { formatDateTime, formatMark } from "@/lib/datetime";
 import AccountBar from "@/components/AccountBar";
@@ -27,8 +27,16 @@ const CODE_EXTENSIONS = [".zip", ...CODE_LANGUAGES.flatMap((l) => l.extensions)]
 const CODE_ACCEPT = CODE_EXTENSIONS.join(",");
 const REPORT_ACCEPT = ".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const VIDEO_ACCEPT = ".mp4,.mov,.avi,.mkv,.webm,.m4v,video/*";
+// Shown under each upload field. These must match the backend limits in app/main.py.
+const UPLOAD_HINTS = {
+  code: "A single source file in one of the languages above, or a .zip. Max 50 MB; a .zip may unpack to at most 200 MB.",
+  report: "PDF or DOCX. Max 25 MB.",
+  video: "MP4, MOV, AVI, MKV, WEBM or M4V. Max 1 GB.",
+};
 
-/** The same three upload fields for a new submission or an edit. */
+const TYPE_LABEL: Record<SubmissionType, string> = { code: "Code", report: "Report", video: "Presentation video" };
+
+/** Only the upload fields this assignment accepts, for a new submission or an edit. */
 function UploadForm({
   assignment,
   mode,
@@ -46,6 +54,7 @@ function UploadForm({
   const [message, setMessage] = useState<MessageState>(null);
   const [submitting, setSubmitting] = useState(false);
   const id = (field: string) => `${field}-${assignment.id}`;
+  const accepts = (kind: SubmissionType) => assignment.submission_types.includes(kind);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -89,6 +98,9 @@ function UploadForm({
 
   return (
     <form onSubmit={handleSubmit} className="mt-4 rounded-md border border-gray-200 p-4">
+      <p className="mb-3 text-sm text-gray-600">
+        Accepted for this assignment: {assignment.submission_types.map((t) => TYPE_LABEL[t]).join(", ")}.
+      </p>
       {mode === "edit" && assignment.my_submission && (
         <div className="mb-4">
           <p className="mb-2 text-sm font-semibold">Currently submitted files</p>
@@ -96,41 +108,56 @@ function UploadForm({
           <p className="mt-3 text-sm text-gray-600">Choose only the files you want to replace; the others are kept.</p>
         </div>
       )}
-      <label className="block text-sm font-semibold" htmlFor={id("code")}>
-        Code (zip or single file)
-      </label>
-      <div id={id("code-help")} className="mt-1 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-700">
-        <p className="font-semibold">Accepted languages</p>
-        <ul className="mt-1 grid gap-x-4 gap-y-0.5 sm:grid-cols-3">
-          {CODE_LANGUAGES.map((l) => (
-            <li key={l.name}>
-              {l.name} <span className="text-gray-500">({l.extensions.join(", ")})</span>
-            </li>
-          ))}
-        </ul>
-        <p className="mt-1 text-gray-600">
-          A .zip may also contain other files (README, data), but it must include code in one of these languages.
-          Other languages, such as TypeScript, Kotlin, Swift or Rust, are not accepted yet.
-        </p>
-      </div>
-      <input
-        id={id("code")}
-        type="file"
-        ref={codeRef}
-        accept={CODE_ACCEPT}
-        aria-describedby={id("code-help")}
-        className={fileInput}
-      />
+      {accepts("code") && (
+        <>
+          <label className="block text-sm font-semibold" htmlFor={id("code")}>
+            Code (zip or single file)
+          </label>
+          <div id={id("code-help")} className="mt-1 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-700">
+            <p className="font-semibold">Accepted languages</p>
+            <ul className="mt-1 grid gap-x-4 gap-y-0.5 sm:grid-cols-3">
+              {CODE_LANGUAGES.map((l) => (
+                <li key={l.name}>
+                  {l.name} <span className="text-gray-500">({l.extensions.join(", ")})</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1 text-gray-600">
+              A .zip may also contain other files (README, data), but it must include code in one of these
+              languages. Other languages, such as TypeScript, Kotlin, Swift or Rust, are not accepted yet.
+            </p>
+          </div>
+          <input
+            id={id("code")}
+            type="file"
+            ref={codeRef}
+            accept={CODE_ACCEPT}
+            aria-describedby={id("code-help")}
+            className={fileInput}
+          />
+          <p className="mb-3 text-xs text-gray-500">{UPLOAD_HINTS.code}</p>
+        </>
+      )}
 
-      <label className="block text-sm font-semibold" htmlFor={id("report")}>
-        Report (PDF or DOCX)
-      </label>
-      <input id={id("report")} type="file" ref={reportRef} accept={REPORT_ACCEPT} className={fileInput} />
+      {accepts("report") && (
+        <>
+          <label className="block text-sm font-semibold" htmlFor={id("report")}>
+            Report (PDF or DOCX)
+          </label>
+          <input id={id("report")} type="file" ref={reportRef} accept={REPORT_ACCEPT} className={fileInput} />
+          <p className="mb-3 text-xs text-gray-500">{UPLOAD_HINTS.report}</p>
+        </>
+      )}
 
-      <label className="block text-sm font-semibold" htmlFor={id("video")}>
-        Presentation video
-      </label>
-      <input id={id("video")} type="file" ref={videoRef} accept={VIDEO_ACCEPT} className={fileInput} />
+      {accepts("video") && (
+        <>
+          <label className="block text-sm font-semibold" htmlFor={id("video")}>
+            Presentation video
+          </label>
+          <input id={id("video")} type="file" ref={videoRef} accept={VIDEO_ACCEPT} className={fileInput} />
+          <p className="mb-3 text-xs text-gray-500">{UPLOAD_HINTS.video}</p>
+        </>
+      )}
 
       <div className="flex flex-wrap gap-2">
         <button
@@ -181,6 +208,7 @@ function AssignmentCard({
         <div>
           <h3 className="text-lg font-bold">{a.name}</h3>
           <p className="text-xs text-gray-500">{a.subject_name}</p>
+          <p className="text-xs text-gray-500">Accepts: {a.submission_types.map((t) => TYPE_LABEL[t]).join(", ")}</p>
         </div>
         <span
           className={`rounded px-2 py-0.5 text-xs font-semibold ${
@@ -384,7 +412,7 @@ export default function StudentPage() {
                         s.status === "graded" ? "bg-green-50 text-green-800" : "bg-yellow-50 text-yellow-800"
                       }`}
                     >
-                      {s.status}
+                      {s.status === "graded" ? "Graded" : "Submitted"}
                     </span>
                   </td>
                   <td className="border border-gray-200 px-3 py-1.5">{formatMark(s.final_mark, s.max_mark)}</td>

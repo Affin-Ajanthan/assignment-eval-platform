@@ -178,8 +178,12 @@ def test_auto_evaluate_reflects_similarity_flag():
     )
     body = r.json()
     assert body["similarity_flagged"] is True
+    # Shown to the instructor as a review flag...
+    assert any("similarity checker flagged" in f for f in body["review_flags"])
+    # ...but it does not change the marks (no cap on the integrity criterion).
     integrity = next(c for c in body["criterion_breakdown"] if c["name"] == "Academic integrity")
-    assert integrity["score"] <= 0.3 * integrity["max_points"] + 1e-6
+    assert "capped" not in integrity["justification"]
+    assert "score not changed" in integrity["justification"]
 
 
 def test_auto_evaluate_404_for_unknown_submission():

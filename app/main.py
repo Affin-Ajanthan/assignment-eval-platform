@@ -37,7 +37,7 @@ import zipfile
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,6 +46,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from .demo_data import demo_data_enabled, seed_demo_data
 from .auth import (
     bootstrap_admin,
     create_session,
@@ -75,6 +76,7 @@ from .evaluator.semantic_consistency import get_consistency_service
 from .evaluator.ai_text_detection import get_ai_text_detector
 from .evaluator.rubric_grading import Criterion as _EvalCriterion, HeuristicRubricGrader
 from .models import (
+    SUBMISSION_TYPES,
     Assignment,
     AuthSession,
     AutoEvaluation,
@@ -112,10 +114,11 @@ Base.metadata.create_all(bind=engine)
 add_missing_columns("similarity_flags", {
     "semantic_similarity": "FLOAT", "flag_level": "VARCHAR", "flag_reason": "VARCHAR",
 })
-add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON", "ai_signals": "JSON"})
+add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON", "ai_signals": "JSON", "model": "VARCHAR"})
 # Submissions made before assignments existed keep assignment_id NULL (and
 # their free-text assignment_name); nothing else about them changes.
 add_missing_columns("submissions", {"assignment_id": "INTEGER REFERENCES assignments(id)"})
+add_missing_columns("assignments", {"submission_types": "JSON"})
 add_missing_columns("assignments", {"starter_code": "TEXT", "starter_code_filename": "VARCHAR"})
 add_missing_columns("assignments", {"report_template_text": "TEXT", "report_template_filename": "VARCHAR"})
 
@@ -237,6 +240,7 @@ class RubricOut(BaseModel):
     assignment_names: list[str] = []
 
 
+SubmissionType = Literal["code", "report", "video"]
 _STARTER_CODE_MAX = 200_000
 
 
@@ -249,6 +253,8 @@ class AssignmentIn(BaseModel):
     available_from: datetime
     deadline: datetime
     rubric_id: Optional[int] = None
+    # Which kinds of file students may submit. Defaults to all of them.
+    submission_types: list[SubmissionType] = Field(default_factory=lambda: list(SUBMISSION_TYPES))
     # Optional instructor starter code (one file). Its fingerprints are left
     # out of the token similarity check; the file name's extension decides
     # which submitted files it is subtracted from.
@@ -262,6 +268,7 @@ class AssignmentUpdate(BaseModel):
     available_from: Optional[datetime] = None
     deadline: Optional[datetime] = None
     rubric_id: Optional[int] = None  # send null explicitly to detach the rubric
+    submission_types: Optional[list[SubmissionType]] = None
     starter_code: Optional[str] = Field(default=None, max_length=_STARTER_CODE_MAX)  # "" removes it
     starter_code_filename: Optional[str] = Field(default=None, max_length=200)
 
@@ -280,6 +287,7 @@ class AssignmentOut(BaseModel):
     rubric_id: Optional[int]
     rubric_name: Optional[str]
     max_points: Optional[float]
+    submission_types: list[str]
     submission_count: int
     graded_count: int
     created_at: UTCDateTime
@@ -316,6 +324,7 @@ class StudentAssignmentOut(BaseModel):
     available_from: UTCDateTime
     deadline: UTCDateTime
     status: str  # open | closed (upcoming assignments aren't listed)
+    submission_types: list[str]
     my_submission: Optional[MySubmissionOut]
 
 
@@ -337,6 +346,8 @@ class SubmissionOut(BaseModel):
     # grading information this response carries.
     final_mark: Optional[float] = None
     max_mark: Optional[float] = None
+    # Kinds of file uploaded: a subset of code, report, video.
+    submitted_types: list[str] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -363,7 +374,7 @@ class GradeOut(BaseModel):
 class AutoEvaluateIn(BaseModel):
     rubric_id: int
     # False: grade with the built-in heuristic grader instead of the rubric
-    # model (local Ollama / Claude). Everything else in the pipeline runs.
+    # model (local Ollama). Everything else in the pipeline runs.
     use_rubric_model: bool = True
 
 
@@ -427,6 +438,7 @@ class AutoEvaluationOut(BaseModel):
     review_flags: list[str]
     criterion_breakdown: list[dict]
     grader: str
+    model: Optional[str] = None
     similarity_flagged: bool
     code_ai_flagged: bool
     report_ai_signal: Optional[str]
@@ -546,6 +558,11 @@ class BatchAutoEvaluateIn(BaseModel):
     use_rubric_model: bool = True
 
 
+def _ai_flagged(code_ai_flagged: bool, report_ai_signal: Optional[str]) -> bool:
+    """AI-content review flag: the code or report signal is high. Never changes marks."""
+    return bool(code_ai_flagged) or report_ai_signal == "high"
+
+
 class BatchEvaluationItemOut(BaseModel):
     submission_id: int
     student_name: str
@@ -553,8 +570,12 @@ class BatchEvaluationItemOut(BaseModel):
     recommended_score: Optional[float] = None
     recommended_max: Optional[float] = None
     grader: Optional[str] = None
+    model: Optional[str] = None
     review_flags: list[str] = []
     error: Optional[str] = None
+    # Review flags shown as their own table columns; None when the submission failed.
+    similarity_flagged: Optional[bool] = None
+    ai_flagged: Optional[bool] = None
 
 
 class BatchAutoEvaluateOut(BaseModel):
@@ -577,6 +598,8 @@ async def _lifespan(_app: FastAPI):
     db = next(get_db())
     try:
         bootstrap_admin(db)
+        if demo_data_enabled():
+            seed_demo_data(db)
     finally:
         db.close()
     # Load UniXcoder once, in the background, so startup isn't blocked
@@ -1140,6 +1163,7 @@ def _assignment_out(db: Session, a: Assignment) -> AssignmentOut:
         status=a.status_at(_utcnow_naive()),
         rubric_id=a.rubric_id, rubric_name=a.rubric.name if a.rubric else None,
         max_points=a.rubric.max_total if a.rubric else None,
+        submission_types=a.accepted_types(),
         submission_count=len(subs), graded_count=sum(1 for s in subs if s.status == "graded"),
         created_at=_as_utc(a.created_at), updated_at=_as_utc(a.updated_at),
         starter_code=a.starter_code or "", starter_code_filename=a.starter_code_filename or "",
@@ -1185,6 +1209,7 @@ def _student_assignment_out(db: Session, student: User, a: Assignment, now: date
         id=a.id, subject_id=a.subject_id, subject_name=a.subject.name if a.subject else "",
         name=a.name, description=a.description or "",
         available_from=_as_utc(a.available_from), deadline=_as_utc(a.deadline), status=status,
+        submission_types=a.accepted_types(),
         my_submission=_my_submission_out(mine, status == "open") if mine else None,
     )
 
@@ -1199,10 +1224,11 @@ def create_assignment(payload: AssignmentIn, instructor: User = Depends(require_
     _require_unique_assignment_name(db, payload.subject_id, name)
     _check_assignment_rubric(db, payload.subject_id, payload.rubric_id)
     starter_code, starter_filename = _clean_starter_code(payload.starter_code, payload.starter_code_filename)
+    types = _normalise_submission_types(payload.submission_types)
     assignment = Assignment(
         subject_id=payload.subject_id, name=name, description=payload.description.strip(),
         available_from=available_from, deadline=deadline, rubric_id=payload.rubric_id,
-        starter_code=starter_code, starter_code_filename=starter_filename,
+        submission_types=types, starter_code=starter_code, starter_code_filename=starter_filename,
         created_by_id=instructor.id,
     )
     db.add(assignment)
@@ -1277,6 +1303,14 @@ def update_assignment(
     if "rubric_id" in payload.model_fields_set:
         _check_assignment_rubric(db, assignment.subject_id, payload.rubric_id)
         assignment.rubric_id = payload.rubric_id
+    if payload.submission_types is not None:
+        types = _normalise_submission_types(payload.submission_types)
+        if types != assignment.accepted_types():
+            has_submissions = db.query(Submission.id).filter(Submission.assignment_id == assignment.id).first()
+            if has_submissions:
+                raise HTTPException(
+                    409, "The accepted submission types can't be changed after students have submitted to this assignment.")
+            assignment.submission_types = types
 
     if name != assignment.name:
         # Keep linked submissions and stored similarity results under the new
@@ -1494,6 +1528,32 @@ def _save_video_upload(file: UploadFile, submission_uuid: str) -> str:
     return str(dest.relative_to(BASE_DIR))
 
 
+_TYPE_LABELS = {"code": "code (.zip or a source file)", "report": "report (PDF or DOCX)", "video": "video"}
+
+
+def _normalise_submission_types(types: list[str]) -> list[str]:
+    chosen = [t for t in SUBMISSION_TYPES if t in set(types)]
+    if not chosen:
+        raise HTTPException(400, "Choose at least one submission type (code, report or video).")
+    return chosen
+
+
+def _accepted_label(assignment: Assignment) -> str:
+    return ", ".join(_TYPE_LABELS[t] for t in assignment.accepted_types())
+
+
+def _reject_unaccepted_types(assignment: Assignment, **uploads) -> None:
+    """Refuse files of a kind the instructor did not enable for this assignment."""
+    accepted = set(assignment.accepted_types())
+    rejected = [kind for kind, upload in uploads.items() if upload and kind not in accepted]
+    if rejected:
+        raise HTTPException(
+            400,
+            f"'{assignment.name}' accepts only: {_accepted_label(assignment)}. "
+            f"Remove the {', '.join(rejected)} file(s) you uploaded.",
+        )
+
+
 @app.post("/submissions", response_model=SubmissionOut)
 def create_submission(
     background_tasks: BackgroundTasks,
@@ -1514,7 +1574,8 @@ def create_submission(
     _require_open(assignment)
     code, report, video = (f if f is not None and f.filename else None for f in (code, report, video))
     if not (code or report or video):
-        raise HTTPException(400, "Upload at least one file (code, report or presentation video).")
+        raise HTTPException(400, f"Upload at least one file: {_accepted_label(assignment)}.")
+    _reject_unaccepted_types(assignment, code=code, report=report, video=video)
     existing = (
         db.query(Submission)
         .filter(Submission.assignment_id == assignment.id, Submission.student_id == student.id)
@@ -1632,6 +1693,7 @@ def update_submission(
     code, report, video = (f if f is not None and f.filename else None for f in (code, report, video))
     if not (code or report or video):
         raise HTTPException(400, "Choose at least one file to replace.")
+    _reject_unaccepted_types(submission.assignment, code=code, report=report, video=video)
 
     batch = uuid.uuid4().hex[:8]
     try:
@@ -2174,9 +2236,10 @@ def _run_auto_evaluation(
         )
         .all()
     )
-    # Only token/fingerprint overlap counts as a similarity flag that can
-    # cap an integrity score; a semantic-only "review" flag is surfaced
-    # to the instructor but never penalizes on its own.
+    # Similarity flags are review signals only and never change marks in
+    # any grader. Token/fingerprint overlap is the "high" flag; a
+    # semantic-only "review" flag is surfaced the same way, just worded
+    # as a weaker signal.
     similarity_flagged = any(f.flag_level in (None, "high") for f in flags)
     semantic_review_flagged = any(f.flag_level == "review" for f in flags)
 
@@ -2214,6 +2277,7 @@ def _run_auto_evaluation(
             for c in result.grading.criteria
         ],
         grader=result.grading.grader,
+        model=result.grading.model,
         similarity_flagged=result.similarity_flagged,
         code_ai_flagged=result.code_ai_flagged,
         report_ai_signal=result.report_analysis.ai_text.signal if result.report_analysis else None,
@@ -2283,24 +2347,32 @@ def auto_evaluate_assignment(
     if not submissions:
         raise HTTPException(404, "No submissions found for this assignment")
 
-    already_done: set[int] = set()
+    # Latest stored evaluation per submission. A skipped submission is not re-run,
+    # but its stored marks and flags still go into the table.
+    stored: dict[int, AutoEvaluation] = {}
     if payload.skip_already_evaluated:
-        already_done = {
-            row[0]
-            for row in db.query(AutoEvaluation.submission_id)
+        stored_rows = (
+            db.query(AutoEvaluation)
             .filter(
                 AutoEvaluation.rubric_id == rubric.id,
                 AutoEvaluation.submission_id.in_([s.id for s in submissions]),
             )
+            .order_by(AutoEvaluation.id)
             .all()
-        }
+        )
+        stored = {row.submission_id: row for row in stored_rows}  # later rows overwrite earlier ones
 
     results: list[BatchEvaluationItemOut] = []
     for submission in submissions:
         name = submission.student_name
-        if submission.id in already_done:
+        if submission.id in stored:
+            prev = stored[submission.id]
             results.append(BatchEvaluationItemOut(
-                submission_id=submission.id, student_name=name, status="skipped"))
+                submission_id=submission.id, student_name=name, status="skipped",
+                recommended_score=prev.recommended_score, recommended_max=prev.recommended_max,
+                grader=prev.grader, model=prev.model, review_flags=list(prev.review_flags or []),
+                similarity_flagged=prev.similarity_flagged,
+                ai_flagged=_ai_flagged(prev.code_ai_flagged, prev.report_ai_signal)))
             continue
         try:
             ev = _run_auto_evaluation(db, submission, rubric, use_rubric_model=payload.use_rubric_model)
@@ -2313,7 +2385,9 @@ def auto_evaluate_assignment(
         results.append(BatchEvaluationItemOut(
             submission_id=submission.id, student_name=name, status="evaluated",
             recommended_score=ev.recommended_score, recommended_max=ev.recommended_max,
-            grader=ev.grader, review_flags=list(ev.review_flags or [])))
+            grader=ev.grader, model=ev.model, review_flags=list(ev.review_flags or []),
+            similarity_flagged=ev.similarity_flagged,
+            ai_flagged=_ai_flagged(ev.code_ai_flagged, ev.report_ai_signal)))
 
     def _count(status: str) -> int:
         return sum(1 for r in results if r.status == status)

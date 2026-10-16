@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 const STORAGE_KEY = "autoeval.useRubricModel";
 
 /**
- * On/off state for the rubric grading model (local Ollama / Claude) during
+ * On/off state for the rubric grading model (local Ollama) during
  * auto-evaluation. Off = the built-in heuristic grader scores the rubric;
  * the rest of the pipeline runs either way. Remembered per browser so the
  * single-submission and whole-assignment panels share the same setting.

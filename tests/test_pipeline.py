@@ -88,3 +88,18 @@ def test_pipeline_handles_completely_empty_submission():
     assert result.report_analysis is None
     assert result.video_analysis is None
     assert result.grading.total_score >= 0
+
+
+def test_cut_inputs_become_review_flags_for_the_instructor():
+    from app.evaluator.rubric_grading import CriterionResult, GradingResult, RubricGrader
+
+    class _CutGrader(RubricGrader):
+        name = "fake"
+
+        def grade(self, criteria, evidence):
+            results = [CriterionResult(c.name, 0.0, c.max_points, "checked") for c in criteria]
+            return GradingResult(criteria=results, grader=self.name, omitted=["report text"])
+
+    result = evaluate_submission(criteria=CRITERIA, grader=_CutGrader())
+    assert any(flag.startswith("report text:") and "not shown to the grader" in flag for flag in result.review_flags)
+    assert result.needs_human_review

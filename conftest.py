@@ -37,10 +37,19 @@ os.environ["SEMANTIC_SIMILARITY"] = "0"
 # Same for the sentence-embedding model behind cross-modal consistency.
 os.environ["CROSS_MODAL_SEMANTIC"] = "0"
 # Keep grading deterministic and offline: never call a local Ollama model
-# or the Claude API from the ordinary tests.
+# from the ordinary tests.
 os.environ["GRADER_BACKEND"] = "heuristic"
+# ...and never call the local vision model for frame descriptions.
+os.environ["VIDEO_VISION"] = "off"
 # And the Fast-DetectGPT scoring model (reports fall back to the style heuristic).
 os.environ["AI_TEXT_DETECTION"] = "0"
+# The local demo accounts are for manual use, not for the test database.
+os.environ["DEMO_DATA"] = "off"
+
+# app/db.py also reads PORTAL_DB_PATH for the database file: point it into
+# this session's temporary folder too, so database and uploads stay together
+# and are removed at the end. Never the real portal.db.
+os.environ["PORTAL_DB_PATH"] = str(Path(_TEST_DATA_DIR) / "portal.db")
 
 # Bootstrap the default admin account directly, rather than relying on
 # app.main's `@app.on_event("startup")` handler -- a bare

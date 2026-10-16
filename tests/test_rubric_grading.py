@@ -1,5 +1,3 @@
-from dataclasses import dataclass, field
-
 import json
 
 import pytest
@@ -9,7 +7,7 @@ from app.evaluator.rubric_grading import (
     Criterion,
     Evidence,
     HeuristicRubricGrader,
-    LLMRubricGrader,
+    OLLAMA_NUM_CTX,
     OllamaRubricGrader,
     build_default_grader,
 )
@@ -55,12 +53,17 @@ def test_heuristic_grader_matches_keywords_present_in_code():
     assert result.criteria[0].score >= 4
 
 
-def test_heuristic_grader_caps_score_when_similarity_flagged():
+def test_heuristic_grader_does_not_change_marks_when_similarity_or_ai_flagged():
     grader = HeuristicRubricGrader()
     criteria = [Criterion(name="Academic integrity", description="Original, authentic work", max_points=20)]
-    evidence = Evidence(code_reports=[], similarity_flagged=True)
-    result = grader.grade(criteria, evidence)
-    assert result.criteria[0].score <= 6  # 0.3 * 20
+    text = "original authentic work academic integrity"  # every criterion keyword is present
+    plain = grader.grade(criteria, Evidence(video_transcript=text))
+    flagged = grader.grade(
+        criteria, Evidence(video_transcript=text, similarity_flagged=True, ai_content_flagged=True))
+    assert plain.criteria[0].score == 20  # full keyword coverage
+    assert flagged.criteria[0].score == plain.criteria[0].score  # flags used to cap this at 6 / 10
+    note = flagged.criteria[0].justification
+    assert "for instructor review, score not changed" in note
 
 
 def test_heuristic_grader_blends_code_quality_score():
@@ -72,84 +75,8 @@ def test_heuristic_grader_blends_code_quality_score():
     assert result.criteria[0].score >= 5  # good code (quality score 100/100) should score at least half
 
 
-# --------------------------------------------------------------------------
-# LLM grader -- tested with a fake client, no real network/API key needed.
-# --------------------------------------------------------------------------
-
-
-@dataclass
-class _FakeToolUseBlock:
-    input: dict
-    type: str = "tool_use"
-
-
-@dataclass
-class _FakeResponse:
-    content: list = field(default_factory=list)
-
-
-class _FakeMessages:
-    def __init__(self, payload):
-        self._payload = payload
-        self.last_call_kwargs = None
-
-    def create(self, **kwargs):
-        self.last_call_kwargs = kwargs
-        return _FakeResponse(content=[_FakeToolUseBlock(input=self._payload)])
-
-
-class _FakeAnthropicClient:
-    def __init__(self, payload):
-        self.messages = _FakeMessages(payload)
-
-
-def test_llm_grader_parses_tool_use_response():
-    payload = {
-        "criteria": [
-            {"name": "Correctness", "score": 55, "justification": "Implements the algorithm correctly."},
-            {"name": "Code quality", "score": 30, "justification": "Well documented."},
-        ]
-    }
-    client = _FakeAnthropicClient(payload)
-    grader = LLMRubricGrader(client=client)
-    criteria = [
-        Criterion(name="Correctness", description="", max_points=60),
-        Criterion(name="Code quality", description="", max_points=40),
-    ]
-    result = grader.grade(criteria, _evidence())
-
-    assert result.grader == "llm"
-    assert result.criteria[0].score == 55
-    assert result.criteria[1].score == 30
-    assert client.messages.last_call_kwargs["tool_choice"]["name"] == "submit_grades"
-
-
-def test_llm_grader_clamps_score_to_max_points():
-    payload = {"criteria": [{"name": "Only", "score": 999, "justification": "way over"}]}
-    client = _FakeAnthropicClient(payload)
-    grader = LLMRubricGrader(client=client)
-    result = grader.grade([Criterion(name="Only", max_points=10)], _evidence())
-    assert result.criteria[0].score == 10
-
-
-def test_llm_grader_handles_missing_criterion_in_response():
-    payload = {"criteria": []}
-    client = _FakeAnthropicClient(payload)
-    grader = LLMRubricGrader(client=client)
-    result = grader.grade([Criterion(name="Missing", max_points=10)], _evidence())
-    assert result.criteria[0].score == 0.0
-    assert "did not return" in result.criteria[0].justification
-
-
-def test_llm_grader_without_client_raises_helpful_error():
-    grader = LLMRubricGrader(client=None)
-    with pytest.raises(RuntimeError, match="needs a client"):
-        grader.grade([Criterion(name="X", max_points=10)], _evidence())
-
-
-def test_build_default_grader_falls_back_to_heuristic_without_api_key(monkeypatch):
+def test_build_default_grader_falls_back_to_heuristic_without_ollama(monkeypatch):
     monkeypatch.setenv("GRADER_BACKEND", "auto")
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setattr(rubric_grading, "_ollama_available", lambda *a, **k: False)
     grader = build_default_grader()
     assert isinstance(grader, HeuristicRubricGrader)
@@ -186,8 +113,9 @@ def test_ollama_grader_parses_json_reply_and_requests_qwen3():
     assert [c.score for c in result.criteria] == [50, 35]
     url, payload = post.calls[0]
     assert url.endswith("/api/chat")
-    assert payload["model"] == "qwen3:4b"
+    assert payload["model"] == "qwen3:8b"
     assert payload["options"]["temperature"] == 0
+    assert payload["options"]["num_ctx"] == OLLAMA_NUM_CTX
     assert payload["think"] is False
 
 
@@ -210,6 +138,40 @@ def test_ollama_grader_bad_json_raises_runtime_error():
     grader = OllamaRubricGrader(post=lambda *a: {"message": {"content": "not json"}})
     with pytest.raises(RuntimeError, match="expected JSON"):
         grader.grade([Criterion(name="X", max_points=10)], _evidence())
+
+
+def test_ollama_grader_caps_reply_length():
+    post = _FakePost([{"name": "X", "score": 10, "justification": "ok"}])
+    OllamaRubricGrader(post=post).grade([Criterion(name="X", max_points=10)], _evidence())
+    assert post.calls[0][1]["options"]["num_predict"] == rubric_grading.OLLAMA_NUM_PREDICT
+
+
+def test_ollama_grader_retries_a_timeout_once():
+    attempts = []
+    good = {"message": {"content": json.dumps({"criteria": [
+        {"name": "X", "checks_total": 1, "checks_met": 1, "checks_partly": 0, "justification": "ok"}]})}}
+
+    def flaky(url, payload, timeout):
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise TimeoutError("timed out")
+        return good
+
+    result = OllamaRubricGrader(post=flaky).grade([Criterion(name="X", max_points=10)], _evidence())
+    assert len(attempts) == 2
+    assert result.criteria[0].score == 10.0
+
+
+def test_ollama_grader_gives_up_after_two_timeouts():
+    attempts = []
+
+    def always_timeout(url, payload, timeout):
+        attempts.append(1)
+        raise TimeoutError("timed out")
+
+    with pytest.raises(TimeoutError):
+        OllamaRubricGrader(post=always_timeout).grade([Criterion(name="X", max_points=10)], _evidence())
+    assert len(attempts) == 2
 
 
 def test_build_default_grader_prefers_ollama_when_available(monkeypatch):
@@ -261,3 +223,326 @@ def test_ollama_grader_sends_source_code_to_the_model():
     OllamaRubricGrader(post=post).grade([Criterion(name="Correctness", max_points=10)], evidence)
     sent = post.calls[0][1]["messages"][0]["content"]
     assert "def bubble_sort(items):" in sent
+
+
+def test_relevant_text_returns_short_text_unchanged():
+    criteria = [Criterion(name="Testing", description="describes tests", max_points=5)]
+    assert rubric_grading._relevant_text("short text", criteria, 1000) == "short text"
+
+
+def test_relevant_text_keeps_the_passage_that_matches_the_criteria():
+    filler = "\n\n".join(f"Background paragraph number {i} about unrelated history." for i in range(60))
+    text = filler + "\n\nWe tested the sorter with an empty list and with 12 random inputs."
+    criteria = [Criterion(name="Testing", description="describes the tests and inputs used", max_points=5)]
+    selected = rubric_grading._relevant_text(text, criteria, 1500)
+    assert "empty list and with 12 random inputs" in selected
+    assert len(selected) <= 1500 + 250
+    assert "not shown to you" in selected
+
+
+def test_relevant_text_keeps_original_order():
+    paragraphs = [f"Paragraph {i} " + "filler words " * 20 for i in range(30)]
+    paragraphs[25] = "Paragraph 25 explains the stack and its push and pop operations."
+    paragraphs[3] = "Paragraph 3 also explains the stack operations in detail."
+    text = "\n\n".join(paragraphs)
+    criteria = [Criterion(name="Stack", description="explains stack push and pop", max_points=5)]
+    selected = rubric_grading._relevant_text(text, criteria, 1200)
+    assert selected.index("Paragraph 3") < selected.index("Paragraph 25")
+
+
+def test_stemming_matches_word_forms():
+    assert rubric_grading._stem("testing") == rubric_grading._stem("tests") == rubric_grading._stem("tested") == "test"
+    assert rubric_grading._stem("inputs") == rubric_grading._stem("input") == "input"
+    assert rubric_grading._stem("describes") == rubric_grading._stem("describe") == "describ"
+    assert rubric_grading._stem("code") == "code"  # too short to trim safely
+
+
+def test_selection_matches_different_word_forms():
+    filler = "\n\n".join(f"Background paragraph {i} about history and goals of the project. " * 3 for i in range(60))
+    text = filler + "\n\nWe tested the sorter on several inputs, including an empty input."
+    criteria = [Criterion(name="Tests", description="describes the test inputs", max_points=5)]
+    selected = rubric_grading._relevant_text(text, criteria, 1500)
+    assert "We tested the sorter on several inputs" in selected
+
+
+def test_omitted_note_says_the_text_exists_and_is_not_missing():
+    text = "\n\n".join(f"Paragraph {i} " + "filler " * 80 for i in range(40))
+    criteria = [Criterion(name="Testing", description="tests", max_points=5)]
+    selected = rubric_grading._relevant_text(text, criteria, 1000)
+    assert "not shown to you" in selected and "do not treat them as missing" in selected
+
+
+def test_cut_inputs_reports_only_inputs_that_were_shortened():
+    long_report = SimpleNamespace(content=SimpleNamespace(text="\n\n".join("filler " * 100 for _ in range(60))))
+    criteria = [Criterion(name="Testing", description="tests", max_points=5)]
+    assert rubric_grading._cut_inputs(criteria, Evidence(report=long_report)) == ["report text"]
+    assert rubric_grading._cut_inputs(criteria, Evidence(video_transcript="short transcript")) == []
+
+
+def test_ollama_grade_result_lists_cut_inputs():
+    long_report = SimpleNamespace(content=SimpleNamespace(text="\n\n".join("filler " * 100 for _ in range(60))))
+    post = _FakePost([{"name": "Testing", "checks_total": 1, "checks_met": 1, "checks_partly": 0, "justification": "ok"}])
+    result = OllamaRubricGrader(post=post).grade(
+        [Criterion(name="Testing", description="tests", max_points=5)], Evidence(report=long_report))
+    assert result.omitted == ["report text"]
+
+
+def test_prompt_reaches_relevant_report_text_beyond_the_old_4000_char_cut():
+    from types import SimpleNamespace
+    filler = "\n\n".join("Unrelated background sentence that goes on and on. " * 10 for _ in range(20))
+    report_text = filler + "\n\nThe deadlock analysis shows that the lock ordering prevents deadlock."
+    evidence = Evidence(report=SimpleNamespace(content=SimpleNamespace(text=report_text)))
+    criteria = [Criterion(name="Deadlock analysis", description="explains why deadlock cannot happen", max_points=5)]
+    prompt = rubric_grading._build_prompt(criteria, evidence)
+    assert "lock ordering prevents deadlock" in prompt
+
+
+# --------------------------------------------------------------------------
+# The grader cannot run code, so it must not claim to have.
+# --------------------------------------------------------------------------
+
+import re  # noqa: E402
+
+# Phrases that claim the code was executed or its output observed.
+_RAN_CODE_CLAIM = re.compile(
+    r"\b(ran|executed|executing)\b|by running|when (run|executed)|after running|"
+    r"(tested|verified|confirmed)\b[^.]{0,40}\b(running|executing|execution)|test cases? (pass|passed)",
+    re.I,
+)
+
+DEMO_CODE = '''
+def bubble_sort(items):
+    """Sort a list of numbers in ascending order."""
+    n = len(items)
+    for i in range(n):
+        for j in range(0, n - i - 1):
+            if items[j] > items[j + 1]:
+                items[j], items[j + 1] = items[j + 1], items[j]
+    return items
+
+
+if __name__ == "__main__":
+    print(bubble_sort([5, 2, 9, 1, 5, 6]))
+'''
+
+
+def test_prompt_tells_the_model_it_cannot_run_code_and_must_not_claim_to():
+    prompt = rubric_grading._build_prompt([Criterion(name="Correctness", max_points=10)], Evidence())
+    assert "you cannot run, execute or test any code" in prompt
+    assert "Never say or imply that you ran, executed" in prompt
+    assert "by inspection" in prompt
+
+
+def test_ran_code_detector_catches_overclaims_and_allows_honest_wording():
+    # Real overclaims seen from the model before the prompt was tightened.
+    assert _RAN_CODE_CLAIM.search("The function correctly sorts the list, as verified by running the code.")
+    assert _RAN_CODE_CLAIM.search("I ran the function on [5, 2, 9] and it returned [2, 5, 9].")
+    assert _RAN_CODE_CLAIM.search("All test cases pass.")
+    # Honest wording must not be flagged.
+    assert not _RAN_CODE_CLAIM.search("By inspection, the nested loops correctly sort the list in place.")
+    assert not _RAN_CODE_CLAIM.search("The code appears to implement bubble sort with a correct swap condition.")
+
+
+@pytest.mark.slow
+def test_real_model_does_not_claim_to_have_run_the_code():
+    """Live check against the local qwen3:8b: code containing a demo call
+    (`print(bubble_sort([...]))`) used to make it write 'as verified by ...'."""
+    if not rubric_grading._ollama_available():
+        pytest.skip("Ollama / qwen3:8b not available")
+    evidence = Evidence(code_reports=[analyze_python(DEMO_CODE, "solution.py")],
+                        code_sources={"solution.py": DEMO_CODE})
+    result = OllamaRubricGrader().grade(
+        [Criterion("Correctness", "The function sorts any list of numbers correctly", 6),
+         Criterion("Code quality", "Clean, documented, readable code", 4)],
+        evidence,
+    )
+    for c in result.criteria:
+        assert not _RAN_CODE_CLAIM.search(c.justification), f"{c.name}: {c.justification}"
+
+
+# --------------------------------------------------------------------------
+# One rule for every grader: similarity / AI-content flags never change marks.
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("flags", [
+    {"similarity_flagged": True},
+    {"ai_content_flagged": True},
+    {"similarity_flagged": True, "ai_content_flagged": True},
+])
+def test_no_grader_changes_marks_because_of_review_flags(flags):
+    text = "original authentic work academic integrity"
+    criteria = [Criterion("Academic integrity", "Original, authentic work", 20)]
+    plain = Evidence(video_transcript=text)
+    flagged = Evidence(video_transcript=text, **flags)
+
+    # Keyword grader: identical marks with and without the flag.
+    keyword = HeuristicRubricGrader()
+    assert keyword.grade(criteria, flagged).total_score == keyword.grade(criteria, plain).total_score == 20
+
+    # LLM grader: the prompt must not depend on the flag at all, so whatever
+    # the model returns, the flag cannot move the marks.
+    assert rubric_grading._build_prompt(criteria, flagged) == rubric_grading._build_prompt(criteria, plain)
+
+    reply = [{"name": "Academic integrity", "score": 17, "justification": "ok"}]
+    ollama = OllamaRubricGrader(post=_FakePost(reply))
+    assert ollama.grade(criteria, flagged).total_score == ollama.grade(criteria, plain).total_score == 17
+
+
+# --------------------------------------------------------------------------
+# Calibration (few-shot) examples in the grading prompt.
+# --------------------------------------------------------------------------
+
+
+def _example_scores():
+    return [int(m) for m in re.findall(r"Score: (\d+)", rubric_grading.FEW_SHOT_EXAMPLES)]
+
+
+def test_prompt_contains_calibration_examples_before_the_rubric_when_enabled(monkeypatch):
+    monkeypatch.setenv("GRADER_FEWSHOT", "on")
+    prompt = rubric_grading._build_prompt([Criterion("X", "d", 5)], Evidence())
+    assert "CALIBRATION EXAMPLES" in prompt
+    assert prompt.index("CALIBRATION EXAMPLES") < prompt.index("RUBRIC:")
+    assert "scale proportionally to each criterion's max points" in prompt
+
+
+def test_calibration_examples_are_off_by_default(monkeypatch):
+    """Off by default: on the Mohler evaluation they made the platform prompt
+    worse (more false 'no answer provided' zeros), so they are opt-in."""
+    monkeypatch.delenv("GRADER_FEWSHOT", raising=False)
+    prompt = rubric_grading._build_prompt([Criterion("X", "d", 5)], Evidence())
+    assert "CALIBRATION EXAMPLES" not in prompt
+    monkeypatch.setenv("GRADER_FEWSHOT", "off")
+    assert "CALIBRATION EXAMPLES" not in rubric_grading._build_prompt([Criterion("X", "d", 5)], Evidence())
+
+
+def test_calibration_examples_cover_the_whole_range_not_just_generous_marks():
+    """Telling a small model only 'do not be harsh' made it score nearly
+    everything 4-5 in our evaluation (weak answers inflated by 1-1.6 marks), so
+    the examples must include clearly low and zero cases as well as full marks."""
+    scores = _example_scores()
+    assert len(scores) >= 5
+    assert max(scores) >= 9                                   # full marks for a short, correct answer
+    assert sum(1 for s in scores if s <= 3) >= 3              # several clearly weak or wrong cases
+    assert 0 in scores                                        # and a no-evidence case
+
+
+def test_calibration_examples_do_not_depend_on_review_flags(monkeypatch):
+    monkeypatch.setenv("GRADER_FEWSHOT", "on")
+    criteria = [Criterion("Academic integrity", "Original work", 20)]
+    assert rubric_grading._build_prompt(criteria, Evidence(similarity_flagged=True)) == \
+        rubric_grading._build_prompt(criteria, Evidence())
+
+
+# --------------------------------------------------------------------------
+# False "no answer was provided" zeros: the model claims submitted work is
+# missing. The prompt states what was submitted, and a safety net re-asks once.
+# --------------------------------------------------------------------------
+
+from types import SimpleNamespace  # noqa: E402
+
+
+def _report_evidence(text="A prototype simulates parts of the finished product."):
+    return Evidence(report=SimpleNamespace(content=SimpleNamespace(text=text)))
+
+
+def test_prompt_states_exactly_what_was_submitted():
+    prompt = rubric_grading._build_prompt([Criterion("Answer", "d", 5)], _report_evidence("one two three"))
+    assert "EVIDENCE SUBMITTED BY THE STUDENT" in prompt
+    assert "report text (words): 3" in prompt
+    assert "source code (files): none" in prompt and "video transcript (words): none" in prompt
+    assert "even when it is short or informal" in prompt
+
+
+def test_summary_counts_code_transcript_and_frames():
+    evidence = Evidence(code_sources={"a.py": "x = 1", "b.py": "y = 2"}, video_transcript="hello there",
+                        video_frames=[(1.0, "a slide")])
+    summary = rubric_grading._evidence_summary(evidence)
+    assert "source code (files): 2" in summary and "video transcript (words): 2" in summary
+    assert "video frame descriptions: 1" in summary and "report text (words): none" in summary
+
+
+@pytest.mark.parametrize("claim", [
+    "No answer was provided for the question.",
+    "No student submission evidence was provided for the answer quality criterion.",
+    "No evidence for the answer quality criterion was provided.",
+    "The student did not submit any source code, report text, or video transcript that contains the answer.",
+    "The answer was not provided in the evidence.",
+])
+def test_detector_catches_false_not_provided_claims(claim):
+    assert rubric_grading.claims_submitted_evidence_missing(claim, _report_evidence())
+
+
+@pytest.mark.parametrize("fine", [
+    "The student's answer misses the key idea that a prototype simulates behaviour.",
+    "No evidence of testing is mentioned in the report.",
+    "No evidence of unit tests was provided in the report.",
+    "The report does not include any test cases.",
+    "The student does not include the key idea of LIFO in the answer.",
+    "The answer does not address the question about insertion sort.",
+    "There is no video transcript, so the video criterion cannot be assessed.",
+])
+def test_detector_leaves_real_judgements_alone(fine):
+    assert not rubric_grading.claims_submitted_evidence_missing(fine, _report_evidence())
+
+
+def test_detector_only_flags_kinds_that_were_actually_submitted():
+    report_only = _report_evidence()
+    assert not rubric_grading.claims_submitted_evidence_missing("No video transcript was provided.", report_only)
+    with_transcript = Evidence(video_transcript="a spoken explanation")
+    assert rubric_grading.claims_submitted_evidence_missing("No video transcript was provided.", with_transcript)
+    assert not rubric_grading.claims_submitted_evidence_missing("No answer was provided.", Evidence())  # truly nothing
+
+
+class _SeqPost:
+    """Returns each scripted reply in turn (a reply may be an Exception)."""
+
+    def __init__(self, *replies):
+        self.replies = list(replies)
+        self.calls = []
+
+    def __call__(self, url, payload, timeout):
+        self.calls.append(payload["messages"][0]["content"])
+        reply = self.replies.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return {"message": {"content": json.dumps({"criteria": [
+            {"name": "Answer", "score": reply[0], "justification": reply[1]}]})}}
+
+
+_CRITERION = [Criterion("Answer", "Matches the reference answer", 5)]
+_FALSE_CLAIM = (0, "No answer was provided for the question.")
+
+
+def test_false_zero_is_retried_once_and_the_corrected_mark_is_used():
+    post = _SeqPost(_FALSE_CLAIM, (4, "The answer captures the key idea of simulating the product."))
+    result = OllamaRubricGrader(post=post).grade(_CRITERION, _report_evidence())
+    assert len(post.calls) == 2
+    assert "CORRECTION" in post.calls[1] and "CORRECTION" not in post.calls[0]
+    assert "report text (words): 8" in post.calls[1]
+    assert result.criteria[0].score == 4
+    assert "automatic check" not in result.criteria[0].justification
+
+
+def test_persistent_false_claim_keeps_the_mark_but_warns_the_instructor():
+    post = _SeqPost(_FALSE_CLAIM, (0, "Still no answer was provided."))
+    result = OllamaRubricGrader(post=post).grade(_CRITERION, _report_evidence())
+    assert len(post.calls) == 2
+    assert result.criteria[0].score == 0
+    assert "automatic check" in result.criteria[0].justification and "please review" in result.criteria[0].justification
+
+
+def test_failing_retry_does_not_break_grading():
+    post = _SeqPost(_FALSE_CLAIM, RuntimeError("ollama hiccup"))
+    result = OllamaRubricGrader(post=post).grade(_CRITERION, _report_evidence())
+    assert result.criteria[0].score == 0 and "please review" in result.criteria[0].justification
+
+
+def test_honest_replies_are_not_retried():
+    post = _SeqPost((3, "The answer is partly right but omits that a prototype simulates behaviour."))
+    OllamaRubricGrader(post=post).grade(_CRITERION, _report_evidence())
+    assert len(post.calls) == 1
+    # a genuine absence is not retried either: nothing was submitted
+    post = _SeqPost((0, "No answer was provided."))
+    OllamaRubricGrader(post=post).grade(_CRITERION, Evidence())
+    assert len(post.calls) == 1
