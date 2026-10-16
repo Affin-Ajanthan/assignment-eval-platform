@@ -62,9 +62,9 @@ Full original/modified sources for every row are in `results.csv` / `results.jso
 | TC10 | JavaScript | change indentation | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
 | TC10 | JavaScript | change indentation | raw | no | no | 0.999350 | 1.000000 | +0.000650 | INFO |  |  |
 | TC10 | PHP | change indentation | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
-| TC10 | PHP | change indentation | raw | no | no | 0.999179 | 1.000000 | +0.000821 | INFO |  |  |
+| TC10 | PHP | change indentation | raw | no | no | 0.999178 | 1.000000 | +0.000822 | INFO |  |  |
 | TC10 | Python | change indentation | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
-| TC10 | Python | change indentation | raw | no | no | 0.998511 | 1.000000 | +0.001489 | INFO |  |  |
+| TC10 | Python | change indentation | raw | no | no | 0.998511 | 1.000000 | +0.001488 | INFO |  |  |
 | TC10 | Ruby | change indentation | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
 | TC10 | Ruby | change indentation | raw | no | no | 0.999248 | 1.000000 | +0.000752 | INFO |  |  |
 | TC11 | C | add blank lines | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
@@ -76,7 +76,7 @@ Full original/modified sources for every row are in `results.csv` / `results.jso
 | TC11 | Go | add blank lines | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
 | TC11 | Go | add blank lines | raw | no | no | 0.948389 | 1.000000 | +0.051611 | INFO |  |  |
 | TC11 | Java | add blank lines | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
-| TC11 | Java | add blank lines | raw | no | no | 0.952100 | 1.000000 | +0.047900 | INFO |  |  |
+| TC11 | Java | add blank lines | raw | no | no | 0.952099 | 1.000000 | +0.047901 | INFO |  |  |
 | TC11 | JavaScript | add blank lines | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
 | TC11 | JavaScript | add blank lines | raw | no | no | 0.946270 | 1.000000 | +0.053730 | INFO |  |  |
 | TC11 | PHP | add blank lines | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
@@ -85,7 +85,7 @@ Full original/modified sources for every row are in `results.csv` / `results.jso
 | TC11 | Python | add blank lines | raw | no | no | 0.991522 | 1.000000 | +0.008478 | INFO |  |  |
 | TC11 | Ruby | add blank lines | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
 | TC11 | Ruby | add blank lines | raw | no | no | 0.990532 | 1.000000 | +0.009468 | INFO |  |  |
-| TC12 | C | change spaces around operators | production | yes | yes | 0.988185 | 1.000000 | +0.011815 | PASS |  |  |
+| TC12 | C | change spaces around operators | production | yes | yes | 0.988184 | 1.000000 | +0.011815 | PASS |  |  |
 | TC12 | C | change spaces around operators | raw | no | no | 0.951923 | 1.000000 | +0.048077 | INFO | **yes** |  |
 | TC12 | C# | change spaces around operators | production | yes | yes | 0.988276 | 1.000000 | +0.011724 | PASS |  |  |
 | TC12 | C# | change spaces around operators | raw | no | no | 0.985720 | 1.000000 | +0.014280 | INFO |  |  |
@@ -101,8 +101,8 @@ Full original/modified sources for every row are in `results.csv` / `results.jso
 | TC12 | PHP | change spaces around operators | raw | no | no | 0.983351 | 1.000000 | +0.016649 | INFO |  |  |
 | TC12 | Python | change spaces around operators | production | yes | yes | 0.958077 | 1.000000 | +0.041923 | PASS | **yes** |  |
 | TC12 | Python | change spaces around operators | raw | no | no | 0.967763 | 1.000000 | +0.032237 | INFO | **yes** |  |
-| TC12 | Ruby | change spaces around operators | production | yes | yes | 0.972744 | 1.000000 | +0.027256 | PASS | **yes** |  |
-| TC12 | Ruby | change spaces around operators | raw | no | no | 0.986353 | 1.000000 | +0.013647 | INFO |  |  |
+| TC12 | Ruby | change spaces around operators | production | yes | yes | 0.972743 | 1.000000 | +0.027256 | PASS | **yes** |  |
+| TC12 | Ruby | change spaces around operators | raw | no | no | 0.986354 | 1.000000 | +0.013646 | INFO |  |  |
 | TC13 | C | change spaces around commas and parentheses | production | yes | yes | 0.996729 | 1.000000 | +0.003271 | PASS |  |  |
 | TC13 | C | change spaces around commas and parentheses | raw | no | no | 0.994928 | 1.000000 | +0.005072 | INFO |  |  |
 | TC13 | C# | change spaces around commas and parentheses | production | yes | yes | 0.991949 | 1.000000 | +0.008051 | PASS |  |  |
@@ -110,7 +110,7 @@ Full original/modified sources for every row are in `results.csv` / `results.jso
 | TC13 | C++ | change spaces around commas and parentheses | production | yes | yes | 0.996016 | 1.000000 | +0.003984 | PASS |  |  |
 | TC13 | C++ | change spaces around commas and parentheses | raw | no | no | 0.994840 | 1.000000 | +0.005160 | INFO |  |  |
 | TC13 | Go | change spaces around commas and parentheses | production | yes | yes | 0.998249 | 1.000000 | +0.001751 | PASS |  |  |
-| TC13 | Go | change spaces around commas and parentheses | raw | no | no | 0.998698 | 1.000000 | +0.001302 | INFO |  |  |
+| TC13 | Go | change spaces around commas and parentheses | raw | no | no | 0.998699 | 1.000000 | +0.001301 | INFO |  |  |
 | TC13 | Java | change spaces around commas and parentheses | production | yes | yes | 0.995713 | 1.000000 | +0.004287 | PASS |  |  |
 | TC13 | Java | change spaces around commas and parentheses | raw | no | no | 0.997321 | 1.000000 | +0.002679 | INFO |  |  |
 | TC13 | JavaScript | change spaces around commas and parentheses | production | yes | yes | 0.992702 | 1.000000 | +0.007298 | PASS |  |  |
@@ -122,13 +122,13 @@ Full original/modified sources for every row are in `results.csv` / `results.jso
 | TC13 | Ruby | change spaces around commas and parentheses | production | yes | yes | 0.997388 | 1.000000 | +0.002612 | PASS |  |  |
 | TC13 | Ruby | change spaces around commas and parentheses | raw | no | no | 0.999479 | 1.000000 | +0.000521 | INFO |  |  |
 | TC14 | C | add comments to one submission | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
-| TC14 | C | add comments to one submission | raw | no | no | 0.853953 | 1.000000 | +0.146047 | INFO |  |  |
+| TC14 | C | add comments to one submission | raw | no | no | 0.853952 | 1.000000 | +0.146048 | INFO |  |  |
 | TC14 | C# | add comments to one submission | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
-| TC14 | C# | add comments to one submission | raw | no | no | 0.793857 | 1.000000 | +0.206143 | INFO |  |  |
+| TC14 | C# | add comments to one submission | raw | no | no | 0.793856 | 1.000000 | +0.206144 | INFO |  |  |
 | TC14 | C++ | add comments to one submission | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
-| TC14 | C++ | add comments to one submission | raw | no | no | 0.828235 | 1.000000 | +0.171765 | INFO |  |  |
+| TC14 | C++ | add comments to one submission | raw | no | no | 0.828235 | 1.000000 | +0.171764 | INFO |  |  |
 | TC14 | Go | add comments to one submission | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
-| TC14 | Go | add comments to one submission | raw | no | no | 0.858306 | 1.000000 | +0.141694 | INFO |  |  |
+| TC14 | Go | add comments to one submission | raw | no | no | 0.858307 | 1.000000 | +0.141693 | INFO |  |  |
 | TC14 | Java | add comments to one submission | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
 | TC14 | Java | add comments to one submission | raw | no | no | 0.836062 | 1.000000 | +0.163938 | INFO |  |  |
 | TC14 | JavaScript | add comments to one submission | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
@@ -136,15 +136,15 @@ Full original/modified sources for every row are in `results.csv` / `results.jso
 | TC14 | PHP | add comments to one submission | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
 | TC14 | PHP | add comments to one submission | raw | no | no | 0.763174 | 1.000000 | +0.236826 | INFO |  |  |
 | TC14 | Python | add comments to one submission | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
-| TC14 | Python | add comments to one submission | raw | no | no | 0.749232 | 1.000000 | +0.250768 | INFO |  |  |
+| TC14 | Python | add comments to one submission | raw | no | no | 0.749231 | 1.000000 | +0.250768 | INFO |  |  |
 | TC14 | Ruby | add comments to one submission | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
 | TC14 | Ruby | add comments to one submission | raw | no | no | 0.807813 | 1.000000 | +0.192187 | INFO |  |  |
 | TC15 | C | change existing comments | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
 | TC15 | C | change existing comments | raw | no | no | 0.918666 | 1.000000 | +0.081334 | INFO |  |  |
 | TC15 | C# | change existing comments | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
-| TC15 | C# | change existing comments | raw | no | no | 0.931607 | 1.000000 | +0.068393 | INFO |  |  |
+| TC15 | C# | change existing comments | raw | no | no | 0.931606 | 1.000000 | +0.068394 | INFO |  |  |
 | TC15 | C++ | change existing comments | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
-| TC15 | C++ | change existing comments | raw | no | no | 0.921325 | 1.000000 | +0.078675 | INFO |  |  |
+| TC15 | C++ | change existing comments | raw | no | no | 0.921324 | 1.000000 | +0.078676 | INFO |  |  |
 | TC15 | Go | change existing comments | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
 | TC15 | Go | change existing comments | raw | no | no | 0.929350 | 1.000000 | +0.070650 | INFO |  |  |
 | TC15 | Java | change existing comments | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
@@ -162,15 +162,15 @@ Full original/modified sources for every row are in `results.csv` / `results.jso
 | TC16 | C# | remove comments from one submission | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
 | TC16 | C# | remove comments from one submission | raw | no | no | 0.937486 | 1.000000 | +0.062514 | INFO | **yes** |  |
 | TC16 | C++ | remove comments from one submission | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
-| TC16 | C++ | remove comments from one submission | raw | no | no | 0.951344 | 1.000000 | +0.048656 | INFO |  |  |
+| TC16 | C++ | remove comments from one submission | raw | no | no | 0.951344 | 1.000000 | +0.048655 | INFO |  |  |
 | TC16 | Go | remove comments from one submission | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
 | TC16 | Go | remove comments from one submission | raw | no | no | 0.952827 | 1.000000 | +0.047173 | INFO |  |  |
 | TC16 | Java | remove comments from one submission | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
-| TC16 | Java | remove comments from one submission | raw | no | no | 0.957556 | 1.000000 | +0.042444 | INFO |  |  |
+| TC16 | Java | remove comments from one submission | raw | no | no | 0.957555 | 1.000000 | +0.042445 | INFO |  |  |
 | TC16 | JavaScript | remove comments from one submission | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
 | TC16 | JavaScript | remove comments from one submission | raw | no | no | 0.940803 | 1.000000 | +0.059197 | INFO | **yes** |  |
 | TC16 | PHP | remove comments from one submission | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
-| TC16 | PHP | remove comments from one submission | raw | no | no | 0.954886 | 1.000000 | +0.045114 | INFO |  |  |
+| TC16 | PHP | remove comments from one submission | raw | no | no | 0.954885 | 1.000000 | +0.045115 | INFO |  |  |
 | TC16 | Python | remove comments from one submission | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
 | TC16 | Python | remove comments from one submission | raw | no | no | 0.951827 | 1.000000 | +0.048173 | INFO |  |  |
 | TC16 | Ruby | remove comments from one submission | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
@@ -186,7 +186,7 @@ Full original/modified sources for every row are in `results.csv` / `results.jso
 | TC17 | Java | change line endings (LF -> CRLF) | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
 | TC17 | Java | change line endings (LF -> CRLF) | raw | no | no | 0.985638 | 1.000000 | +0.014362 | INFO |  |  |
 | TC17 | JavaScript | change line endings (LF -> CRLF) | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
-| TC17 | JavaScript | change line endings (LF -> CRLF) | raw | no | no | 0.985232 | 1.000000 | +0.014767 | INFO |  |  |
+| TC17 | JavaScript | change line endings (LF -> CRLF) | raw | no | no | 0.985233 | 1.000000 | +0.014767 | INFO |  |  |
 | TC17 | PHP | change line endings (LF -> CRLF) | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |
 | TC17 | PHP | change line endings (LF -> CRLF) | raw | no | no | 0.994315 | 1.000000 | +0.005685 | INFO |  |  |
 | TC17 | Python | change line endings (LF -> CRLF) | production | yes | yes | 1.000000 | 1.000000 | +0.000000 | PASS |  |  |

@@ -55,6 +55,7 @@ from typing import Callable, Iterable, Protocol
 
 from .core import _GENERIC_KEYWORDS, PairResult
 from .python_cleanup import strip_python_dead_code
+from .ts_cleanup import LANGUAGE_BY_EXTENSION, strip_dead_code
 
 log = logging.getLogger(__name__)
 
@@ -165,8 +166,11 @@ def normalize_code(source: str, filename: str = "", external_names: set[str] | N
     otherwise one inserted junk variable renumbers every later placeholder
     and an exact copy scores like different code. `external_names`: the
     names used by the submission's other files (see python_cleanup)."""
-    if Path(filename).suffix.lower() == ".py":
+    suffix = Path(filename).suffix.lower()
+    if suffix == ".py":
         source = strip_python_dead_code(source, external_names)
+    elif suffix in LANGUAGE_BY_EXTENSION:  # Java, JavaScript (tree-sitter; see ts_cleanup)
+        source = strip_dead_code(source, LANGUAGE_BY_EXTENSION[suffix], external_names)
     pattern = _HASH_COMMENT_RE if Path(filename).suffix.lower() in _HASH_COMMENT_LANGS else _C_COMMENT_RE
     stripped = pattern.sub(lambda m: "" if m.lastgroup == "comment" else m.group(), source)
     return " ".join(anonymize_identifiers(stripped).split())

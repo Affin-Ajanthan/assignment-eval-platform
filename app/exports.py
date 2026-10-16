@@ -142,6 +142,8 @@ def report_similarity_xlsx(result, subject_name: str) -> bytes:
         ("Pairs", len(result.pairs)),
         ("Flagged pairs", sum(1 for p in result.pairs if p.flag_level)),
         ("Fingerprints shared by most reports (ignored)", result.common_fingerprints_excluded),
+        ("Template PDF cut out of reports", result.template_filename or "None"),
+        ("Template words cut (all reports)", sum(result.template_words_removed.values())),
         ("Semantic model", f"{sem.model} ({sem.status})"),
         ("Semantic cohort median", sem.cohort_median if sem.cohort_median is not None else "-"),
         ("Semantic review threshold", sem.review_threshold if sem.review_threshold is not None else "-"),
