@@ -564,6 +564,9 @@ class BatchEvaluationItemOut(BaseModel):
     # Review flags shown as their own table columns; None when the submission failed.
     similarity_flagged: Optional[bool] = None
     ai_flagged: Optional[bool] = None
+    # Level, score and method behind ai_flagged, so the table can show which
+    # detector ran. None when the submission failed or predates these details.
+    ai_signals: Optional[AISignalsOut] = None
 
 
 class BatchAutoEvaluateOut(BaseModel):
@@ -2279,7 +2282,8 @@ def auto_evaluate_assignment(
                 recommended_score=prev.recommended_score, recommended_max=prev.recommended_max,
                 grader=prev.grader, model=prev.model, review_flags=list(prev.review_flags or []),
                 similarity_flagged=prev.similarity_flagged,
-                ai_flagged=_ai_flagged(prev.code_ai_flagged, prev.report_ai_signal)))
+                ai_flagged=_ai_flagged(prev.code_ai_flagged, prev.report_ai_signal),
+                ai_signals=prev.ai_signals))
             continue
         try:
             ev = _run_auto_evaluation(db, submission, rubric, use_rubric_model=payload.use_rubric_model)
@@ -2294,7 +2298,8 @@ def auto_evaluate_assignment(
             recommended_score=ev.recommended_score, recommended_max=ev.recommended_max,
             grader=ev.grader, model=ev.model, review_flags=list(ev.review_flags or []),
             similarity_flagged=ev.similarity_flagged,
-            ai_flagged=_ai_flagged(ev.code_ai_flagged, ev.report_ai_signal)))
+            ai_flagged=_ai_flagged(ev.code_ai_flagged, ev.report_ai_signal),
+            ai_signals=ev.ai_signals))
 
     def _count(status: str) -> int:
         return sum(1 for r in results if r.status == status)

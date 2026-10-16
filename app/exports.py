@@ -171,6 +171,21 @@ def _flag_text(flagged):
     return "" if flagged is None else "Flagged" if flagged else "No flag"
 
 
+def _ai_signal_text(signal) -> str:
+    """"High (73/100)"; blank when not assessed."""
+    return f"{signal.signal.capitalize()} ({signal.score}/100)" if signal else ""
+
+
+def _ai_method_text(signal) -> str:
+    """Which detector scored the report. The style heuristic only runs on
+    reports when the Fast-DetectGPT model is off or failed to load."""
+    if not signal:
+        return ""
+    if signal.method.startswith("fast-detectgpt:"):
+        return f"Fast-DetectGPT ({signal.method.split(':', 1)[1]})"
+    return "Style heuristic (model not used)"
+
+
 def batch_evaluation_xlsx(result, subject_name: str, rubric_name: str) -> bytes:
     """Evaluate a whole assignment -> Summary + Results."""
     wb = Workbook()
@@ -191,15 +206,19 @@ def batch_evaluation_xlsx(result, subject_name: str, rubric_name: str) -> bytes:
     for r in result.results:
         pct = (r.recommended_score / r.recommended_max
                if r.recommended_score is not None and r.recommended_max else None)
+        report_ai = r.ai_signals.report if r.ai_signals else None
+        code_ai = r.ai_signals.code if r.ai_signals else None
         rows.append([r.submission_id, r.student_name, r.status.capitalize(), r.recommended_score,
                      r.recommended_max, pct, _flag_text(r.similarity_flagged), _flag_text(r.ai_flagged),
+                     _ai_signal_text(report_ai), _ai_method_text(report_ai), _ai_signal_text(code_ai),
                      r.grader or "", "; ".join(r.review_flags), r.error or ""])
         fills.append(_FAILED_FILL if r.status == "failed" else _REVIEW_FILL if r.review_flags else None)
     _table(wb.create_sheet("Results"),
            ["Submission", "Student", "Status", "Recommended score", "Out of", "Percent",
-            "Similarity flag", "AI detection flag", "Grader", "Review flags", "Error"],
+            "Similarity flag", "AI detection flag", "Report AI signal", "Report AI method",
+            "Code AI signal (style heuristic)", "Grader", "Review flags", "Error"],
            rows, formats={6: _PERCENT}, fills=fills,
-           widths=[12, 24, 11, 12, 9, 9, 15, 17, 12, 60, 40])
+           widths=[12, 24, 11, 12, 9, 9, 15, 17, 16, 30, 18, 12, 60, 40])
     ws = wb["Results"]
     ws.append([])
     ws.append(["Automated scores are a second opinion; the instructor's manual grade always counts."])
