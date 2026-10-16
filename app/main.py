@@ -72,7 +72,7 @@ from .evaluator.document_extraction import (
 )
 from .evaluator.pipeline import evaluate_submission as _run_pipeline
 from .evaluator.semantic_consistency import get_consistency_service
-from .evaluator.ai_text_detection import get_ai_text_detector
+from .evaluator.ai_text_detection import get_ai_text_detector, model_name as ai_text_model_name
 from .evaluator.rubric_grading import Criterion as _EvalCriterion, HeuristicRubricGrader
 from .models import (
     SUBMISSION_TYPES,
@@ -615,7 +615,19 @@ app.add_middleware(
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    # The AI-text detector falls back to the style heuristic silently when its
+    # model is off or fails to load; this makes that visible. Public endpoint,
+    # so only the error type is shown -- the full message is in the server log.
+    detector = get_ai_text_detector()
+    return {
+        "status": "ok",
+        "ai_text_detector": {
+            "status": detector.status,  # not_loaded (still loading) | ready | unavailable | disabled
+            "model": ai_text_model_name(),
+            "fallback_to_heuristic": detector.status in ("unavailable", "disabled"),
+            "error": detector.error.split(":", 1)[0] if detector.error else None,
+        },
+    }
 
 
 # ---- helpers ---------------------------------------------------------------
