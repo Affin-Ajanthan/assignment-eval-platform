@@ -24,7 +24,7 @@ def average_positive(values):
         return 0
     return total / count
 "
-TC01,Python,identical copy (baseline),raw,False,False,True,1.0,1.0,0.0,n/a (informational),INFO,,,python.py,python.py,"# Average of the positive values in a list.
+TC01,Python,identical copy (baseline),raw,False,False,True,0.9999998807907104,0.9999998807907104,0.0,n/a (informational),INFO,,,python.py,python.py,"# Average of the positive values in a list.
 def average_positive(values):
     total = 0
     count = 0
@@ -86,7 +86,7 @@ TC02,Java,identical copy (baseline),production,True,True,True,1.0,1.0,0.0,|1 - s
     }
 }
 "
-TC02,Java,identical copy (baseline),raw,False,False,True,1.0,1.0,0.0,n/a (informational),INFO,,,java.java,java.java,"public class Stats {
+TC02,Java,identical copy (baseline),raw,False,False,True,0.9999999403953552,0.9999999403953552,0.0,n/a (informational),INFO,,,java.java,java.java,"public class Stats {
     // Average of the positive values in an array.
     public static double averagePositive(int[] values) {
         double total = 0;
@@ -123,7 +123,7 @@ TC02,Java,identical copy (baseline),raw,False,False,True,1.0,1.0,0.0,n/a (inform
     }
 }
 "
-TC03,JavaScript,identical copy (baseline),production,True,True,True,1.0,1.0,0.0,|1 - score| <= 1e-06,PASS,,,javascript.js,javascript.js,"// Average of the positive values in an array.
+TC03,JavaScript,identical copy (baseline),production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,|1 - score| <= 1e-06,PASS,,,javascript.js,javascript.js,"// Average of the positive values in an array.
 function averagePositive(values) {
     let total = 0;
     let count = 0;
@@ -156,7 +156,7 @@ function averagePositive(values) {
     return total / count;
 }
 "
-TC03,JavaScript,identical copy (baseline),raw,False,False,True,0.9999998807907104,0.9999998807907104,0.0,n/a (informational),INFO,,,javascript.js,javascript.js,"// Average of the positive values in an array.
+TC03,JavaScript,identical copy (baseline),raw,False,False,True,1.0,1.0,0.0,n/a (informational),INFO,,,javascript.js,javascript.js,"// Average of the positive values in an array.
 function averagePositive(values) {
     let total = 0;
     let count = 0;
@@ -189,7 +189,7 @@ function averagePositive(values) {
     return total / count;
 }
 "
-TC04,C,identical copy (baseline),production,True,True,True,1.0,1.0,0.0,|1 - score| <= 1e-06,PASS,,,c.c,c.c,"#include <stdio.h>
+TC04,C,identical copy (baseline),production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,|1 - score| <= 1e-06,PASS,,,c.c,c.c,"#include <stdio.h>
 
 // Average of the positive values in an array.
 double average_positive(const int *values, int n) {
@@ -226,7 +226,7 @@ double average_positive(const int *values, int n) {
     return total / count;
 }
 "
-TC04,C,identical copy (baseline),raw,False,False,True,0.9999998807907104,0.9999998807907104,0.0,n/a (informational),INFO,,,c.c,c.c,"#include <stdio.h>
+TC04,C,identical copy (baseline),raw,False,False,True,1.0,1.0,0.0,n/a (informational),INFO,,,c.c,c.c,"#include <stdio.h>
 
 // Average of the positive values in an array.
 double average_positive(const int *values, int n) {
@@ -300,7 +300,7 @@ double averagePositive(const std::vector<int> &values) {
     return total / count;
 }
 "
-TC05,C++,identical copy (baseline),raw,False,False,True,1.0,1.0,0.0,n/a (informational),INFO,,,cpp.cpp,cpp.cpp,"#include <vector>
+TC05,C++,identical copy (baseline),raw,False,False,True,0.9999998211860657,0.9999998211860657,0.0,n/a (informational),INFO,,,cpp.cpp,cpp.cpp,"#include <vector>
 
 // Average of the positive values in a vector.
 double averagePositive(const std::vector<int> &values) {
@@ -505,7 +505,7 @@ func AveragePositive(values []int) float64 {
 	return float64(total) / float64(count)
 }
 "
-TC08,PHP,identical copy (baseline),production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,|1 - score| <= 1e-06,PASS,,,php.php,php.php,"<?php
+TC08,PHP,identical copy (baseline),production,True,True,True,1.0,1.0,0.0,|1 - score| <= 1e-06,PASS,,,php.php,php.php,"<?php
 // Average of the positive values in an array.
 function averagePositive(array $values) {
     $total = 0;
@@ -575,7 +575,7 @@ function averagePositive(array $values) {
     return $total / $count;
 }
 "
-TC09,Ruby,identical copy (baseline),production,True,True,True,1.0,1.0,0.0,|1 - score| <= 1e-06,PASS,,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+TC09,Ruby,identical copy (baseline),production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,|1 - score| <= 1e-06,PASS,,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
 def average_positive(values)
   total = 0
   count = 0
@@ -633,7 +633,7 @@ def average_positive(values)
   total.to_f / count
 end
 "
-TC10,C,change indentation,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,c.c,c.c,"#include <stdio.h>
+TC10,C,change indentation,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,c.c,c.c,"#include <stdio.h>
 
 // Average of the positive values in an array.
 double average_positive(const int *values, int n) {
@@ -670,7 +670,7 @@ double average_positive(const int *values, int n) {
   return total / count;
 }
 "
-TC10,C,change indentation,raw,False,False,True,0.9989492893218994,0.9999998807907104,0.0010505914688110352,n/a (informational),INFO,False,,c.c,c.c,"#include <stdio.h>
+TC10,C,change indentation,raw,False,False,True,0.998949408531189,1.0,0.0010505914688110352,n/a (informational),INFO,False,,c.c,c.c,"#include <stdio.h>
 
 // Average of the positive values in an array.
 double average_positive(const int *values, int n) {
@@ -754,7 +754,7 @@ TC10,C#,change indentation,production,True,True,True,1.0,1.0,0.0,identical norma
   }
 }
 "
-TC10,C#,change indentation,raw,False,False,True,0.9968660473823547,1.0,0.0031339526176452637,n/a (informational),INFO,False,,csharp.cs,csharp.cs,"public static class Stats
+TC10,C#,change indentation,raw,False,False,True,0.9968661069869995,1.0,0.0031338930130004883,n/a (informational),INFO,False,,csharp.cs,csharp.cs,"public static class Stats
 {
     // Average of the positive values in an array.
     public static double AveragePositive(int[] values)
@@ -838,7 +838,7 @@ double averagePositive(const std::vector<int> &values) {
   return total / count;
 }
 "
-TC10,C++,change indentation,raw,False,False,True,0.9986752271652222,1.0,0.001324772834777832,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
+TC10,C++,change indentation,raw,False,False,True,0.9986751079559326,0.9999998211860657,0.0013247132301330566,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
 
 // Average of the positive values in a vector.
 double averagePositive(const std::vector<int> &values) {
@@ -986,7 +986,7 @@ TC10,Java,change indentation,production,True,True,True,1.0,1.0,0.0,identical nor
   }
 }
 "
-TC10,Java,change indentation,raw,False,False,True,0.9986320734024048,1.0,0.0013679265975952148,n/a (informational),INFO,False,,java.java,java.java,"public class Stats {
+TC10,Java,change indentation,raw,False,False,True,0.9986320734024048,0.9999999403953552,0.0013678669929504395,n/a (informational),INFO,False,,java.java,java.java,"public class Stats {
     // Average of the positive values in an array.
     public static double averagePositive(int[] values) {
         double total = 0;
@@ -1023,7 +1023,7 @@ TC10,Java,change indentation,raw,False,False,True,0.9986320734024048,1.0,0.00136
   }
 }
 "
-TC10,JavaScript,change indentation,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+TC10,JavaScript,change indentation,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
 function averagePositive(values) {
     let total = 0;
     let count = 0;
@@ -1056,7 +1056,7 @@ function averagePositive(values) {
   return total / count;
 }
 "
-TC10,JavaScript,change indentation,raw,False,False,True,0.9993501901626587,0.9999998807907104,0.0006496906280517578,n/a (informational),INFO,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+TC10,JavaScript,change indentation,raw,False,False,True,0.9993504881858826,1.0,0.0006495118141174316,n/a (informational),INFO,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
 function averagePositive(values) {
     let total = 0;
     let count = 0;
@@ -1089,7 +1089,7 @@ function averagePositive(values) {
   return total / count;
 }
 "
-TC10,PHP,change indentation,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,php.php,php.php,"<?php
+TC10,PHP,change indentation,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,php.php,php.php,"<?php
 // Average of the positive values in an array.
 function averagePositive(array $values) {
     $total = 0;
@@ -1124,7 +1124,7 @@ function averagePositive(array $values) {
   return $total / $count;
 }
 "
-TC10,PHP,change indentation,raw,False,False,True,0.9991785287857056,1.0,0.0008214712142944336,n/a (informational),INFO,False,,php.php,php.php,"<?php
+TC10,PHP,change indentation,raw,False,False,True,0.999178409576416,1.0,0.0008215904235839844,n/a (informational),INFO,False,,php.php,php.php,"<?php
 // Average of the positive values in an array.
 function averagePositive(array $values) {
     $total = 0;
@@ -1184,7 +1184,7 @@ def average_positive(values):
     return 0
   return total / count
 "
-TC10,Python,change indentation,raw,False,False,True,0.9985114932060242,1.0,0.00148850679397583,n/a (informational),INFO,False,,python.py,python.py,"# Average of the positive values in a list.
+TC10,Python,change indentation,raw,False,False,True,0.9985114336013794,0.9999998807907104,0.0014884471893310547,n/a (informational),INFO,False,,python.py,python.py,"# Average of the positive values in a list.
 def average_positive(values):
     total = 0
     count = 0
@@ -1209,7 +1209,7 @@ def average_positive(values):
     return 0
   return total / count
 "
-TC10,Ruby,change indentation,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+TC10,Ruby,change indentation,production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
 def average_positive(values)
   total = 0
   count = 0
@@ -1238,7 +1238,7 @@ def average_positive(values)
     total.to_f / count
 end
 "
-TC10,Ruby,change indentation,raw,False,False,True,0.9992483854293823,1.0,0.0007516145706176758,n/a (informational),INFO,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+TC10,Ruby,change indentation,raw,False,False,True,0.9992484450340271,1.0,0.0007515549659729004,n/a (informational),INFO,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
 def average_positive(values)
   total = 0
   count = 0
@@ -1267,7 +1267,7 @@ def average_positive(values)
     total.to_f / count
 end
 "
-TC11,C,add blank lines,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,c.c,c.c,"#include <stdio.h>
+TC11,C,add blank lines,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,c.c,c.c,"#include <stdio.h>
 
 // Average of the positive values in an array.
 double average_positive(const int *values, int n) {
@@ -1322,7 +1322,7 @@ double average_positive(const int *values, int n) {
 }
 
 "
-TC11,C,add blank lines,raw,False,False,True,0.9307982921600342,0.9999998807907104,0.06920158863067627,n/a (informational),INFO,False,,c.c,c.c,"#include <stdio.h>
+TC11,C,add blank lines,raw,False,False,True,0.9307981133460999,1.0,0.06920188665390015,n/a (informational),INFO,False,,c.c,c.c,"#include <stdio.h>
 
 // Average of the positive values in an array.
 double average_positive(const int *values, int n) {
@@ -1447,7 +1447,7 @@ TC11,C#,add blank lines,production,True,True,True,1.0,1.0,0.0,identical normalis
 }
 
 "
-TC11,C#,add blank lines,raw,False,False,True,0.9914999008178711,1.0,0.008500099182128906,n/a (informational),INFO,False,,csharp.cs,csharp.cs,"public static class Stats
+TC11,C#,add blank lines,raw,False,False,True,0.9914997816085815,1.0,0.008500218391418457,n/a (informational),INFO,False,,csharp.cs,csharp.cs,"public static class Stats
 {
     // Average of the positive values in an array.
     public static double AveragePositive(int[] values)
@@ -1572,7 +1572,7 @@ double averagePositive(const std::vector<int> &values) {
 }
 
 "
-TC11,C++,add blank lines,raw,False,False,True,0.954126238822937,1.0,0.04587376117706299,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
+TC11,C++,add blank lines,raw,False,False,True,0.9541261196136475,0.9999998211860657,0.04587370157241821,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
 
 // Average of the positive values in a vector.
 double averagePositive(const std::vector<int> &values) {
@@ -1792,7 +1792,7 @@ TC11,Java,add blank lines,production,True,True,True,1.0,1.0,0.0,identical normal
 }
 
 "
-TC11,Java,add blank lines,raw,False,False,True,0.9520995020866394,1.0,0.047900497913360596,n/a (informational),INFO,False,,java.java,java.java,"public class Stats {
+TC11,Java,add blank lines,raw,False,False,True,0.9520993232727051,0.9999999403953552,0.047900617122650146,n/a (informational),INFO,False,,java.java,java.java,"public class Stats {
     // Average of the positive values in an array.
     public static double averagePositive(int[] values) {
         double total = 0;
@@ -1847,7 +1847,7 @@ TC11,Java,add blank lines,raw,False,False,True,0.9520995020866394,1.0,0.04790049
 }
 
 "
-TC11,JavaScript,add blank lines,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+TC11,JavaScript,add blank lines,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
 function averagePositive(values) {
     let total = 0;
     let count = 0;
@@ -1896,7 +1896,7 @@ function averagePositive(values) {
 }
 
 "
-TC11,JavaScript,add blank lines,raw,False,False,True,0.946270227432251,0.9999998807907104,0.05372965335845947,n/a (informational),INFO,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+TC11,JavaScript,add blank lines,raw,False,False,True,0.946270227432251,1.0,0.05372977256774902,n/a (informational),INFO,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
 function averagePositive(values) {
     let total = 0;
     let count = 0;
@@ -1945,7 +1945,7 @@ function averagePositive(values) {
 }
 
 "
-TC11,PHP,add blank lines,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,php.php,php.php,"<?php
+TC11,PHP,add blank lines,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,php.php,php.php,"<?php
 // Average of the positive values in an array.
 function averagePositive(array $values) {
     $total = 0;
@@ -1997,7 +1997,7 @@ function averagePositive(array $values) {
 }
 
 "
-TC11,PHP,add blank lines,raw,False,False,True,0.9689450263977051,1.0,0.031054973602294922,n/a (informational),INFO,False,,php.php,php.php,"<?php
+TC11,PHP,add blank lines,raw,False,False,True,0.9689452052116394,1.0,0.031054794788360596,n/a (informational),INFO,False,,php.php,php.php,"<?php
 // Average of the positive values in an array.
 function averagePositive(array $values) {
     $total = 0;
@@ -2086,7 +2086,7 @@ def average_positive(values):
     return total / count
 
 "
-TC11,Python,add blank lines,raw,False,False,True,0.991521954536438,1.0,0.008478045463562012,n/a (informational),INFO,False,,python.py,python.py,"# Average of the positive values in a list.
+TC11,Python,add blank lines,raw,False,False,True,0.9915218353271484,0.9999998807907104,0.008478045463562012,n/a (informational),INFO,False,,python.py,python.py,"# Average of the positive values in a list.
 def average_positive(values):
     total = 0
     count = 0
@@ -2123,7 +2123,7 @@ def average_positive(values):
     return total / count
 
 "
-TC11,Ruby,add blank lines,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+TC11,Ruby,add blank lines,production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
 def average_positive(values)
   total = 0
   count = 0
@@ -2166,7 +2166,7 @@ def average_positive(values)
 end
 
 "
-TC11,Ruby,add blank lines,raw,False,False,True,0.9905321598052979,1.0,0.009467840194702148,n/a (informational),INFO,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+TC11,Ruby,add blank lines,raw,False,False,True,0.9905322790145874,1.0,0.009467720985412598,n/a (informational),INFO,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
 def average_positive(values)
   total = 0
   count = 0
@@ -2209,7 +2209,7 @@ def average_positive(values)
 end
 
 "
-TC12,C,change spaces around operators,production,True,True,False,0.9881845116615295,1.0,0.011815488338470459,drop <= 0.1 and score >= 0.8,PASS,False,,c.c,c.c,"#include <stdio.h>
+TC12,C,change spaces around operators,production,True,True,False,0.9881844520568848,0.9999998807907104,0.011815428733825684,drop <= 0.1 and score >= 0.8,PASS,False,,c.c,c.c,"#include <stdio.h>
 
 // Average of the positive values in an array.
 double average_positive(const int *values, int n) {
@@ -2246,7 +2246,7 @@ double average_positive(const int *values, int n) {
     return total/count;
 }
 "
-TC12,C,change spaces around operators,raw,False,False,False,0.9519227743148804,0.9999998807907104,0.04807710647583008,n/a (informational),INFO,True,,c.c,c.c,"#include <stdio.h>
+TC12,C,change spaces around operators,raw,False,False,False,0.9519227743148804,1.0,0.04807722568511963,n/a (informational),INFO,True,,c.c,c.c,"#include <stdio.h>
 
 // Average of the positive values in an array.
 double average_positive(const int *values, int n) {
@@ -2283,7 +2283,7 @@ double average_positive(const int *values, int n) {
     return total/count;
 }
 "
-TC12,C#,change spaces around operators,production,True,True,False,0.9882758259773254,1.0,0.01172417402267456,drop <= 0.1 and score >= 0.8,PASS,False,,csharp.cs,csharp.cs,"public static class Stats
+TC12,C#,change spaces around operators,production,True,True,False,0.9882758855819702,1.0,0.011724114418029785,drop <= 0.1 and score >= 0.8,PASS,False,,csharp.cs,csharp.cs,"public static class Stats
 {
     // Average of the positive values in an array.
     public static double AveragePositive(int[] values)
@@ -2330,7 +2330,7 @@ TC12,C#,change spaces around operators,production,True,True,False,0.988275825977
     }
 }
 "
-TC12,C#,change spaces around operators,raw,False,False,False,0.9857197999954224,1.0,0.014280200004577637,n/a (informational),INFO,False,,csharp.cs,csharp.cs,"public static class Stats
+TC12,C#,change spaces around operators,raw,False,False,False,0.9857199192047119,1.0,0.014280080795288086,n/a (informational),INFO,False,,csharp.cs,csharp.cs,"public static class Stats
 {
     // Average of the positive values in an array.
     public static double AveragePositive(int[] values)
@@ -2377,7 +2377,7 @@ TC12,C#,change spaces around operators,raw,False,False,False,0.9857197999954224,
     }
 }
 "
-TC12,C++,change spaces around operators,production,True,True,False,0.9915176630020142,0.9999999403953552,0.008482277393341064,drop <= 0.1 and score >= 0.8,PASS,False,,cpp.cpp,cpp.cpp,"#include <vector>
+TC12,C++,change spaces around operators,production,True,True,False,0.9915177226066589,0.9999999403953552,0.008482217788696289,drop <= 0.1 and score >= 0.8,PASS,False,,cpp.cpp,cpp.cpp,"#include <vector>
 
 // Average of the positive values in a vector.
 double averagePositive(const std::vector<int> &values) {
@@ -2414,7 +2414,7 @@ double averagePositive(const std::vector<int> &values) {
     return total/count;
 }
 "
-TC12,C++,change spaces around operators,raw,False,False,False,0.9868113994598389,1.0,0.013188600540161133,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
+TC12,C++,change spaces around operators,raw,False,False,False,0.9868112802505493,0.9999998211860657,0.013188540935516357,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
 
 // Average of the positive values in a vector.
 double averagePositive(const std::vector<int> &values) {
@@ -2451,7 +2451,7 @@ double averagePositive(const std::vector<int> &values) {
     return total/count;
 }
 "
-TC12,Go,change spaces around operators,production,True,True,False,0.955090343952179,1.0,0.044909656047821045,drop <= 0.1 and score >= 0.8,PASS,True,,go.go,go.go,"package stats
+TC12,Go,change spaces around operators,production,True,True,False,0.9550901651382446,1.0,0.04490983486175537,drop <= 0.1 and score >= 0.8,PASS,True,,go.go,go.go,"package stats
 
 // AveragePositive returns the average of the positive values.
 func AveragePositive(values []int) float64 {
@@ -2488,7 +2488,7 @@ func AveragePositive(values []int) float64 {
 	return float64(total)/float64(count)
 }
 "
-TC12,Go,change spaces around operators,raw,False,False,False,0.9847478270530701,1.0,0.015252172946929932,n/a (informational),INFO,False,,go.go,go.go,"package stats
+TC12,Go,change spaces around operators,raw,False,False,False,0.9847477078437805,1.0,0.015252292156219482,n/a (informational),INFO,False,,go.go,go.go,"package stats
 
 // AveragePositive returns the average of the positive values.
 func AveragePositive(values []int) float64 {
@@ -2525,7 +2525,7 @@ func AveragePositive(values []int) float64 {
 	return float64(total)/float64(count)
 }
 "
-TC12,Java,change spaces around operators,production,True,True,False,0.986987829208374,1.0,0.013012170791625977,drop <= 0.1 and score >= 0.8,PASS,False,,java.java,java.java,"public class Stats {
+TC12,Java,change spaces around operators,production,True,True,False,0.9869878888130188,1.0,0.013012111186981201,drop <= 0.1 and score >= 0.8,PASS,False,,java.java,java.java,"public class Stats {
     // Average of the positive values in an array.
     public static double averagePositive(int[] values) {
         double total = 0;
@@ -2562,7 +2562,7 @@ TC12,Java,change spaces around operators,production,True,True,False,0.9869878292
     }
 }
 "
-TC12,Java,change spaces around operators,raw,False,False,False,0.9607488512992859,1.0,0.03925114870071411,n/a (informational),INFO,True,,java.java,java.java,"public class Stats {
+TC12,Java,change spaces around operators,raw,False,False,False,0.9607486724853516,0.9999999403953552,0.03925126791000366,n/a (informational),INFO,True,,java.java,java.java,"public class Stats {
     // Average of the positive values in an array.
     public static double averagePositive(int[] values) {
         double total = 0;
@@ -2599,7 +2599,7 @@ TC12,Java,change spaces around operators,raw,False,False,False,0.960748851299285
     }
 }
 "
-TC12,JavaScript,change spaces around operators,production,True,True,False,0.9886953830718994,1.0,0.011304616928100586,drop <= 0.1 and score >= 0.8,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+TC12,JavaScript,change spaces around operators,production,True,True,False,0.9886952638626099,0.9999998807907104,0.011304616928100586,drop <= 0.1 and score >= 0.8,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
 function averagePositive(values) {
     let total = 0;
     let count = 0;
@@ -2632,7 +2632,7 @@ function averagePositive(values) {
     return total/count;
 }
 "
-TC12,JavaScript,change spaces around operators,raw,False,False,False,0.9868279695510864,0.9999998807907104,0.013171911239624023,n/a (informational),INFO,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+TC12,JavaScript,change spaces around operators,raw,False,False,False,0.9868281483650208,1.0,0.013171851634979248,n/a (informational),INFO,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
 function averagePositive(values) {
     let total = 0;
     let count = 0;
@@ -2665,7 +2665,7 @@ function averagePositive(values) {
     return total/count;
 }
 "
-TC12,PHP,change spaces around operators,production,True,True,False,0.9580007195472717,0.9999998807907104,0.04199916124343872,drop <= 0.1 and score >= 0.8,PASS,True,,php.php,php.php,"<?php
+TC12,PHP,change spaces around operators,production,True,True,False,0.9580007195472717,1.0,0.04199928045272827,drop <= 0.1 and score >= 0.8,PASS,True,,php.php,php.php,"<?php
 // Average of the positive values in an array.
 function averagePositive(array $values) {
     $total = 0;
@@ -2735,7 +2735,7 @@ function averagePositive(array $values) {
     return $total/$count;
 }
 "
-TC12,Python,change spaces around operators,production,True,True,False,0.9580770134925842,1.0,0.04192298650741577,drop <= 0.1 and score >= 0.8,PASS,True,,python.py,python.py,"# Average of the positive values in a list.
+TC12,Python,change spaces around operators,production,True,True,False,0.958077073097229,1.0,0.041922926902770996,drop <= 0.1 and score >= 0.8,PASS,True,,python.py,python.py,"# Average of the positive values in a list.
 def average_positive(values):
     total = 0
     count = 0
@@ -2760,7 +2760,7 @@ def average_positive(values):
         return 0
     return total/count
 "
-TC12,Python,change spaces around operators,raw,False,False,False,0.9677627086639404,1.0,0.03223729133605957,n/a (informational),INFO,True,,python.py,python.py,"# Average of the positive values in a list.
+TC12,Python,change spaces around operators,raw,False,False,False,0.9677628874778748,0.9999998807907104,0.03223699331283569,n/a (informational),INFO,True,,python.py,python.py,"# Average of the positive values in a list.
 def average_positive(values):
     total = 0
     count = 0
@@ -2785,7 +2785,7 @@ def average_positive(values):
         return 0
     return total/count
 "
-TC12,Ruby,change spaces around operators,production,True,True,False,0.9727435111999512,1.0,0.027256488800048828,drop <= 0.1 and score >= 0.8,PASS,True,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+TC12,Ruby,change spaces around operators,production,True,True,False,0.9727434515953064,0.9999999403953552,0.027256488800048828,drop <= 0.1 and score >= 0.8,PASS,True,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
 def average_positive(values)
   total = 0
   count = 0
@@ -2814,7 +2814,7 @@ def average_positive(values)
   total.to_f/count
 end
 "
-TC12,Ruby,change spaces around operators,raw,False,False,False,0.9863532781600952,1.0,0.013646721839904785,n/a (informational),INFO,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+TC12,Ruby,change spaces around operators,raw,False,False,False,0.9863535165786743,1.0,0.013646483421325684,n/a (informational),INFO,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
 def average_positive(values)
   total = 0
   count = 0
@@ -2843,7 +2843,7 @@ def average_positive(values)
   total.to_f/count
 end
 "
-TC13,C,change spaces around commas and parentheses,production,True,True,False,0.9967288970947266,1.0,0.0032711029052734375,drop <= 0.1 and score >= 0.8,PASS,False,,c.c,c.c,"#include <stdio.h>
+TC13,C,change spaces around commas and parentheses,production,True,True,False,0.9967288970947266,0.9999998807907104,0.0032709836959838867,drop <= 0.1 and score >= 0.8,PASS,False,,c.c,c.c,"#include <stdio.h>
 
 // Average of the positive values in an array.
 double average_positive(const int *values, int n) {
@@ -2880,7 +2880,7 @@ double average_positive( const int *values ,int n ) {
     return total / count;
 }
 "
-TC13,C,change spaces around commas and parentheses,raw,False,False,False,0.9949281215667725,0.9999998807907104,0.005071759223937988,n/a (informational),INFO,False,,c.c,c.c,"#include <stdio.h>
+TC13,C,change spaces around commas and parentheses,raw,False,False,False,0.994928240776062,1.0,0.005071759223937988,n/a (informational),INFO,False,,c.c,c.c,"#include <stdio.h>
 
 // Average of the positive values in an array.
 double average_positive(const int *values, int n) {
@@ -2917,7 +2917,7 @@ double average_positive( const int *values ,int n ) {
     return total / count;
 }
 "
-TC13,C#,change spaces around commas and parentheses,production,True,True,False,0.9919487237930298,1.0,0.008051276206970215,drop <= 0.1 and score >= 0.8,PASS,False,,csharp.cs,csharp.cs,"public static class Stats
+TC13,C#,change spaces around commas and parentheses,production,True,True,False,0.9919486045837402,1.0,0.008051395416259766,drop <= 0.1 and score >= 0.8,PASS,False,,csharp.cs,csharp.cs,"public static class Stats
 {
     // Average of the positive values in an array.
     public static double AveragePositive(int[] values)
@@ -2964,7 +2964,7 @@ TC13,C#,change spaces around commas and parentheses,production,True,True,False,0
     }
 }
 "
-TC13,C#,change spaces around commas and parentheses,raw,False,False,False,0.9962252378463745,1.0,0.0037747621536254883,n/a (informational),INFO,False,,csharp.cs,csharp.cs,"public static class Stats
+TC13,C#,change spaces around commas and parentheses,raw,False,False,False,0.9962251782417297,1.0,0.0037748217582702637,n/a (informational),INFO,False,,csharp.cs,csharp.cs,"public static class Stats
 {
     // Average of the positive values in an array.
     public static double AveragePositive(int[] values)
@@ -3048,7 +3048,7 @@ double averagePositive( const std::vector<int> &values ) {
     return total / count;
 }
 "
-TC13,C++,change spaces around commas and parentheses,raw,False,False,False,0.9948402643203735,1.0,0.005159735679626465,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
+TC13,C++,change spaces around commas and parentheses,raw,False,False,False,0.9948402643203735,0.9999998211860657,0.005159556865692139,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
 
 // Average of the positive values in a vector.
 double averagePositive(const std::vector<int> &values) {
@@ -3085,7 +3085,7 @@ double averagePositive( const std::vector<int> &values ) {
     return total / count;
 }
 "
-TC13,Go,change spaces around commas and parentheses,production,True,True,False,0.9982487559318542,1.0,0.001751244068145752,drop <= 0.1 and score >= 0.8,PASS,False,,go.go,go.go,"package stats
+TC13,Go,change spaces around commas and parentheses,production,True,True,False,0.998248815536499,1.0,0.0017511844635009766,drop <= 0.1 and score >= 0.8,PASS,False,,go.go,go.go,"package stats
 
 // AveragePositive returns the average of the positive values.
 func AveragePositive(values []int) float64 {
@@ -3122,7 +3122,7 @@ func AveragePositive( values []int ) float64 {
 	return float64( total ) / float64( count )
 }
 "
-TC13,Go,change spaces around commas and parentheses,raw,False,False,False,0.9986984729766846,1.0,0.0013015270233154297,n/a (informational),INFO,False,,go.go,go.go,"package stats
+TC13,Go,change spaces around commas and parentheses,raw,False,False,False,0.9986985325813293,1.0,0.0013014674186706543,n/a (informational),INFO,False,,go.go,go.go,"package stats
 
 // AveragePositive returns the average of the positive values.
 func AveragePositive(values []int) float64 {
@@ -3159,7 +3159,7 @@ func AveragePositive( values []int ) float64 {
 	return float64( total ) / float64( count )
 }
 "
-TC13,Java,change spaces around commas and parentheses,production,True,True,False,0.9957131743431091,1.0,0.004286825656890869,drop <= 0.1 and score >= 0.8,PASS,False,,java.java,java.java,"public class Stats {
+TC13,Java,change spaces around commas and parentheses,production,True,True,False,0.9957132339477539,1.0,0.004286766052246094,drop <= 0.1 and score >= 0.8,PASS,False,,java.java,java.java,"public class Stats {
     // Average of the positive values in an array.
     public static double averagePositive(int[] values) {
         double total = 0;
@@ -3196,7 +3196,7 @@ TC13,Java,change spaces around commas and parentheses,production,True,True,False
     }
 }
 "
-TC13,Java,change spaces around commas and parentheses,raw,False,False,False,0.9973206520080566,1.0,0.0026793479919433594,n/a (informational),INFO,False,,java.java,java.java,"public class Stats {
+TC13,Java,change spaces around commas and parentheses,raw,False,False,False,0.9973207116127014,0.9999999403953552,0.0026792287826538086,n/a (informational),INFO,False,,java.java,java.java,"public class Stats {
     // Average of the positive values in an array.
     public static double averagePositive(int[] values) {
         double total = 0;
@@ -3233,7 +3233,7 @@ TC13,Java,change spaces around commas and parentheses,raw,False,False,False,0.99
     }
 }
 "
-TC13,JavaScript,change spaces around commas and parentheses,production,True,True,False,0.9927019476890564,1.0,0.0072980523109436035,drop <= 0.1 and score >= 0.8,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+TC13,JavaScript,change spaces around commas and parentheses,production,True,True,False,0.9927020072937012,0.9999998807907104,0.007297873497009277,drop <= 0.1 and score >= 0.8,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
 function averagePositive(values) {
     let total = 0;
     let count = 0;
@@ -3266,7 +3266,7 @@ function averagePositive( values ) {
     return total / count;
 }
 "
-TC13,JavaScript,change spaces around commas and parentheses,raw,False,False,False,0.9978612661361694,0.9999998807907104,0.0021386146545410156,n/a (informational),INFO,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+TC13,JavaScript,change spaces around commas and parentheses,raw,False,False,False,0.9978612661361694,1.0,0.0021387338638305664,n/a (informational),INFO,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
 function averagePositive(values) {
     let total = 0;
     let count = 0;
@@ -3299,7 +3299,7 @@ function averagePositive( values ) {
     return total / count;
 }
 "
-TC13,PHP,change spaces around commas and parentheses,production,True,True,False,0.99260413646698,0.9999998807907104,0.007395744323730469,drop <= 0.1 and score >= 0.8,PASS,False,,php.php,php.php,"<?php
+TC13,PHP,change spaces around commas and parentheses,production,True,True,False,0.9926041960716248,1.0,0.007395803928375244,drop <= 0.1 and score >= 0.8,PASS,False,,php.php,php.php,"<?php
 // Average of the positive values in an array.
 function averagePositive(array $values) {
     $total = 0;
@@ -3334,7 +3334,7 @@ function averagePositive( array $values ) {
     return $total / $count;
 }
 "
-TC13,PHP,change spaces around commas and parentheses,raw,False,False,False,0.9955600500106812,1.0,0.004439949989318848,n/a (informational),INFO,False,,php.php,php.php,"<?php
+TC13,PHP,change spaces around commas and parentheses,raw,False,False,False,0.9955601692199707,1.0,0.004439830780029297,n/a (informational),INFO,False,,php.php,php.php,"<?php
 // Average of the positive values in an array.
 function averagePositive(array $values) {
     $total = 0;
@@ -3394,7 +3394,7 @@ def average_positive( values ):
         return 0
     return total / count
 "
-TC13,Python,change spaces around commas and parentheses,raw,False,False,False,0.9980853796005249,1.0,0.0019146203994750977,n/a (informational),INFO,False,,python.py,python.py,"# Average of the positive values in a list.
+TC13,Python,change spaces around commas and parentheses,raw,False,False,False,0.9980852603912354,0.9999998807907104,0.0019146203994750977,n/a (informational),INFO,False,,python.py,python.py,"# Average of the positive values in a list.
 def average_positive(values):
     total = 0
     count = 0
@@ -3419,7 +3419,7 @@ def average_positive( values ):
         return 0
     return total / count
 "
-TC13,Ruby,change spaces around commas and parentheses,production,True,True,False,0.9973881840705872,1.0,0.002611815929412842,drop <= 0.1 and score >= 0.8,PASS,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+TC13,Ruby,change spaces around commas and parentheses,production,True,True,False,0.9973881244659424,0.9999999403953552,0.002611815929412842,drop <= 0.1 and score >= 0.8,PASS,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
 def average_positive(values)
   total = 0
   count = 0
@@ -3477,7 +3477,7 @@ def average_positive( values )
   total.to_f / count
 end
 "
-TC14,C,add comments to one submission,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,c.c,c.c,"#include <stdio.h>
+TC14,C,add comments to one submission,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,c.c,c.c,"#include <stdio.h>
 
 // Average of the positive values in an array.
 double average_positive(const int *values, int n) {
@@ -3519,7 +3519,7 @@ double average_positive(const int *values, int n) {
     return total / count;
 }
 "
-TC14,C,add comments to one submission,raw,False,False,True,0.8539525270462036,0.9999998807907104,0.14604735374450684,n/a (informational),INFO,False,,c.c,c.c,"#include <stdio.h>
+TC14,C,add comments to one submission,raw,False,False,True,0.8539524078369141,1.0,0.14604759216308594,n/a (informational),INFO,False,,c.c,c.c,"#include <stdio.h>
 
 // Average of the positive values in an array.
 double average_positive(const int *values, int n) {
@@ -3613,7 +3613,7 @@ public static class Stats
     }
 }
 "
-TC14,C#,add comments to one submission,raw,False,False,True,0.793857216835022,1.0,0.20614278316497803,n/a (informational),INFO,False,,csharp.cs,csharp.cs,"public static class Stats
+TC14,C#,add comments to one submission,raw,False,False,True,0.7938562631607056,1.0,0.20614373683929443,n/a (informational),INFO,False,,csharp.cs,csharp.cs,"public static class Stats
 {
     // Average of the positive values in an array.
     public static double AveragePositive(int[] values)
@@ -3707,7 +3707,7 @@ double averagePositive(const std::vector<int> &values) {
     return total / count;
 }
 "
-TC14,C++,add comments to one submission,raw,False,False,True,0.828235387802124,1.0,0.17176461219787598,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
+TC14,C++,add comments to one submission,raw,False,False,True,0.828235387802124,0.9999998211860657,0.17176443338394165,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
 
 // Average of the positive values in a vector.
 double averagePositive(const std::vector<int> &values) {
@@ -3791,7 +3791,7 @@ func AveragePositive(values []int) float64 {
 	return float64(total) / float64(count)
 }
 "
-TC14,Go,add comments to one submission,raw,False,False,True,0.858306348323822,1.0,0.14169365167617798,n/a (informational),INFO,False,,go.go,go.go,"package stats
+TC14,Go,add comments to one submission,raw,False,False,True,0.8583067059516907,1.0,0.14169329404830933,n/a (informational),INFO,False,,go.go,go.go,"package stats
 
 // AveragePositive returns the average of the positive values.
 func AveragePositive(values []int) float64 {
@@ -3875,7 +3875,7 @@ public class Stats {
     }
 }
 "
-TC14,Java,add comments to one submission,raw,False,False,True,0.8360617756843567,1.0,0.1639382243156433,n/a (informational),INFO,False,,java.java,java.java,"public class Stats {
+TC14,Java,add comments to one submission,raw,False,False,True,0.8360618352890015,0.9999999403953552,0.16393810510635376,n/a (informational),INFO,False,,java.java,java.java,"public class Stats {
     // Average of the positive values in an array.
     public static double averagePositive(int[] values) {
         double total = 0;
@@ -3917,7 +3917,7 @@ public class Stats {
     }
 }
 "
-TC14,JavaScript,add comments to one submission,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+TC14,JavaScript,add comments to one submission,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
 function averagePositive(values) {
     let total = 0;
     let count = 0;
@@ -3955,7 +3955,7 @@ function averagePositive(values) {
     return total / count;
 }
 "
-TC14,JavaScript,add comments to one submission,raw,False,False,True,0.7903352975845337,0.9999998807907104,0.20966458320617676,n/a (informational),INFO,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+TC14,JavaScript,add comments to one submission,raw,False,False,True,0.7903352379798889,1.0,0.20966476202011108,n/a (informational),INFO,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
 function averagePositive(values) {
     let total = 0;
     let count = 0;
@@ -3993,7 +3993,7 @@ function averagePositive(values) {
     return total / count;
 }
 "
-TC14,PHP,add comments to one submission,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,php.php,php.php,"<?php
+TC14,PHP,add comments to one submission,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,php.php,php.php,"<?php
 // Average of the positive values in an array.
 function averagePositive(array $values) {
     $total = 0;
@@ -4033,7 +4033,7 @@ function averagePositive(array $values) {
     return $total / $count;
 }
 "
-TC14,PHP,add comments to one submission,raw,False,False,True,0.7631741762161255,1.0,0.2368258237838745,n/a (informational),INFO,False,,php.php,php.php,"<?php
+TC14,PHP,add comments to one submission,raw,False,False,True,0.7631737589836121,1.0,0.23682624101638794,n/a (informational),INFO,False,,php.php,php.php,"<?php
 // Average of the positive values in an array.
 function averagePositive(array $values) {
     $total = 0;
@@ -4103,7 +4103,7 @@ def average_positive(values):
         return 0
     return total / count
 "
-TC14,Python,add comments to one submission,raw,False,False,True,0.7492319345474243,1.0,0.2507680654525757,n/a (informational),INFO,False,,python.py,python.py,"# Average of the positive values in a list.
+TC14,Python,add comments to one submission,raw,False,False,True,0.7492314577102661,0.9999998807907104,0.25076842308044434,n/a (informational),INFO,False,,python.py,python.py,"# Average of the positive values in a list.
 def average_positive(values):
     total = 0
     count = 0
@@ -4133,7 +4133,7 @@ def average_positive(values):
         return 0
     return total / count
 "
-TC14,Ruby,add comments to one submission,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+TC14,Ruby,add comments to one submission,production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
 def average_positive(values)
   total = 0
   count = 0
@@ -4166,7 +4166,7 @@ def average_positive(values)
   total.to_f / count
 end
 "
-TC14,Ruby,add comments to one submission,raw,False,False,True,0.8078129887580872,1.0,0.19218701124191284,n/a (informational),INFO,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+TC14,Ruby,add comments to one submission,raw,False,False,True,0.8078130483627319,1.0,0.19218695163726807,n/a (informational),INFO,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
 def average_positive(values)
   total = 0
   count = 0
@@ -4199,7 +4199,7 @@ def average_positive(values)
   total.to_f / count
 end
 "
-TC15,C,change existing comments,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,c.c,c.c,"#include <stdio.h>
+TC15,C,change existing comments,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,c.c,c.c,"#include <stdio.h>
 
 // Average of the positive values in an array.
 double average_positive(const int *values, int n) {
@@ -4236,7 +4236,7 @@ double average_positive(const int *values, int n) {
     return total / count;
 }
 "
-TC15,C,change existing comments,raw,False,False,True,0.9186660647392273,0.9999998807907104,0.08133381605148315,n/a (informational),INFO,False,,c.c,c.c,"#include <stdio.h>
+TC15,C,change existing comments,raw,False,False,True,0.9186660051345825,1.0,0.08133399486541748,n/a (informational),INFO,False,,c.c,c.c,"#include <stdio.h>
 
 // Average of the positive values in an array.
 double average_positive(const int *values, int n) {
@@ -4320,7 +4320,7 @@ TC15,C#,change existing comments,production,True,True,True,1.0,1.0,0.0,identical
     }
 }
 "
-TC15,C#,change existing comments,raw,False,False,True,0.931606650352478,1.0,0.06839334964752197,n/a (informational),INFO,False,,csharp.cs,csharp.cs,"public static class Stats
+TC15,C#,change existing comments,raw,False,False,True,0.9316062927246094,1.0,0.06839370727539062,n/a (informational),INFO,False,,csharp.cs,csharp.cs,"public static class Stats
 {
     // Average of the positive values in an array.
     public static double AveragePositive(int[] values)
@@ -4404,7 +4404,7 @@ double averagePositive(const std::vector<int> &values) {
     return total / count;
 }
 "
-TC15,C++,change existing comments,raw,False,False,True,0.921324610710144,1.0,0.07867538928985596,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
+TC15,C++,change existing comments,raw,False,False,True,0.9213243126869202,0.9999998211860657,0.07867550849914551,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
 
 // Average of the positive values in a vector.
 double averagePositive(const std::vector<int> &values) {
@@ -4478,7 +4478,7 @@ func AveragePositive(values []int) float64 {
 	return float64(total) / float64(count)
 }
 "
-TC15,Go,change existing comments,raw,False,False,True,0.9293500185012817,1.0,0.07064998149871826,n/a (informational),INFO,False,,go.go,go.go,"package stats
+TC15,Go,change existing comments,raw,False,False,True,0.9293497800827026,1.0,0.07065021991729736,n/a (informational),INFO,False,,go.go,go.go,"package stats
 
 // AveragePositive returns the average of the positive values.
 func AveragePositive(values []int) float64 {
@@ -4552,7 +4552,7 @@ TC15,Java,change existing comments,production,True,True,True,1.0,1.0,0.0,identic
     }
 }
 "
-TC15,Java,change existing comments,raw,False,False,True,0.9291014671325684,1.0,0.07089853286743164,n/a (informational),INFO,False,,java.java,java.java,"public class Stats {
+TC15,Java,change existing comments,raw,False,False,True,0.9291014075279236,0.9999999403953552,0.07089853286743164,n/a (informational),INFO,False,,java.java,java.java,"public class Stats {
     // Average of the positive values in an array.
     public static double averagePositive(int[] values) {
         double total = 0;
@@ -4589,7 +4589,7 @@ TC15,Java,change existing comments,raw,False,False,True,0.9291014671325684,1.0,0
     }
 }
 "
-TC15,JavaScript,change existing comments,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+TC15,JavaScript,change existing comments,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
 function averagePositive(values) {
     let total = 0;
     let count = 0;
@@ -4622,7 +4622,7 @@ function averagePositive(values) {
     return total / count;
 }
 "
-TC15,JavaScript,change existing comments,raw,False,False,True,0.9063159227371216,0.9999998807907104,0.09368395805358887,n/a (informational),INFO,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+TC15,JavaScript,change existing comments,raw,False,False,True,0.9063159227371216,1.0,0.09368407726287842,n/a (informational),INFO,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
 function averagePositive(values) {
     let total = 0;
     let count = 0;
@@ -4655,7 +4655,7 @@ function averagePositive(values) {
     return total / count;
 }
 "
-TC15,PHP,change existing comments,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,php.php,php.php,"<?php
+TC15,PHP,change existing comments,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,php.php,php.php,"<?php
 // Average of the positive values in an array.
 function averagePositive(array $values) {
     $total = 0;
@@ -4690,7 +4690,7 @@ function averagePositive(array $values) {
     return $total / $count;
 }
 "
-TC15,PHP,change existing comments,raw,False,False,True,0.9177521467208862,1.0,0.08224785327911377,n/a (informational),INFO,False,,php.php,php.php,"<?php
+TC15,PHP,change existing comments,raw,False,False,True,0.9177519083023071,1.0,0.08224809169769287,n/a (informational),INFO,False,,php.php,php.php,"<?php
 // Average of the positive values in an array.
 function averagePositive(array $values) {
     $total = 0;
@@ -4750,7 +4750,7 @@ def average_positive(values):
         return 0
     return total / count
 "
-TC15,Python,change existing comments,raw,False,False,True,0.9051305055618286,1.0,0.09486949443817139,n/a (informational),INFO,False,,python.py,python.py,"# Average of the positive values in a list.
+TC15,Python,change existing comments,raw,False,False,True,0.9051305055618286,0.9999998807907104,0.09486937522888184,n/a (informational),INFO,False,,python.py,python.py,"# Average of the positive values in a list.
 def average_positive(values):
     total = 0
     count = 0
@@ -4775,7 +4775,7 @@ def average_positive(values):
         return 0
     return total / count
 "
-TC15,Ruby,change existing comments,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+TC15,Ruby,change existing comments,production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
 def average_positive(values)
   total = 0
   count = 0
@@ -4833,7 +4833,7 @@ def average_positive(values)
   total.to_f / count
 end
 "
-TC16,C,remove comments from one submission,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,c.c,c.c,"#include <stdio.h>
+TC16,C,remove comments from one submission,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,c.c,c.c,"#include <stdio.h>
 
 // Average of the positive values in an array.
 double average_positive(const int *values, int n) {
@@ -4868,7 +4868,7 @@ double average_positive(const int *values, int n) {
     return total / count;
 }
 "
-TC16,C,remove comments from one submission,raw,False,False,True,0.9518849849700928,0.9999998807907104,0.048114895820617676,n/a (informational),INFO,False,,c.c,c.c,"#include <stdio.h>
+TC16,C,remove comments from one submission,raw,False,False,True,0.9518849849700928,1.0,0.04811501502990723,n/a (informational),INFO,False,,c.c,c.c,"#include <stdio.h>
 
 // Average of the positive values in an array.
 double average_positive(const int *values, int n) {
@@ -4948,7 +4948,7 @@ TC16,C#,remove comments from one submission,production,True,True,True,1.0,1.0,0.
     }
 }
 "
-TC16,C#,remove comments from one submission,raw,False,False,True,0.9374861121177673,1.0,0.06251388788223267,n/a (informational),INFO,True,,csharp.cs,csharp.cs,"public static class Stats
+TC16,C#,remove comments from one submission,raw,False,False,True,0.9374860525131226,1.0,0.06251394748687744,n/a (informational),INFO,True,,csharp.cs,csharp.cs,"public static class Stats
 {
     // Average of the positive values in an array.
     public static double AveragePositive(int[] values)
@@ -5028,7 +5028,7 @@ double averagePositive(const std::vector<int> &values) {
     return total / count;
 }
 "
-TC16,C++,remove comments from one submission,raw,False,False,True,0.9513444900512695,1.0,0.04865550994873047,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
+TC16,C++,remove comments from one submission,raw,False,False,True,0.95134437084198,0.9999998211860657,0.04865545034408569,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
 
 // Average of the positive values in a vector.
 double averagePositive(const std::vector<int> &values) {
@@ -5168,7 +5168,7 @@ TC16,Java,remove comments from one submission,production,True,True,True,1.0,1.0,
     }
 }
 "
-TC16,Java,remove comments from one submission,raw,False,False,True,0.9575555324554443,1.0,0.042444467544555664,n/a (informational),INFO,False,,java.java,java.java,"public class Stats {
+TC16,Java,remove comments from one submission,raw,False,False,True,0.95755535364151,0.9999999403953552,0.042444586753845215,n/a (informational),INFO,False,,java.java,java.java,"public class Stats {
     // Average of the positive values in an array.
     public static double averagePositive(int[] values) {
         double total = 0;
@@ -5203,7 +5203,7 @@ TC16,Java,remove comments from one submission,raw,False,False,True,0.95755553245
     }
 }
 "
-TC16,JavaScript,remove comments from one submission,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+TC16,JavaScript,remove comments from one submission,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
 function averagePositive(values) {
     let total = 0;
     let count = 0;
@@ -5234,7 +5234,7 @@ function averagePositive(values) {
     return total / count;
 }
 "
-TC16,JavaScript,remove comments from one submission,raw,False,False,True,0.9408026933670044,0.9999998807907104,0.059197187423706055,n/a (informational),INFO,True,,javascript.js,javascript.js,"// Average of the positive values in an array.
+TC16,JavaScript,remove comments from one submission,raw,False,False,True,0.9408026933670044,1.0,0.059197306632995605,n/a (informational),INFO,True,,javascript.js,javascript.js,"// Average of the positive values in an array.
 function averagePositive(values) {
     let total = 0;
     let count = 0;
@@ -5265,7 +5265,7 @@ function averagePositive(values) {
     return total / count;
 }
 "
-TC16,PHP,remove comments from one submission,production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,php.php,php.php,"<?php
+TC16,PHP,remove comments from one submission,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,php.php,php.php,"<?php
 // Average of the positive values in an array.
 function averagePositive(array $values) {
     $total = 0;
@@ -5298,7 +5298,7 @@ function averagePositive(array $values) {
     return $total / $count;
 }
 "
-TC16,PHP,remove comments from one submission,raw,False,False,True,0.9548856616020203,1.0,0.045114338397979736,n/a (informational),INFO,False,,php.php,php.php,"<?php
+TC16,PHP,remove comments from one submission,raw,False,False,True,0.9548854827880859,1.0,0.04511451721191406,n/a (informational),INFO,False,,php.php,php.php,"<?php
 // Average of the positive values in an array.
 function averagePositive(array $values) {
     $total = 0;
@@ -5354,7 +5354,7 @@ def average_positive(values):
         return 0
     return total / count
 "
-TC16,Python,remove comments from one submission,raw,False,False,True,0.9518266916275024,1.0,0.04817330837249756,n/a (informational),INFO,False,,python.py,python.py,"# Average of the positive values in a list.
+TC16,Python,remove comments from one submission,raw,False,False,True,0.9518266320228577,0.9999998807907104,0.04817324876785278,n/a (informational),INFO,False,,python.py,python.py,"# Average of the positive values in a list.
 def average_positive(values):
     total = 0
     count = 0
@@ -5377,7 +5377,7 @@ def average_positive(values):
         return 0
     return total / count
 "
-TC16,Ruby,remove comments from one submission,production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+TC16,Ruby,remove comments from one submission,production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
 def average_positive(values)
   total = 0
   count = 0
@@ -5431,7 +5431,7 @@ end
   total.to_f / count
 end
 "
-TC17,C,change line endings (LF -> CRLF),production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,c.c,c.c,"#include <stdio.h>
+TC17,C,change line endings (LF -> CRLF),production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,c.c,c.c,"#include <stdio.h>
 
 // Average of the positive values in an array.
 double average_positive(const int *values, int n) {
@@ -5468,7 +5468,7 @@ double average_positive(const int *values, int n) {
     return total / count;
 }
 "
-TC17,C,change line endings (LF -> CRLF),raw,False,False,True,0.9741625785827637,0.9999998807907104,0.025837302207946777,n/a (informational),INFO,False,,c.c,c.c,"#include <stdio.h>
+TC17,C,change line endings (LF -> CRLF),raw,False,False,True,0.9741628766059875,1.0,0.02583712339401245,n/a (informational),INFO,False,,c.c,c.c,"#include <stdio.h>
 
 // Average of the positive values in an array.
 double average_positive(const int *values, int n) {
@@ -5636,7 +5636,7 @@ double averagePositive(const std::vector<int> &values) {
     return total / count;
 }
 "
-TC17,C++,change line endings (LF -> CRLF),raw,False,False,True,0.9877122640609741,1.0,0.012287735939025879,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
+TC17,C++,change line endings (LF -> CRLF),raw,False,False,True,0.9877122044563293,0.9999998211860657,0.012287616729736328,n/a (informational),INFO,False,,cpp.cpp,cpp.cpp,"#include <vector>
 
 // Average of the positive values in a vector.
 double averagePositive(const std::vector<int> &values) {
@@ -5710,7 +5710,7 @@ func AveragePositive(values []int) float64 {
 	return float64(total) / float64(count)
 }
 "
-TC17,Go,change line endings (LF -> CRLF),raw,False,False,True,0.9826099872589111,1.0,0.017390012741088867,n/a (informational),INFO,False,,go.go,go.go,"package stats
+TC17,Go,change line endings (LF -> CRLF),raw,False,False,True,0.9826102256774902,1.0,0.017389774322509766,n/a (informational),INFO,False,,go.go,go.go,"package stats
 
 // AveragePositive returns the average of the positive values.
 func AveragePositive(values []int) float64 {
@@ -5784,7 +5784,7 @@ TC17,Java,change line endings (LF -> CRLF),production,True,True,True,1.0,1.0,0.0
     }
 }
 "
-TC17,Java,change line endings (LF -> CRLF),raw,False,False,True,0.9856382608413696,1.0,0.014361739158630371,n/a (informational),INFO,False,,java.java,java.java,"public class Stats {
+TC17,Java,change line endings (LF -> CRLF),raw,False,False,True,0.9856380224227905,0.9999999403953552,0.014361917972564697,n/a (informational),INFO,False,,java.java,java.java,"public class Stats {
     // Average of the positive values in an array.
     public static double averagePositive(int[] values) {
         double total = 0;
@@ -5821,7 +5821,7 @@ TC17,Java,change line endings (LF -> CRLF),raw,False,False,True,0.98563826084136
     }
 }
 "
-TC17,JavaScript,change line endings (LF -> CRLF),production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+TC17,JavaScript,change line endings (LF -> CRLF),production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
 function averagePositive(values) {
     let total = 0;
     let count = 0;
@@ -5854,7 +5854,7 @@ function averagePositive(values) {
     return total / count;
 }
 "
-TC17,JavaScript,change line endings (LF -> CRLF),raw,False,False,True,0.9852324724197388,0.9999998807907104,0.01476740837097168,n/a (informational),INFO,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
+TC17,JavaScript,change line endings (LF -> CRLF),raw,False,False,True,0.9852327108383179,1.0,0.014767289161682129,n/a (informational),INFO,False,,javascript.js,javascript.js,"// Average of the positive values in an array.
 function averagePositive(values) {
     let total = 0;
     let count = 0;
@@ -5887,7 +5887,7 @@ function averagePositive(values) {
     return total / count;
 }
 "
-TC17,PHP,change line endings (LF -> CRLF),production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,php.php,php.php,"<?php
+TC17,PHP,change line endings (LF -> CRLF),production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,php.php,php.php,"<?php
 // Average of the positive values in an array.
 function averagePositive(array $values) {
     $total = 0;
@@ -5922,7 +5922,7 @@ function averagePositive(array $values) {
     return $total / $count;
 }
 "
-TC17,PHP,change line endings (LF -> CRLF),raw,False,False,True,0.9943152666091919,1.0,0.0056847333908081055,n/a (informational),INFO,False,,php.php,php.php,"<?php
+TC17,PHP,change line endings (LF -> CRLF),raw,False,False,True,0.9943153262138367,1.0,0.00568467378616333,n/a (informational),INFO,False,,php.php,php.php,"<?php
 // Average of the positive values in an array.
 function averagePositive(array $values) {
     $total = 0;
@@ -5982,7 +5982,7 @@ def average_positive(values):
         return 0
     return total / count
 "
-TC17,Python,change line endings (LF -> CRLF),raw,False,False,True,0.976631224155426,1.0,0.023368775844573975,n/a (informational),INFO,False,,python.py,python.py,"# Average of the positive values in a list.
+TC17,Python,change line endings (LF -> CRLF),raw,False,False,True,0.9766311645507812,0.9999998807907104,0.0233687162399292,n/a (informational),INFO,False,,python.py,python.py,"# Average of the positive values in a list.
 def average_positive(values):
     total = 0
     count = 0
@@ -6007,7 +6007,7 @@ def average_positive(values):
         return 0
     return total / count
 "
-TC17,Ruby,change line endings (LF -> CRLF),production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
+TC17,Ruby,change line endings (LF -> CRLF),production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,ruby.rb,ruby.rb,"# Average of the positive values in a list.
 def average_positive(values)
   total = 0
   count = 0
@@ -6065,7 +6065,7 @@ def average_positive(values)
   total.to_f / count
 end
 "
-TC18,C,"change the filename, identical source",production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,c.c,submission_c_v2.c,"#include <stdio.h>
+TC18,C,"change the filename, identical source",production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,c.c,submission_c_v2.c,"#include <stdio.h>
 
 // Average of the positive values in an array.
 double average_positive(const int *values, int n) {
@@ -6102,7 +6102,7 @@ double average_positive(const int *values, int n) {
     return total / count;
 }
 "
-TC18,C,"change the filename, identical source",raw,False,False,True,0.9999998807907104,0.9999998807907104,0.0,n/a (informational),INFO,False,,c.c,submission_c_v2.c,"#include <stdio.h>
+TC18,C,"change the filename, identical source",raw,False,False,True,1.0,1.0,0.0,n/a (informational),INFO,False,,c.c,submission_c_v2.c,"#include <stdio.h>
 
 // Average of the positive values in an array.
 double average_positive(const int *values, int n) {
@@ -6270,7 +6270,7 @@ double averagePositive(const std::vector<int> &values) {
     return total / count;
 }
 "
-TC18,C++,"change the filename, identical source",raw,False,False,True,1.0,1.0,0.0,n/a (informational),INFO,False,,cpp.cpp,submission_cpp_v2.cpp,"#include <vector>
+TC18,C++,"change the filename, identical source",raw,False,False,True,0.9999998211860657,0.9999998211860657,0.0,n/a (informational),INFO,False,,cpp.cpp,submission_cpp_v2.cpp,"#include <vector>
 
 // Average of the positive values in a vector.
 double averagePositive(const std::vector<int> &values) {
@@ -6418,7 +6418,7 @@ TC18,Java,"change the filename, identical source",production,True,True,True,1.0,
     }
 }
 "
-TC18,Java,"change the filename, identical source",raw,False,False,True,0.9999999403953552,1.0,5.960464477539063e-08,n/a (informational),INFO,False,,java.java,submission_java_v2.java,"public class Stats {
+TC18,Java,"change the filename, identical source",raw,False,False,True,0.9999999403953552,0.9999999403953552,0.0,n/a (informational),INFO,False,,java.java,submission_java_v2.java,"public class Stats {
     // Average of the positive values in an array.
     public static double averagePositive(int[] values) {
         double total = 0;
@@ -6455,7 +6455,7 @@ TC18,Java,"change the filename, identical source",raw,False,False,True,0.9999999
     }
 }
 "
-TC18,JavaScript,"change the filename, identical source",production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,javascript.js,submission_javascript_v2.js,"// Average of the positive values in an array.
+TC18,JavaScript,"change the filename, identical source",production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,javascript.js,submission_javascript_v2.js,"// Average of the positive values in an array.
 function averagePositive(values) {
     let total = 0;
     let count = 0;
@@ -6488,7 +6488,7 @@ function averagePositive(values) {
     return total / count;
 }
 "
-TC18,JavaScript,"change the filename, identical source",raw,False,False,True,0.9999998807907104,0.9999998807907104,0.0,n/a (informational),INFO,False,,javascript.js,submission_javascript_v2.js,"// Average of the positive values in an array.
+TC18,JavaScript,"change the filename, identical source",raw,False,False,True,1.0,1.0,0.0,n/a (informational),INFO,False,,javascript.js,submission_javascript_v2.js,"// Average of the positive values in an array.
 function averagePositive(values) {
     let total = 0;
     let count = 0;
@@ -6521,7 +6521,7 @@ function averagePositive(values) {
     return total / count;
 }
 "
-TC18,PHP,"change the filename, identical source",production,True,True,True,0.9999998807907104,0.9999998807907104,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,php.php,submission_php_v2.php,"<?php
+TC18,PHP,"change the filename, identical source",production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,php.php,submission_php_v2.php,"<?php
 // Average of the positive values in an array.
 function averagePositive(array $values) {
     $total = 0;
@@ -6616,7 +6616,7 @@ def average_positive(values):
         return 0
     return total / count
 "
-TC18,Python,"change the filename, identical source",raw,False,False,True,1.0,1.0,0.0,n/a (informational),INFO,False,,python.py,submission_python_v2.py,"# Average of the positive values in a list.
+TC18,Python,"change the filename, identical source",raw,False,False,True,0.9999998807907104,0.9999998807907104,0.0,n/a (informational),INFO,False,,python.py,submission_python_v2.py,"# Average of the positive values in a list.
 def average_positive(values):
     total = 0
     count = 0
@@ -6641,7 +6641,7 @@ def average_positive(values):
         return 0
     return total / count
 "
-TC18,Ruby,"change the filename, identical source",production,True,True,True,1.0,1.0,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,ruby.rb,submission_ruby_v2.rb,"# Average of the positive values in a list.
+TC18,Ruby,"change the filename, identical source",production,True,True,True,0.9999999403953552,0.9999999403953552,0.0,identical normalised text and |difference| <= 1e-06,PASS,False,,ruby.rb,submission_ruby_v2.rb,"# Average of the positive values in a list.
 def average_positive(values)
   total = 0
   count = 0

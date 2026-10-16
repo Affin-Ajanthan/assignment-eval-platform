@@ -387,7 +387,7 @@ export default function InstructorPage() {
               </>
             )}
 
-            <ReportSimilarityPanel subjectId={subjectId} assignmentName={similarityAssignment} />
+            <ReportSimilarityPanel subjectId={subjectId} assignmentNames={assignmentNames} />
           </section>
 
           {/* Evaluate a whole assignment */}

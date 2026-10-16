@@ -8,7 +8,7 @@ Modes: **raw** = source as written; **cleaned** = comments stripped + whitespace
 
 | Language | raw | cleaned | production | production: renames fully erased |
 |---|---|---|---|---|
-| Go | 0.1987 | 0.2947 | 0.0003 | 14/15 |
+| Go | 0.1987 | 0.2947 | 0.0002 | 14/15 |
 | C# | 0.1965 | 0.3145 | 0.0011 | 12/15 |
 | Ruby | 0.1914 | 0.2842 | 0.0007 | 14/15 |
 | JavaScript | 0.1901 | 0.3062 | 0.0008 | 14/15 |
@@ -24,12 +24,12 @@ Modes: **raw** = source as written; **cleaned** = comments stripped + whitespace
 |---|---|---|---|---|---|
 | TC08 | identifiers -> unrelated but valid names | 0.5040 / 0.5766 | 0.7256 / 0.7629 | 0.0000 / 0.0000 | 9/9 |
 | TC06 | short identifiers -> descriptive names | 0.4471 / 0.5217 | 0.6510 / 0.7255 | 0.0014 / 0.0068 | 7/9 |
-| TC11 | rename all identifiers + modify comments | 0.3200 / 0.3621 | 0.4527 / 0.4842 | -0.0000 / 0.0000 | 9/9 |
+| TC11 | rename all identifiers + modify comments | 0.3200 / 0.3622 | 0.4527 / 0.4842 | 0.0000 / 0.0000 | 9/9 |
 | TC07 | descriptive identifiers -> short names | 0.2766 / 0.3945 | 0.4839 / 0.5534 | 0.0014 / 0.0068 | 7/9 |
-| TC10 | rename all identifiers + change formatting | 0.2674 / 0.2930 | 0.4570 / 0.4881 | 0.0095 / 0.0278 | 0/9 |
+| TC10 | rename all identifiers + change formatting | 0.2674 / 0.2930 | 0.4570 / 0.4881 | 0.0094 / 0.0278 | 0/9 |
 | TC15 | rename identifiers across the several functions | 0.1733 / 0.2443 | 0.3322 / 0.4043 | 0.0000 / 0.0000 | 9/9 |
 | TC14 | rename identifiers in the object-oriented part | 0.1502 / 0.2573 | 0.2421 / 0.3179 | 0.0000 / 0.0000 | 9/9 |
-| TC05 | rename functions and variables together | 0.1497 / 0.2007 | 0.2957 / 0.3701 | 0.0000 / 0.0000 | 9/9 |
+| TC05 | rename functions and variables together | 0.1497 / 0.2007 | 0.2957 / 0.3701 | -0.0000 / 0.0000 | 9/9 |
 | TC04 | rename local variables and parameters together | 0.1305 / 0.1641 | 0.2167 / 0.2649 | 0.0000 / 0.0000 | 9/9 |
 | TC01 | rename local variables | 0.1060 / 0.1720 | 0.1766 / 0.2155 | 0.0000 / 0.0000 | 9/9 |
 | TC02 | rename function parameters | 0.0607 / 0.0933 | 0.0715 / 0.1162 | 0.0000 / 0.0000 | 9/9 |
@@ -54,7 +54,7 @@ Each language's inventory program vs its unrelated averaging program.
 | C | 0.3039 | 0.1049 | 0.4500 | +0.1461 | +0.3451 | no |
 | C++ | 0.3202 | 0.2199 | 0.3631 | +0.0429 | +0.1432 | no |
 | C# | 0.3299 | 0.1127 | 0.3131 | -0.0168 | +0.2005 | no |
-| Go | 0.2075 | 0.0978 | 0.4517 | +0.2442 | +0.3539 | no |
+| Go | 0.2075 | 0.0978 | 0.4598 | +0.2524 | +0.3621 | no |
 | PHP | 0.3160 | 0.1482 | 0.5448 | +0.2287 | +0.3966 | no |
 | Ruby | 0.2789 | 0.1143 | 0.4234 | +0.1445 | +0.3091 | no |
 
@@ -124,7 +124,7 @@ Normalisation raised the unrelated-pair score (vs cleaned) in 9/9 languages: Pyt
 | TC07 | Go | descriptive identifiers -> short names | 0.7431 | 0.5934 | 1.0000 | 0.0000 | yes |  |
 | TC07 | Java | descriptive identifiers -> short names | 0.7850 | 0.6380 | 0.9932 | 0.0068 | no |  |
 | TC07 | JavaScript | descriptive identifiers -> short names | 0.7098 | 0.4623 | 1.0000 | 0.0000 | yes |  |
-| TC07 | PHP | descriptive identifiers -> short names | 0.7114 | 0.4552 | 1.0000 | 0.0000 | yes |  |
+| TC07 | PHP | descriptive identifiers -> short names | 0.7114 | 0.4552 | 1.0000 | -0.0000 | yes |  |
 | TC07 | Python | descriptive identifiers -> short names | 0.6848 | 0.4542 | 1.0000 | 0.0000 | yes |  |
 | TC07 | Ruby | descriptive identifiers -> short names | 0.6055 | 0.4466 | 1.0000 | 0.0000 | yes |  |
 | TC08 | C | identifiers -> unrelated but valid names | 0.5055 | 0.2625 | 1.0000 | 0.0000 | yes |  |
@@ -133,7 +133,7 @@ Normalisation raised the unrelated-pair score (vs cleaned) in 9/9 languages: Pyt
 | TC08 | Go | identifiers -> unrelated but valid names | 0.4419 | 0.2600 | 1.0000 | 0.0000 | yes |  |
 | TC08 | Java | identifiers -> unrelated but valid names | 0.5290 | 0.3534 | 1.0000 | 0.0000 | yes |  |
 | TC08 | JavaScript | identifiers -> unrelated but valid names | 0.4630 | 0.2371 | 1.0000 | 0.0000 | yes |  |
-| TC08 | PHP | identifiers -> unrelated but valid names | 0.4234 | 0.2489 | 1.0000 | 0.0000 | yes |  |
+| TC08 | PHP | identifiers -> unrelated but valid names | 0.4234 | 0.2489 | 1.0000 | -0.0000 | yes |  |
 | TC08 | Python | identifiers -> unrelated but valid names | 0.5102 | 0.2408 | 1.0000 | 0.0000 | yes |  |
 | TC08 | Ruby | identifiers -> unrelated but valid names | 0.5499 | 0.2896 | 1.0000 | 0.0000 | yes |  |
 | TC09 | C | rename class and method names | 0.9381 | 0.8794 | 1.0000 | 0.0000 | yes | C has no classes: struct + functions taking it |
@@ -148,14 +148,14 @@ Normalisation raised the unrelated-pair score (vs cleaned) in 9/9 languages: Pyt
 | TC10 | C | rename all identifiers + change formatting | 0.7698 | 0.5389 | 0.9917 | 0.0083 | no |  |
 | TC10 | C# | rename all identifiers + change formatting | 0.7117 | 0.5119 | 0.9958 | 0.0042 | no |  |
 | TC10 | C++ | rename all identifiers + change formatting | 0.7437 | 0.5476 | 0.9940 | 0.0060 | no |  |
-| TC10 | Go | rename all identifiers + change formatting | 0.7120 | 0.5494 | 0.9962 | 0.0038 | no |  |
+| TC10 | Go | rename all identifiers + change formatting | 0.7120 | 0.5494 | 0.9964 | 0.0036 | no |  |
 | TC10 | Java | rename all identifiers + change formatting | 0.7481 | 0.6071 | 0.9973 | 0.0027 | no |  |
 | TC10 | JavaScript | rename all identifiers + change formatting | 0.7070 | 0.5281 | 0.9879 | 0.0121 | no |  |
 | TC10 | PHP | rename all identifiers + change formatting | 0.7300 | 0.5198 | 0.9722 | 0.0278 | no |  |
 | TC10 | Python | rename all identifiers + change formatting | 0.7503 | 0.5310 | 0.9901 | 0.0099 | no |  |
 | TC10 | Ruby | rename all identifiers + change formatting | 0.7204 | 0.5528 | 0.9897 | 0.0103 | no |  |
 | TC11 | C | rename all identifiers + modify comments | 0.7165 | 0.5352 | 1.0000 | 0.0000 | yes |  |
-| TC11 | C# | rename all identifiers + modify comments | 0.6379 | 0.5158 | 1.0000 | -0.0000 | yes |  |
+| TC11 | C# | rename all identifiers + modify comments | 0.6378 | 0.5158 | 1.0000 | 0.0000 | yes |  |
 | TC11 | C++ | rename all identifiers + modify comments | 0.6808 | 0.5569 | 1.0000 | 0.0000 | yes |  |
 | TC11 | Go | rename all identifiers + modify comments | 0.6640 | 0.5479 | 1.0000 | 0.0000 | yes |  |
 | TC11 | Java | rename all identifiers + modify comments | 0.6577 | 0.6164 | 1.0000 | 0.0000 | yes |  |
@@ -163,7 +163,7 @@ Normalisation raised the unrelated-pair score (vs cleaned) in 9/9 languages: Pyt
 | TC11 | PHP | rename all identifiers + modify comments | 0.7256 | 0.5327 | 1.0000 | 0.0000 | yes |  |
 | TC11 | Python | rename all identifiers + modify comments | 0.6657 | 0.5270 | 1.0000 | 0.0000 | yes |  |
 | TC11 | Ruby | rename all identifiers + modify comments | 0.7063 | 0.5561 | 1.0000 | 0.0000 | yes |  |
-| TC12 | C# | rename identifiers in the nested function | 0.9736 | 0.9406 | 1.0000 | -0.0000 | yes |  |
+| TC12 | C# | rename identifiers in the nested function | 0.9736 | 0.9406 | 1.0000 | 0.0000 | yes |  |
 | TC12 | C++ | rename identifiers in the nested function | 0.9831 | 0.9524 | 1.0000 | 0.0000 | yes |  |
 | TC12 | Go | rename identifiers in the nested function | 0.9832 | 0.9338 | 1.0000 | 0.0000 | yes |  |
 | TC12 | Java | rename identifiers in the nested function | 0.9792 | 0.9449 | 1.0000 | 0.0000 | yes |  |
@@ -201,7 +201,7 @@ Normalisation raised the unrelated-pair score (vs cleaned) in 9/9 languages: Pyt
 | UNRELATED | C | unrelated program (control) | 0.3039 | 0.1049 | 0.4500 | 0.5500 | no | inventory program vs averaging program |
 | UNRELATED | C# | unrelated program (control) | 0.3299 | 0.1127 | 0.3131 | 0.6869 | no | inventory program vs averaging program |
 | UNRELATED | C++ | unrelated program (control) | 0.3202 | 0.2199 | 0.3631 | 0.6369 | no | inventory program vs averaging program |
-| UNRELATED | Go | unrelated program (control) | 0.2075 | 0.0978 | 0.4517 | 0.5483 | no | inventory program vs averaging program |
+| UNRELATED | Go | unrelated program (control) | 0.2075 | 0.0978 | 0.4598 | 0.5402 | no | inventory program vs averaging program |
 | UNRELATED | Java | unrelated program (control) | 0.3086 | 0.1725 | 0.3446 | 0.6554 | no | inventory program vs averaging program |
 | UNRELATED | JavaScript | unrelated program (control) | 0.3070 | 0.1561 | 0.3789 | 0.6211 | no | inventory program vs averaging program |
 | UNRELATED | PHP | unrelated program (control) | 0.3160 | 0.1482 | 0.5448 | 0.4552 | no | inventory program vs averaging program |

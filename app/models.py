@@ -152,6 +152,11 @@ class Assignment(Base):
     # extension as starter_code_filename only). Instructor-only.
     starter_code = Column(String, nullable=True)
     starter_code_filename = Column(String, nullable=True)
+    # Optional template PDF (question paper / report template). Only its
+    # extracted text is kept; that text is cut out of every student report
+    # before the report similarity check. Instructor-only.
+    report_template_text = Column(String, nullable=True)
+    report_template_filename = Column(String, nullable=True)
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)

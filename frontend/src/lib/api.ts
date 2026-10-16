@@ -76,6 +76,9 @@ export interface Assignment {
   /** Instructor starter code ("" = none); excluded from the token similarity check. */
   starter_code: string;
   starter_code_filename: string;
+  /** Template PDF cut out of student reports before the report similarity check. */
+  report_template_filename: string;
+  report_template_words: number;
 }
 
 /** A student's own submission: status and final total only. */
@@ -197,6 +200,9 @@ export interface ReportSimilarityResult {
   compared: number;
   skipped: { submission_id: number; student: string; reason: string }[];
   common_fingerprints_excluded: number;
+  /** The assignment's template PDF, cut out of every report before comparing. */
+  template_filename: string | null;
+  template_words_removed: Record<string, number>;
   pairs: ReportSimilarityPair[];
   semantic: {
     status: "ok" | "unavailable" | "disabled";

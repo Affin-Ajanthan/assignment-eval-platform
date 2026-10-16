@@ -5,6 +5,7 @@ import { apiFetch, Assignment, AssignmentStatus, Rubric, SubmissionType } from "
 import { combineLocal, formatDateTime, splitLocal } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
+import ReportTemplateControl from "@/components/instructor/ReportTemplateControl";
 
 const STATUS_STYLE: Record<AssignmentStatus, { text: string; cls: string }> = {
   upcoming: { text: "Not yet open", cls: "bg-gray-100 text-gray-700" },
@@ -397,6 +398,10 @@ export default function AssignmentsSection({
                   {a.starter_code
                     ? `${a.starter_code_filename} (${a.starter_code.split("\n").length} lines, excluded from similarity)`
                     : "None"}
+                </dd>
+                <dt className="font-semibold">Report template (PDF)</dt>
+                <dd>
+                  <ReportTemplateControl assignment={a} onChanged={onChanged} />
                 </dd>
                 <dt className="font-semibold">Submissions</dt>
                 <dd>

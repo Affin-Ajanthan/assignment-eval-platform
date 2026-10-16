@@ -15,15 +15,23 @@ const pct = (x: number) => `${(x * 100).toFixed(0)}%`;
  */
 export default function ReportSimilarityPanel({
   subjectId,
-  assignmentName,
+  assignmentNames,
 }: {
   subjectId: number | null;
-  assignmentName: string;
+  assignmentNames: string[];
 }) {
+  // Its own choice of assignment, independent of the code similarity check above.
+  const [assignmentName, setAssignmentName] = useState("");
   const [result, setResult] = useState<ReportSimilarityResult | null>(null);
   const [msg, setMsg] = useState<MessageState>(null);
   const [running, setRunning] = useState(false);
   const [openPair, setOpenPair] = useState<string | null>(null);
+
+  // Keep the selection valid as the subject's assignments change.
+  useEffect(() => {
+    if (assignmentNames.length && !assignmentNames.includes(assignmentName)) setAssignmentName(assignmentNames[0]);
+    if (!assignmentNames.length) setAssignmentName("");
+  }, [assignmentNames, assignmentName]);
 
   // A result belongs to one assignment: clear it when the selection changes.
   useEffect(() => {
@@ -76,11 +84,30 @@ export default function ReportSimilarityPanel({
       <p className="mt-1 text-sm text-gray-600">
         Compares the PDF reports of the selected assignment: identical passages and similar meaning. Page numbers,
         running headers/footers and text that appears in most reports (such as the assignment brief) are ignored.
+        Upload the assignment&apos;s question paper or report template as a &ldquo;Report template (PDF)&rdquo; on
+        the assignment, and its text is cut out of every report before comparing.
       </p>
+      <label className="mt-3 block text-sm font-semibold" htmlFor="report-similarity-assignment">
+        Assignment
+      </label>
+      <select
+        id="report-similarity-assignment"
+        value={assignmentName}
+        disabled={running}
+        onChange={(e) => setAssignmentName(e.target.value)}
+        className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+      >
+        {assignmentNames.length === 0 && <option value="">No assignments with submissions yet</option>}
+        {assignmentNames.map((a) => (
+          <option key={a} value={a}>
+            {a}
+          </option>
+        ))}
+      </select>
       <button
         type="button"
         onClick={run}
-        disabled={running}
+        disabled={running || !assignmentName}
         className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
       >
         {running ? "Comparing reports..." : "Check report similarity"}
@@ -208,6 +235,10 @@ export default function ReportSimilarityPanel({
             reports&rdquo;, never an automatic finding of misconduct, and report results never change marks.
           </p>
           <p className="mt-1 text-xs text-gray-500">
+            {result.template_filename &&
+              `Template "${result.template_filename}" cut out of reports (${Object.values(
+                result.template_words_removed
+              ).reduce((sum, n) => sum + n, 0)} words in total) · `}
             {result.common_fingerprints_excluded > 0 &&
               `${result.common_fingerprints_excluded} fingerprint(s) shared by most reports ignored · `}
             {result.semantic.status === "ok" && `Semantic model: ${result.semantic.model}`}
