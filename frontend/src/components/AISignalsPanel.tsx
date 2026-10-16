@@ -53,7 +53,12 @@ export default function AISignalsPanel({ result }: { result: AutoEvaluation }) {
         proof: they misfire on formal or non-native English writing and on tidy code, and they never change the
         suggested score.
       </p>
-      {!signals ? (
+      {signals?.disabled ? (
+        <p className="mt-2 text-sm text-gray-600">
+          AI-content detection was turned off for this evaluation. Turn it on and run the auto-evaluation again to see
+          these estimates.
+        </p>
+      ) : !signals ? (
         <p className="mt-2 text-sm text-gray-600">
           Not available for this evaluation (it predates this section) — run the auto-evaluation again.
         </p>

@@ -197,3 +197,49 @@ def test_skipped_rows_show_stored_marks_and_flags(monkeypatch):
         assert item["recommended_max"] == prev["recommended_max"]
         assert item["grader"] == prev["grader"]
         assert item["ai_flagged"] is True and item["similarity_flagged"] is False
+
+
+# ---- AI-content detection switch ---------------------------------------
+
+def test_ai_detection_switch_off_skips_detectors_and_flags(monkeypatch):
+    _high_ai_signal(monkeypatch)
+    subject, tok, rubric, assignment, subs = _setup(2, assignment="AI Switch")
+
+    def must_not_run(*args, **kwargs):
+        raise AssertionError("AI detection ran although it was switched off")
+
+    monkeypatch.setattr(main, "_score_ai_code", must_not_run)
+    off = _batch(subject, assignment, tok, rubric["id"], use_ai_detection=False).json()
+    assert off["evaluated"] == 2
+    assert {item["ai_flagged"] for item in off["results"]} == {False}
+    assert all(item["recommended_score"] is not None for item in off["results"])
+
+    stored = client.get(f"/submissions/{subs[0]['id']}/auto-evaluate", headers=auth_headers(tok)).json()
+    assert stored["ai_signals"] == {"report": None, "code": None, "disabled": True}
+
+    single = client.post(f"/submissions/{subs[1]['id']}/auto-evaluate",
+                         json={"rubric_id": rubric["id"], "use_ai_detection": False},
+                         headers=auth_headers(tok))
+    assert single.status_code == 200, single.text
+    assert single.json()["ai_signals"]["disabled"] is True
+
+
+def test_ai_detection_on_by_default(monkeypatch):
+    _high_ai_signal(monkeypatch)
+    subject, tok, rubric, assignment, subs = _setup(1, assignment="AI Default")
+    body = _batch(subject, assignment, tok, rubric["id"]).json()
+    assert body["results"][0]["ai_flagged"] is True
+    stored = client.get(f"/submissions/{subs[0]['id']}/auto-evaluate", headers=auth_headers(tok)).json()
+    assert stored["ai_signals"]["disabled"] is False
+    assert stored["ai_signals"]["code"]["signal"] == "high"
+
+
+def test_report_ai_text_signal_off_never_loads_the_detector(monkeypatch):
+    from app.evaluator import ai_text_detection, report_analysis
+
+    def must_not_load():
+        raise AssertionError("AI-text model loaded although detection was off")
+
+    monkeypatch.setattr(ai_text_detection, "get_ai_text_detector", must_not_load)
+    result = report_analysis.ai_text_signal("Some report text. " * 50, enabled=False)
+    assert (result.signal, result.method, result.score) == ("off", "off", 0)

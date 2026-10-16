@@ -30,6 +30,7 @@ http://localhost:8000) and sign in.
 from __future__ import annotations
 
 import re
+import tempfile
 import shutil
 import uuid
 import zipfile
@@ -91,6 +92,7 @@ from .models import (
 from .similarity.ai_heuristics import score_source as _score_ai_code
 from .similarity.core import Fingerprint, compare_all, fingerprint_source, subtract_starter
 from .similarity.python_cleanup import names_in
+from .notebook import NOTEBOOK_SUFFIX, read_code
 from .similarity import report_similarity as _report_sim
 from . import exports as _exports
 from .similarity.semantic import (
@@ -104,6 +106,9 @@ from .similarity.semantic import (
 # Source files the similarity check and code analysis read. Includes C# and
 # C/C++ headers, which unixcoder-base-nine was trained on.
 _CODE_EXTENSIONS = {".py", ".java", ".js", ".c", ".cpp",".cc",".cxx",".hh",".hxx", ".h", ".hpp", ".cs", ".go", ".rb",".php"}
+# Files the code checks read: source files plus Jupyter notebooks, whose code
+# cells are read as Python (app/notebook.py).
+_ANALYZED_EXTENSIONS = _CODE_EXTENSIONS | {NOTEBOOK_SUFFIX}
 
 Base.metadata.create_all(bind=engine)
 add_missing_columns("similarity_flags", {
@@ -115,6 +120,7 @@ add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON", "ai_
 add_missing_columns("submissions", {"assignment_id": "INTEGER REFERENCES assignments(id)"})
 add_missing_columns("assignments", {"submission_types": "JSON"})
 add_missing_columns("assignments", {"starter_code": "TEXT", "starter_code_filename": "VARCHAR"})
+add_missing_columns("assignments", {"report_template_text": "TEXT", "report_template_filename": "VARCHAR"})
 
 
 # --------------------------------------------------------------------------
@@ -288,6 +294,9 @@ class AssignmentOut(BaseModel):
     updated_at: Optional[UTCDateTime]
     starter_code: str = ""
     starter_code_filename: str = ""
+    # Template PDF cut out of student reports before the report similarity check.
+    report_template_filename: str = ""
+    report_template_words: int = 0
 
 
 class MySubmissionOut(BaseModel):
@@ -367,6 +376,9 @@ class AutoEvaluateIn(BaseModel):
     # False: grade with the built-in heuristic grader instead of the rubric
     # model (local Ollama). Everything else in the pipeline runs.
     use_rubric_model: bool = True
+    # False: skip AI-content detection (the report's AI-text model and the
+    # code heuristic). Cross-modal consistency and everything else still run.
+    use_ai_detection: bool = True
 
 
 class ConsistencyComponentOut(BaseModel):
@@ -418,6 +430,8 @@ class AISignalsOut(BaseModel):
 
     report: Optional[AISignalOut] = None
     code: Optional[AISignalOut] = None
+    # True when the instructor switched AI-content detection off for this run.
+    disabled: bool = False
 
 
 class AutoEvaluationOut(BaseModel):
@@ -531,6 +545,9 @@ class ReportSimilarityOut(BaseModel):
     # Fingerprints found in most reports (the assignment brief, a template)
     # that were left out of the comparison.
     common_fingerprints_excluded: int
+    # The assignment's template PDF that was cut out of every report first.
+    template_filename: Optional[str] = None
+    template_words_removed: dict[str, int] = {}  # submission id -> words cut
     pairs: list[ReportSimilarityPairOut]
     semantic: ReportSemanticSummaryOut
     # Thresholds are uncalibrated: results are exploratory review signals.
@@ -542,8 +559,9 @@ class BatchAutoEvaluateIn(BaseModel):
     # Resume after an interruption: leave submissions that already have an
     # evaluation against this rubric untouched.
     skip_already_evaluated: bool = False
-    # See AutoEvaluateIn.use_rubric_model.
+    # See AutoEvaluateIn.use_rubric_model / use_ai_detection.
     use_rubric_model: bool = True
+    use_ai_detection: bool = True
 
 
 def _ai_flagged(code_ai_flagged: bool, report_ai_signal: Optional[str]) -> bool:
@@ -1155,6 +1173,8 @@ def _assignment_out(db: Session, a: Assignment) -> AssignmentOut:
         submission_count=len(subs), graded_count=sum(1 for s in subs if s.status == "graded"),
         created_at=_as_utc(a.created_at), updated_at=_as_utc(a.updated_at),
         starter_code=a.starter_code or "", starter_code_filename=a.starter_code_filename or "",
+        report_template_filename=a.report_template_filename or "",
+        report_template_words=len((a.report_template_text or "").split()),
     )
 
 
@@ -1321,6 +1341,56 @@ def update_assignment(
     return _assignment_out(db, assignment)
 
 
+_TEMPLATE_MIN_WORDS = 20
+
+
+@app.post("/assignments/{assignment_id}/report-template", response_model=AssignmentOut)
+def upload_report_template(
+    assignment_id: int, file: UploadFile = File(...),
+    instructor: User = Depends(require_instructor), db: Session = Depends(get_db),
+):
+    """Attach the assignment's template PDF (question paper / report
+    template). Its text is cut out of every student report before the
+    report similarity check, so pasted questions can't make reports look
+    copied. Replaces an earlier template; only the extracted text is kept."""
+    assignment = _instructor_assignment(db, instructor, assignment_id)
+    filename = Path(file.filename or "").name
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(400, "The template must be a PDF file")
+    data = file.file.read(report_max_bytes() + 1)
+    if len(data) > report_max_bytes():
+        raise HTTPException(400, f"The template PDF is larger than {report_max_bytes() // (1024 * 1024)} MB")
+    if not data.startswith(b"%PDF"):
+        raise HTTPException(400, "That file is not a valid PDF")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "template.pdf"
+        path.write_bytes(data)
+        try:
+            text = _report_sim.clean_report_pages(_report_sim.extract_pdf_pages(path))
+        except Exception as exc:
+            raise HTTPException(400, f"Could not read the PDF ({exc.__class__.__name__})") from None
+    if len(text.split()) < _TEMPLATE_MIN_WORDS:
+        raise HTTPException(400, "The PDF has almost no text to read (a scanned PDF has no text layer)")
+    assignment.report_template_text = text
+    assignment.report_template_filename = filename[:200]
+    db.commit()
+    db.refresh(assignment)
+    return _assignment_out(db, assignment)
+
+
+@app.delete("/assignments/{assignment_id}/report-template", response_model=AssignmentOut)
+def delete_report_template(
+    assignment_id: int, instructor: User = Depends(require_instructor), db: Session = Depends(get_db),
+):
+    """Remove the assignment's template PDF."""
+    assignment = _instructor_assignment(db, instructor, assignment_id)
+    assignment.report_template_text = None
+    assignment.report_template_filename = None
+    db.commit()
+    db.refresh(assignment)
+    return _assignment_out(db, assignment)
+
+
 @app.delete("/assignments/{assignment_id}")
 def delete_assignment(assignment_id: int, instructor: User = Depends(require_instructor), db: Session = Depends(get_db)):
     """Removes the assignment (students stop seeing it). Its submissions and
@@ -1339,7 +1409,14 @@ def delete_assignment(assignment_id: int, instructor: User = Depends(require_ins
 # Uploads are untrusted input: every file is checked for type and size,
 # saved under a sanitized name inside its own uploads/<uuid>/ folder, and
 # never executed. A rejected upload removes everything already written.
-_UPLOAD_CODE_EXTENSIONS = _CODE_EXTENSIONS | {".zip", ".h", ".hpp", ".cs", ".jsx", ".tsx", ".kt", ".swift", ".php", ".rs"}
+# Only languages the code checks actually read: a file type that is stored but
+# never compared (TypeScript, Kotlin, Swift, Rust, JSX, ...) would leave a
+# submission silently unchecked, so it is refused at upload instead.
+_UPLOAD_CODE_EXTENSIONS = _ANALYZED_EXTENSIONS | {".zip"}
+_ACCEPTED_LANGUAGES_TEXT = (
+    "Python (.py, .ipynb), Java (.java), JavaScript (.js), C (.c, .h), "
+    "C++ (.cpp, .cc, .cxx, .h, .hpp, .hh, .hxx), C# (.cs), Go (.go), Ruby (.rb), PHP (.php)"
+)
 _VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"}
 _CODE_MAX_BYTES = 50 * 1024 * 1024
 _ZIP_MAX_UNCOMPRESSED_BYTES = 200 * 1024 * 1024
@@ -1387,8 +1464,13 @@ def _save_code_upload(file: UploadFile, submission_uuid: str) -> str:
     (which walks a directory) works the same whether the student
     uploaded one file or a whole project."""
     filename = _safe_filename(file.filename)
-    if Path(filename).suffix.lower() not in _UPLOAD_CODE_EXTENSIONS:
-        raise _UploadRejected(400, "Code must be a .zip file or a single source-code file.")
+    suffix = Path(filename).suffix.lower()
+    if suffix not in _UPLOAD_CODE_EXTENSIONS:
+        raise _UploadRejected(
+            400,
+            f"'{filename}' can't be checked: {suffix or 'files without an extension'} is not a supported "
+            f"language. Upload a .zip or a single file in one of: {_ACCEPTED_LANGUAGES_TEXT}.",
+        )
     code_dir = _submission_dir(submission_uuid) / "code"
     code_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1412,6 +1494,14 @@ def _save_code_upload(file: UploadFile, submission_uuid: str) -> str:
             raise _UploadRejected(400, "The code archive is not a valid .zip file.")
         finally:
             zip_path.unlink(missing_ok=True)
+        # Other files (README, data, images) may come along, but at least one
+        # file must be code the checks can read.
+        if not any(p.is_file() and p.suffix.lower() in _ANALYZED_EXTENSIONS for p in code_dir.rglob("*")):
+            raise _UploadRejected(
+                400,
+                f"'{filename}' contains no code in a supported language, so it can't be checked. "
+                f"Include your source files in one of: {_ACCEPTED_LANGUAGES_TEXT}.",
+            )
     else:
         _write_limited(file, code_dir / filename, _CODE_MAX_BYTES, "code file")
 
@@ -1880,17 +1970,18 @@ def check_similarity(
         normalized_files: list[str] = []
         files = []
         if code_dir.is_dir():
-            files = [(path, path.read_text(encoding="utf-8", errors="ignore")) for path in sorted(code_dir.rglob("*"))
-                     if path.is_file() and path.suffix.lower() in _CODE_EXTENSIONS]
-        # Names each Python file uses, so a module-level constant read by
+            # (name, source) per file; a notebook is its code cells as "<name>.ipynb.py".
+            files = [(path, *read_code(path)) for path in sorted(code_dir.rglob("*"))
+                     if path.is_file() and path.suffix.lower() in _ANALYZED_EXTENSIONS]
+        # Names each code file uses, so a top-level constant read by
         # another file isn't removed as "unused" before the semantic check.
-        py_names = {path: names_in(source) for path, source in files if path.suffix.lower() == ".py"}
-        for path, source in files:
-            fp = subtract_starter(fingerprint_source(str(submission.id), path.name, source), starter_fp)
+        py_names = {path: names_in(source) for path, _, source in files}
+        for path, name, source in files:
+            fp = subtract_starter(fingerprint_source(str(submission.id), name, source), starter_fp)
             merged.hashes |= fp.hashes
             merged.token_count += fp.token_count
             external = set().union(*(names for other, names in py_names.items() if other != path))
-            normalized_files.append(normalize_code(source, path.name, external))
+            normalized_files.append(normalize_code(source, name, external))
         fingerprints[str(submission.id)] = merged
         semantic_sources[str(submission.id)] = "\n".join(f for f in normalized_files if f)
 
@@ -2057,13 +2148,21 @@ def check_report_similarity(
     if len(texts) < 2:
         raise HTTPException(400, "Need at least 2 readable PDF reports for this assignment to compare")
 
-    result = _report_sim.compare_reports(texts, get_consistency_service())
+    assignment = next(
+        (a for a in db.query(Assignment).filter(Assignment.subject_id == subject_id).all()
+         if _norm_name(a.name) == _norm_name(assignment_name)),
+        None,
+    )
+    template = assignment.report_template_text if assignment else None
+    result = _report_sim.compare_reports(texts, get_consistency_service(), template_text=template)
     return ReportSimilarityOut(
         subject_id=subject_id,
         assignment_name=assignment_name,
         compared=len(texts),
         skipped=skipped,
         common_fingerprints_excluded=result.common_fingerprints_excluded,
+        template_filename=(assignment.report_template_filename if template else None),
+        template_words_removed=result.template_words_removed,
         pairs=[
             ReportSimilarityPairOut(
                 submission_a_id=int(p.submission_a), submission_b_id=int(p.submission_b),
@@ -2104,11 +2203,13 @@ def auto_evaluate(
         raise HTTPException(403, "You are not assigned to this subject")
     if rubric.subject_id != submission.subject_id:
         raise HTTPException(400, "That rubric belongs to a different subject than this submission")
-    return _run_auto_evaluation(db, submission, rubric, use_rubric_model=payload.use_rubric_model)
+    return _run_auto_evaluation(db, submission, rubric, use_rubric_model=payload.use_rubric_model,
+                                use_ai_detection=payload.use_ai_detection)
 
 
 def _run_auto_evaluation(
-    db: Session, submission: Submission, rubric: Rubric, use_rubric_model: bool = True
+    db: Session, submission: Submission, rubric: Rubric, use_rubric_model: bool = True,
+    use_ai_detection: bool = True,
 ) -> AutoEvaluation:
     """Run the full pipeline for one submission against one rubric, store
     and return the AutoEvaluation. Shared by the single and batch endpoints;
@@ -2125,11 +2226,11 @@ def _run_auto_evaluation(
 
     code_ai_flagged = False
     code_ai = None
-    if code_dir:
+    if code_dir and use_ai_detection:
         combined_source = "\n".join(
-            p.read_text(encoding="utf-8", errors="ignore")
+            read_code(p)[1]
             for p in sorted(code_dir.rglob("*"))
-            if p.is_file() and p.suffix.lower() in _CODE_EXTENSIONS
+            if p.is_file() and p.suffix.lower() in _ANALYZED_EXTENSIONS
         )
         if combined_source.strip():
             code_ai = _score_ai_code(str(submission_id), combined_source)
@@ -2171,6 +2272,7 @@ def _run_auto_evaluation(
         code_ai_flagged=code_ai_flagged,
         report_extraction=report_extraction,
         grader=None if use_rubric_model else HeuristicRubricGrader(),
+        ai_detection=use_ai_detection,
     )
 
     auto_eval = AutoEvaluation(
@@ -2187,7 +2289,7 @@ def _run_auto_evaluation(
         model=result.grading.model,
         similarity_flagged=result.similarity_flagged,
         code_ai_flagged=result.code_ai_flagged,
-        report_ai_signal=result.report_analysis.ai_text.signal if result.report_analysis else None,
+        report_ai_signal=result.report_analysis.ai_text.signal if result.report_analysis and use_ai_detection else None,
         consistency_score=result.consistency.consistency_score,
         cross_modal_consistency=(
             result.semantic_consistency.to_dict() if result.semantic_consistency else None
@@ -2195,7 +2297,7 @@ def _run_auto_evaluation(
         ai_signals={
             "report": _ai_signal_dict(result.report_analysis.ai_text) if result.report_analysis else None,
             "code": _ai_signal_dict(code_ai, method="style-heuristic") if code_ai else None,
-        },
+        } if use_ai_detection else {"report": None, "code": None, "disabled": True},
     )
     db.add(auto_eval)
     db.commit()
@@ -2282,7 +2384,8 @@ def auto_evaluate_assignment(
                 ai_flagged=_ai_flagged(prev.code_ai_flagged, prev.report_ai_signal)))
             continue
         try:
-            ev = _run_auto_evaluation(db, submission, rubric, use_rubric_model=payload.use_rubric_model)
+            ev = _run_auto_evaluation(db, submission, rubric, use_rubric_model=payload.use_rubric_model,
+                                      use_ai_detection=payload.use_ai_detection)
         except Exception as exc:  # one bad submission must not stop the batch
             db.rollback()
             results.append(BatchEvaluationItemOut(

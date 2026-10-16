@@ -32,6 +32,7 @@ only the grading model is used. A failure never breaks the analysis.
 from __future__ import annotations
 
 import base64
+import logging
 import os
 import statistics
 from abc import ABC, abstractmethod
@@ -39,6 +40,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .rubric_grading import OLLAMA_URL, _ollama_available, _ollama_post
+
+logger = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------------------
@@ -69,7 +72,26 @@ class NullTranscriber(Transcriber):
         return TranscriptionResult(text="", segments=[], backend="null")
 
 
+def _register_nvidia_dlls() -> None:
+    """On Windows, let CTranslate2 find the CUDA libraries that pip installs
+    (nvidia-cublas-cu12, nvidia-cudnn-cu12) under site-packages/nvidia/*/bin;
+    Windows does not search there on its own. No-op elsewhere or when the
+    packages are not installed."""
+    if os.name != "nt":
+        return
+    try:
+        import nvidia
+    except ImportError:
+        return
+    for root in getattr(nvidia, "__path__", []):
+        for bin_dir in sorted(Path(root).glob("*/bin")):
+            if str(bin_dir) not in os.environ.get("PATH", ""):
+                os.environ["PATH"] = str(bin_dir) + os.pathsep + os.environ.get("PATH", "")
+                os.add_dll_directory(str(bin_dir))
+
+
 def _cuda_available() -> bool:
+    _register_nvidia_dlls()
     try:
         import ctranslate2
         return ctranslate2.get_cuda_device_count() > 0
@@ -108,9 +130,12 @@ class WhisperTranscriber(Transcriber):
         try:
             segments, _info = self._load().transcribe(str(video_path))
             segs = [{"start": s.start, "end": s.end, "text": s.text.strip()} for s in segments]
-        except Exception:
+        except Exception as exc:
             if self.device != "cuda":
                 raise
+            # Not silent: the CPU retry is several times slower, so say why.
+            logger.warning("Whisper on the GPU failed (%s: %s); transcribing on the CPU instead, which is much slower",
+                           exc.__class__.__name__, exc)
             self._fall_back_to_cpu()
             segments, _info = self._load().transcribe(str(video_path))
             segs = [{"start": s.start, "end": s.end, "text": s.text.strip()} for s in segments]
@@ -173,10 +198,14 @@ def analyze_frames(video_path: Path, sample_fps: float = 1.0) -> FrameAnalysis:
     sampled = 0
 
     while True:
-        ret, frame = cap.read()
-        if not ret:
+        # grab() advances without converting the frame; only the sampled
+        # frames (one per 1/sample_fps seconds) are retrieved.
+        if not cap.grab():
             break
         if frame_idx % frame_interval == 0:
+            ret, frame = cap.retrieve()
+            if not ret:
+                break
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             gray = cv2.resize(gray, (160, 90))
             if prev_gray is not None:
