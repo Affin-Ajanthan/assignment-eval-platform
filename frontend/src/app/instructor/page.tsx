@@ -18,7 +18,11 @@ import AssignmentsSection from "@/components/instructor/AssignmentsSection";
 import BatchEvaluateSection from "@/components/instructor/BatchEvaluateSection";
 import DownloadExcelButton from "@/components/instructor/DownloadExcelButton";
 import ReportSimilarityPanel from "@/components/instructor/ReportSimilarityPanel";
-import RubricModelToggle, { useRubricModelSetting } from "@/components/instructor/RubricModelToggle";
+import RubricModelToggle, {
+  AiDetectionToggle,
+  useAiDetectionSetting,
+  useRubricModelSetting,
+} from "@/components/instructor/RubricModelToggle";
 import RubricsSection from "@/components/instructor/RubricsSection";
 import { formatDateTime, formatMark } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
@@ -44,11 +48,15 @@ export default function InstructorPage() {
   const [autoevalMsg, setAutoevalMsg] = useState<MessageState>(null);
   const [autoevalRunning, setAutoevalRunning] = useState(false);
   const [useRubricModel, setUseRubricModel] = useRubricModelSetting();
+  const [useAiDetection, setUseAiDetection] = useAiDetectionSetting();
 
   // Grading panel
   const [gradingSubmissionId, setGradingSubmissionId] = useState<number | null>(null);
   // Which submission's uploaded files are expanded in the submissions table.
   const [filesOpenFor, setFilesOpenFor] = useState<number | null>(null);
+  // Which assignment's submissions the table shows: "all", "a:<assignment id>",
+  // or "n:<name>" for submissions whose assignment was deleted (kept as records).
+  const [submissionFilter, setSubmissionFilter] = useState("all");
   const [gradingRubricId, setGradingRubricId] = useState<number | null>(null);
   const [criterionScores, setCriterionScores] = useState<Record<string, string>>({});
   const [gradingComments, setGradingComments] = useState("");
@@ -85,6 +93,38 @@ export default function InstructorPage() {
     loadAssignments(subjectId);
     loadSubmissions(subjectId);
   }, [subjectId, loadRubrics, loadAssignments, loadSubmissions]);
+
+  const submissionOptions = useMemo(() => {
+    const options = assignments.map((a) => ({ key: `a:${a.id}`, label: a.name, assignment: a as Assignment | null }));
+    const orphanNames = Array.from(
+      new Set(submissions.filter((sub) => sub.assignment_id === null).map((sub) => sub.assignment_name))
+    );
+    return [
+      ...options,
+      ...orphanNames.map((name) => ({ key: `n:${name}`, label: `${name} (deleted)`, assignment: null })),
+    ];
+  }, [assignments, submissions]);
+
+  // Back to "All assignments" when the subject changes or the chosen one disappears.
+  useEffect(() => {
+    if (submissionFilter !== "all" && !submissionOptions.some((o) => o.key === submissionFilter)) {
+      setSubmissionFilter("all");
+    }
+  }, [submissionOptions, submissionFilter]);
+  useEffect(() => {
+    setSubmissionFilter("all");
+  }, [subjectId]);
+
+  const selectedOption = submissionOptions.find((o) => o.key === submissionFilter) ?? null;
+  const shownSubmissions = useMemo(() => {
+    if (submissionFilter === "all") return submissions;
+    if (submissionFilter.startsWith("a:")) {
+      const id = Number(submissionFilter.slice(2));
+      return submissions.filter((sub) => sub.assignment_id === id);
+    }
+    const name = submissionFilter.slice(2);
+    return submissions.filter((sub) => sub.assignment_id === null && sub.assignment_name === name);
+  }, [submissions, submissionFilter]);
 
   const assignmentNames = useMemo(
     () => Array.from(new Set(submissions.map((s) => s.assignment_name))),
@@ -149,7 +189,7 @@ export default function InstructorPage() {
     try {
       const result = await apiFetch<AutoEvaluation>(`/submissions/${autoevalSubmissionId}/auto-evaluate`, {
         method: "POST",
-        json: { rubric_id: autoevalRubricId, use_rubric_model: useRubricModel },
+        json: { rubric_id: autoevalRubricId, use_rubric_model: useRubricModel, use_ai_detection: useAiDetection },
       });
       setAutoevalResult(result);
       setAutoevalMsg({ text: "Auto-evaluation complete.", kind: "success" });
@@ -403,7 +443,79 @@ export default function InstructorPage() {
           {/* Submissions */}
           <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-bold">Submissions for this subject</h2>
-            <table className="mt-2 w-full text-sm">
+            <label className="mt-3 block text-sm font-semibold" htmlFor="submissions-assignment">
+              Assignment
+            </label>
+            <select
+              id="submissions-assignment"
+              value={submissionFilter}
+              onChange={(e) => {
+                setSubmissionFilter(e.target.value);
+                setFilesOpenFor(null);
+              }}
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            >
+              <option value="all">All assignments ({submissions.length} submissions)</option>
+              {submissionOptions.map((o) => (
+                <option key={o.key} value={o.key}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+
+            {selectedOption?.assignment && (
+              <div className="mt-3 rounded-md border border-blue-100 bg-blue-50 px-4 py-3 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold">{selectedOption.assignment.name}</span>
+                  <span
+                    className={`rounded px-2 py-0.5 text-xs font-semibold ${
+                      selectedOption.assignment.status === "open"
+                        ? "bg-green-100 text-green-800"
+                        : selectedOption.assignment.status === "upcoming"
+                          ? "bg-yellow-100 text-yellow-800"
+                          : "bg-gray-200 text-gray-700"
+                    }`}
+                  >
+                    {selectedOption.assignment.status === "open"
+                      ? "Open"
+                      : selectedOption.assignment.status === "upcoming"
+                        ? "Upcoming"
+                        : "Closed"}
+                  </span>
+                </div>
+                <p className="mt-2 whitespace-pre-wrap text-gray-800">
+                  {selectedOption.assignment.description || (
+                    <span className="text-gray-500">No description was given for this assignment.</span>
+                  )}
+                </p>
+                <dl className="mt-2 grid gap-x-4 gap-y-0.5 text-xs text-gray-700 sm:grid-cols-[max-content_1fr]">
+                  <dt className="font-semibold">Open</dt>
+                  <dd>
+                    {formatDateTime(selectedOption.assignment.available_from)} to{" "}
+                    {formatDateTime(selectedOption.assignment.deadline)}
+                  </dd>
+                  <dt className="font-semibold">Rubric</dt>
+                  <dd>
+                    {selectedOption.assignment.rubric_name
+                      ? `${selectedOption.assignment.rubric_name} (${selectedOption.assignment.max_points} pts)`
+                      : "None selected"}
+                  </dd>
+                  <dt className="font-semibold">Accepts</dt>
+                  <dd className="capitalize">{selectedOption.assignment.submission_types.join(", ")}</dd>
+                  <dt className="font-semibold">Submissions</dt>
+                  <dd>
+                    {shownSubmissions.length} ({shownSubmissions.filter((sub) => sub.status === "graded").length} graded)
+                  </dd>
+                </dl>
+              </div>
+            )}
+            {selectedOption && !selectedOption.assignment && (
+              <p className="mt-3 rounded-md bg-gray-50 px-4 py-3 text-sm text-gray-600">
+                This assignment was deleted; its {shownSubmissions.length} submission(s) are kept as records.
+              </p>
+            )}
+
+            <table className="mt-3 w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-left">
                   <th className="border border-gray-200 px-3 py-1.5">Student</th>
@@ -416,7 +528,14 @@ export default function InstructorPage() {
                 </tr>
               </thead>
               <tbody>
-                {submissions.map((s) => (
+                {shownSubmissions.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="border border-gray-200 px-3 py-3 text-center text-gray-500">
+                      {submissionFilter === "all" ? "No submissions yet." : "No submissions for this assignment yet."}
+                    </td>
+                  </tr>
+                )}
+                {shownSubmissions.map((s) => (
                   <Fragment key={s.id}>
                   <tr>
                     <td className="border border-gray-200 px-3 py-1.5">
@@ -514,6 +633,7 @@ export default function InstructorPage() {
                 ))}
               </select>
               <RubricModelToggle on={useRubricModel} onChange={setUseRubricModel} disabled={autoevalRunning} />
+              <AiDetectionToggle on={useAiDetection} onChange={setUseAiDetection} disabled={autoevalRunning} />
               <div className="mt-3 space-x-2">
                 <button
                   type="button"

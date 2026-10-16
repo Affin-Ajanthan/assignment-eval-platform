@@ -22,6 +22,7 @@ from .code_analysis import FULL_SOURCE_LIMIT, CodeReport, analyze_directory, rea
 from .code_execution import ExecutionResult, SandboxUnavailable, run_python_files, sandbox_enabled
 from .cross_modal import ConsistencyResult, check_consistency
 from .document_extraction import ReportExtraction, extract_report_text
+from .language_mismatch import language_mismatches
 from .report_analysis import ReportAnalysis, analyze_report
 from .rubric_grading import (
     Criterion,
@@ -80,6 +81,7 @@ def evaluate_submission(
     code_ai_flagged: bool = False,
     consistency_service: SentenceEmbeddingService | None = None,
     report_extraction: ReportExtraction | None = None,
+    ai_detection: bool = True,
 ) -> AggregatedResult:
     """Run the full pipeline for one submission and return one
     aggregated result, ready to hand to an instructor dashboard.
@@ -92,7 +94,7 @@ def evaluate_submission(
     report_analysis, report_read_error = None, None
     if report_path:
         try:
-            report_analysis = analyze_report(report_path)
+            report_analysis = analyze_report(report_path, ai_detection=ai_detection)
         except Exception as exc:  # corrupted/unreadable document: evaluate everything else
             report_read_error = f"{exc.__class__.__name__}: {exc}"[:200]
     # Report text for the cross-modal check comes from MarkItDown (extracted
@@ -190,6 +192,12 @@ def evaluate_submission(
         review_flags.append(f"the report file could not be read for report analysis ({report_read_error})")
     if semantic_consistency and semantic_consistency.status == "review_recommended":
         review_flags.append(f"cross-modal semantic consistency: {semantic_consistency.reason}")
+    # The semantic check compares topics, so the same project in another
+    # language (a C# video with Go code) still reads as consistent.
+    report_text = (report_extraction.text if report_extraction and report_extraction.ok
+                   else report_analysis.content.text if report_analysis else None)
+    for mismatch in language_mismatches(code_dir, transcript=video_transcript, report_text=report_text):
+        review_flags.append(mismatch.flag)
     if code_reports and not report_path and not video_path:
         review_flags.append("only code was submitted -- report and video are still missing")
 

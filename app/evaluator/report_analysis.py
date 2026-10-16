@@ -224,19 +224,23 @@ class ReportAnalysis:
     image_check: ImageCheckResult
 
 
-def ai_text_signal(text: str) -> TextHeuristicScore:
+def ai_text_signal(text: str, enabled: bool = True) -> TextHeuristicScore:
     """Fast-DetectGPT (ai_text_detection.py) when its local model is
-    available; the style heuristic above otherwise."""
+    available; the style heuristic above otherwise. ``enabled=False`` (the
+    instructor's switch) skips detection entirely: signal "off"."""
+    if not enabled:
+        return TextHeuristicScore(score=0, signal="off", method="off",
+                                  reasons=["AI-content detection was turned off for this evaluation"])
     from .ai_text_detection import get_ai_text_detector, to_score
 
     result = get_ai_text_detector().detect(text)
     return to_score(result) if result is not None else score_text(text)
 
 
-def analyze_report(path: Path) -> ReportAnalysis:
+def analyze_report(path: Path, ai_detection: bool = True) -> ReportAnalysis:
     content = extract_report(path)
     return ReportAnalysis(
         content=content,
-        ai_text=ai_text_signal(content.text),
+        ai_text=ai_text_signal(content.text, enabled=ai_detection),
         image_check=check_images(content),
     )

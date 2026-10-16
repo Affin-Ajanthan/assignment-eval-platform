@@ -269,7 +269,8 @@ export interface AutoEvaluation {
   /** Null on evaluations stored before this feature existed. */
   cross_modal_consistency: CrossModalConsistency | null;
   /** Null on evaluations stored before AI-signal details were kept. */
-  ai_signals?: { report: AISignal | null; code: AISignal | null } | null;
+  /** `disabled`: the instructor switched AI-content detection off for this run. */
+  ai_signals?: { report: AISignal | null; code: AISignal | null; disabled?: boolean } | null;
   created_at: string;
 }
 

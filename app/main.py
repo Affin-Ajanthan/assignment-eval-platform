@@ -376,6 +376,9 @@ class AutoEvaluateIn(BaseModel):
     # False: grade with the built-in heuristic grader instead of the rubric
     # model (local Ollama). Everything else in the pipeline runs.
     use_rubric_model: bool = True
+    # False: skip AI-content detection (the report's AI-text model and the
+    # code heuristic). Cross-modal consistency and everything else still run.
+    use_ai_detection: bool = True
 
 
 class ConsistencyComponentOut(BaseModel):
@@ -427,6 +430,8 @@ class AISignalsOut(BaseModel):
 
     report: Optional[AISignalOut] = None
     code: Optional[AISignalOut] = None
+    # True when the instructor switched AI-content detection off for this run.
+    disabled: bool = False
 
 
 class AutoEvaluationOut(BaseModel):
@@ -554,8 +559,9 @@ class BatchAutoEvaluateIn(BaseModel):
     # Resume after an interruption: leave submissions that already have an
     # evaluation against this rubric untouched.
     skip_already_evaluated: bool = False
-    # See AutoEvaluateIn.use_rubric_model.
+    # See AutoEvaluateIn.use_rubric_model / use_ai_detection.
     use_rubric_model: bool = True
+    use_ai_detection: bool = True
 
 
 def _ai_flagged(code_ai_flagged: bool, report_ai_signal: Optional[str]) -> bool:
@@ -2197,11 +2203,13 @@ def auto_evaluate(
         raise HTTPException(403, "You are not assigned to this subject")
     if rubric.subject_id != submission.subject_id:
         raise HTTPException(400, "That rubric belongs to a different subject than this submission")
-    return _run_auto_evaluation(db, submission, rubric, use_rubric_model=payload.use_rubric_model)
+    return _run_auto_evaluation(db, submission, rubric, use_rubric_model=payload.use_rubric_model,
+                                use_ai_detection=payload.use_ai_detection)
 
 
 def _run_auto_evaluation(
-    db: Session, submission: Submission, rubric: Rubric, use_rubric_model: bool = True
+    db: Session, submission: Submission, rubric: Rubric, use_rubric_model: bool = True,
+    use_ai_detection: bool = True,
 ) -> AutoEvaluation:
     """Run the full pipeline for one submission against one rubric, store
     and return the AutoEvaluation. Shared by the single and batch endpoints;
@@ -2218,7 +2226,7 @@ def _run_auto_evaluation(
 
     code_ai_flagged = False
     code_ai = None
-    if code_dir:
+    if code_dir and use_ai_detection:
         combined_source = "\n".join(
             read_code(p)[1]
             for p in sorted(code_dir.rglob("*"))
@@ -2264,6 +2272,7 @@ def _run_auto_evaluation(
         code_ai_flagged=code_ai_flagged,
         report_extraction=report_extraction,
         grader=None if use_rubric_model else HeuristicRubricGrader(),
+        ai_detection=use_ai_detection,
     )
 
     auto_eval = AutoEvaluation(
@@ -2280,7 +2289,7 @@ def _run_auto_evaluation(
         model=result.grading.model,
         similarity_flagged=result.similarity_flagged,
         code_ai_flagged=result.code_ai_flagged,
-        report_ai_signal=result.report_analysis.ai_text.signal if result.report_analysis else None,
+        report_ai_signal=result.report_analysis.ai_text.signal if result.report_analysis and use_ai_detection else None,
         consistency_score=result.consistency.consistency_score,
         cross_modal_consistency=(
             result.semantic_consistency.to_dict() if result.semantic_consistency else None
@@ -2288,7 +2297,7 @@ def _run_auto_evaluation(
         ai_signals={
             "report": _ai_signal_dict(result.report_analysis.ai_text) if result.report_analysis else None,
             "code": _ai_signal_dict(code_ai, method="style-heuristic") if code_ai else None,
-        },
+        } if use_ai_detection else {"report": None, "code": None, "disabled": True},
     )
     db.add(auto_eval)
     db.commit()
@@ -2375,7 +2384,8 @@ def auto_evaluate_assignment(
                 ai_flagged=_ai_flagged(prev.code_ai_flagged, prev.report_ai_signal)))
             continue
         try:
-            ev = _run_auto_evaluation(db, submission, rubric, use_rubric_model=payload.use_rubric_model)
+            ev = _run_auto_evaluation(db, submission, rubric, use_rubric_model=payload.use_rubric_model,
+                                      use_ai_detection=payload.use_ai_detection)
         except Exception as exc:  # one bad submission must not stop the batch
             db.rollback()
             results.append(BatchEvaluationItemOut(
