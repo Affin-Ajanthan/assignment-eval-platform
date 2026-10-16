@@ -337,13 +337,28 @@ _STILL_WRONG_NOTE = (
 )
 
 
+# How every criterion is scored, so marks are proportional instead of all-or-nothing.
+_SCORING_SCALE = (
+    "HOW TO SCORE EACH CRITERION:\n"
+    "1. Split the criterion's description into its separate checks (the things it asks for).\n"
+    "2. Count the checks: how many there are, how many are met, how many are partly met "
+    "(the rest are not met). The program calculates the score from these counts.\n"
+    "Examples: every check met = full marks; half the checks met = half marks; nothing attempted, "
+    "or nothing in the evidence shows it = 0. Give full marks only when every check is met.\n"
+    "Judge code-quality or readability criteria from the SOURCE CODE text only. The static metrics "
+    "are not evidence of readability. A file with no real logic (only comments, docstrings, pass or "
+    "empty functions) scores no more than a quarter of any code-quality marks.\n"
+    "In each justification, name the checks you counted as met or not met.\n\n"
+)
+
+
 def _build_prompt(criteria: list[Criterion], evidence: Evidence) -> str:
     criteria_desc = "\n".join(
         f"- {c.name} (max {c.max_points} points): {c.description}" for c in criteria
     )
     code_summary = "\n".join(
         f"  {r.filename}: {r.function_count} functions, {r.class_count} classes, "
-        f"avg complexity {r.avg_complexity:.1f}, quality score {r.quality_score}/100, "
+        f"avg complexity {r.avg_complexity:.1f}, "
         f"issues: {'; '.join(r.issues) or 'none'}"
         for r in evidence.code_reports
     ) or "  (no code submitted)"
@@ -379,8 +394,9 @@ def _build_prompt(criteria: list[Criterion], evidence: Evidence) -> str:
         "reading it, and word uncertain judgements as \"appears to\" or \"by inspection\".\n\n"
         + (f"{FEW_SHOT_EXAMPLES}\n" if _few_shot_enabled() else "")
         + f"RUBRIC:\n{criteria_desc}\n\n"
+        + _SCORING_SCALE
         + _evidence_summary(evidence)
-        + f"CODE ANALYSIS (static metrics):\n{code_summary}\n\n"
+        + f"CODE ANALYSIS (structure only -- it says nothing about readability or correctness):\n{code_summary}\n\n"
         f"SOURCE CODE (truncated):\n{source_code}\n\n"
         f"{execution}"
         f"REPORT TEXT (truncated):\n{report_text}\n\n"
@@ -474,7 +490,37 @@ def _ollama_post(url: str, payload: dict, timeout: float) -> dict:
 
 
 def _ollama_response_schema() -> dict:
-    return _build_grading_tool()["input_schema"]
+    """Ollama is asked for check COUNTS, not a score: the program computes the
+    score (small models write a reasoning line and then a score that doesn't
+    match it). Each count is an integer; met + partly met <= total."""
+    return {
+        "type": "object",
+        "properties": {"criteria": {"type": "array", "items": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "checks_total": {"type": "integer"},
+                "checks_met": {"type": "integer"},
+                "checks_partly": {"type": "integer"},
+                "justification": {"type": "string"},
+            },
+            "required": ["name", "checks_total", "checks_met", "checks_partly", "justification"],
+        }}},
+        "required": ["criteria"],
+    }
+
+
+def _score_from_checks(entry: dict, max_points: float) -> float | None:
+    """max x (met + half of partly met) / total checks; None when the counts are unusable."""
+    total = entry.get("checks_total")
+    if not isinstance(total, (int, float)) or isinstance(total, bool) or total <= 0:
+        return None
+    met = min(max(0, entry.get("checks_met", 0) or 0), total)
+    partly = min(max(0, entry.get("checks_partly", 0) or 0), total - met)
+    return max_points * (met + 0.5 * partly) / total
+
+
+_MISSING_NOTE = "LLM did not return a score for this criterion"
 
 
 class OllamaRubricGrader(RubricGrader):
@@ -523,10 +569,12 @@ class OllamaRubricGrader(RubricGrader):
                     justification="LLM did not return a score for this criterion",
                 ))
                 continue
-            try:
-                score = float(entry["score"])
-            except (KeyError, TypeError, ValueError):
-                score = 0.0
+            score = _score_from_checks(entry, criterion.max_points)
+            if score is None:
+                try:
+                    score = float(entry["score"])
+                except (KeyError, TypeError, ValueError):
+                    score = 0.0
             results.append(CriterionResult(
                 name=criterion.name,
                 score=max(0.0, min(score, criterion.max_points)),
@@ -538,11 +586,25 @@ class OllamaRubricGrader(RubricGrader):
     def grade(self, criteria: list[Criterion], evidence: Evidence) -> GradingResult:
         prompt = _build_prompt(criteria, evidence).replace(
             "Call submit_grades with one entry per criterion, in the same order.",
-            'Reply with JSON {"criteria": [{"name", "score", "justification"}]} '
+            'Reply with JSON {"criteria": [{"name", "checks_total", "checks_met", "checks_partly", "justification"}]} '
             "with one entry per criterion, in the same order, using the exact "
             "criterion names.",
         )
         results = self._to_results(criteria, self._ask(prompt))
+        # Small models sometimes leave criteria out. Ask once more for those only,
+        # rather than silently scoring them 0.
+        missing = [i for i, r in enumerate(results) if r.justification == _MISSING_NOTE]
+        if missing:
+            names = ", ".join(criteria[i].name for i in missing)
+            try:
+                again = self._to_results(criteria, self._ask(
+                    prompt + f"\n\nYour previous reply left out these criteria: {names}. "
+                    "Reply with one entry for EVERY criterion in the rubric, including these."))
+            except Exception:
+                again = None
+            for i in missing:
+                if again is not None and again[i].justification != _MISSING_NOTE:
+                    results[i] = again[i]
 
         # Safety net for a known small-model failure: claiming the submission was
         # not provided (and scoring 0) although the system knows it was. Ask once

@@ -123,6 +123,10 @@ class AuthSession(Base):
 # Assignments + grading
 # --------------------------------------------------------------------------
 
+# The file kinds a student can submit. An assignment accepts any subset.
+SUBMISSION_TYPES = ("code", "report", "video")
+
+
 class Assignment(Base):
     """One piece of coursework in a subject: what students see and submit to.
 
@@ -140,6 +144,9 @@ class Assignment(Base):
     available_from = Column(DateTime, nullable=False)
     deadline = Column(DateTime, nullable=False)
     rubric_id = Column(Integer, ForeignKey("rubrics.id"), nullable=True)
+    # Subset of SUBMISSION_TYPES; NULL (assignments made before this option
+    # existed) accepts every type.
+    submission_types = Column(JSON, nullable=True)
     # Optional code handed out to every student. Its Winnowing fingerprints
     # are excluded from the token similarity check (files with the same
     # extension as starter_code_filename only). Instructor-only.
@@ -151,6 +158,12 @@ class Assignment(Base):
 
     subject = relationship("Subject")
     rubric = relationship("Rubric")
+
+    def accepted_types(self) -> list[str]:
+        """File kinds students may submit, in the canonical order."""
+        if not self.submission_types:
+            return list(SUBMISSION_TYPES)
+        return [t for t in SUBMISSION_TYPES if t in self.submission_types]
 
     def status_at(self, now: datetime) -> str:
         """'upcoming' | 'open' | 'closed' for a naive-UTC ``now``."""

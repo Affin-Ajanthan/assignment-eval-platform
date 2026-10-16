@@ -36,7 +36,7 @@ import zipfile
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -74,6 +74,7 @@ from .evaluator.semantic_consistency import get_consistency_service
 from .evaluator.ai_text_detection import get_ai_text_detector
 from .evaluator.rubric_grading import Criterion as _EvalCriterion, HeuristicRubricGrader
 from .models import (
+    SUBMISSION_TYPES,
     Assignment,
     AuthSession,
     AutoEvaluation,
@@ -111,6 +112,7 @@ add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON", "ai_
 # Submissions made before assignments existed keep assignment_id NULL (and
 # their free-text assignment_name); nothing else about them changes.
 add_missing_columns("submissions", {"assignment_id": "INTEGER REFERENCES assignments(id)"})
+add_missing_columns("assignments", {"submission_types": "JSON"})
 add_missing_columns("assignments", {"starter_code": "TEXT", "starter_code_filename": "VARCHAR"})
 
 
@@ -231,6 +233,7 @@ class RubricOut(BaseModel):
     assignment_names: list[str] = []
 
 
+SubmissionType = Literal["code", "report", "video"]
 _STARTER_CODE_MAX = 200_000
 
 
@@ -243,6 +246,8 @@ class AssignmentIn(BaseModel):
     available_from: datetime
     deadline: datetime
     rubric_id: Optional[int] = None
+    # Which kinds of file students may submit. Defaults to all of them.
+    submission_types: list[SubmissionType] = Field(default_factory=lambda: list(SUBMISSION_TYPES))
     # Optional instructor starter code (one file). Its fingerprints are left
     # out of the token similarity check; the file name's extension decides
     # which submitted files it is subtracted from.
@@ -256,6 +261,7 @@ class AssignmentUpdate(BaseModel):
     available_from: Optional[datetime] = None
     deadline: Optional[datetime] = None
     rubric_id: Optional[int] = None  # send null explicitly to detach the rubric
+    submission_types: Optional[list[SubmissionType]] = None
     starter_code: Optional[str] = Field(default=None, max_length=_STARTER_CODE_MAX)  # "" removes it
     starter_code_filename: Optional[str] = Field(default=None, max_length=200)
 
@@ -274,6 +280,7 @@ class AssignmentOut(BaseModel):
     rubric_id: Optional[int]
     rubric_name: Optional[str]
     max_points: Optional[float]
+    submission_types: list[str]
     submission_count: int
     graded_count: int
     created_at: UTCDateTime
@@ -307,6 +314,7 @@ class StudentAssignmentOut(BaseModel):
     available_from: UTCDateTime
     deadline: UTCDateTime
     status: str  # open | closed (upcoming assignments aren't listed)
+    submission_types: list[str]
     my_submission: Optional[MySubmissionOut]
 
 
@@ -1128,6 +1136,7 @@ def _assignment_out(db: Session, a: Assignment) -> AssignmentOut:
         status=a.status_at(_utcnow_naive()),
         rubric_id=a.rubric_id, rubric_name=a.rubric.name if a.rubric else None,
         max_points=a.rubric.max_total if a.rubric else None,
+        submission_types=a.accepted_types(),
         submission_count=len(subs), graded_count=sum(1 for s in subs if s.status == "graded"),
         created_at=_as_utc(a.created_at), updated_at=_as_utc(a.updated_at),
         starter_code=a.starter_code or "", starter_code_filename=a.starter_code_filename or "",
@@ -1171,6 +1180,7 @@ def _student_assignment_out(db: Session, student: User, a: Assignment, now: date
         id=a.id, subject_id=a.subject_id, subject_name=a.subject.name if a.subject else "",
         name=a.name, description=a.description or "",
         available_from=_as_utc(a.available_from), deadline=_as_utc(a.deadline), status=status,
+        submission_types=a.accepted_types(),
         my_submission=_my_submission_out(mine, status == "open") if mine else None,
     )
 
@@ -1185,10 +1195,11 @@ def create_assignment(payload: AssignmentIn, instructor: User = Depends(require_
     _require_unique_assignment_name(db, payload.subject_id, name)
     _check_assignment_rubric(db, payload.subject_id, payload.rubric_id)
     starter_code, starter_filename = _clean_starter_code(payload.starter_code, payload.starter_code_filename)
+    types = _normalise_submission_types(payload.submission_types)
     assignment = Assignment(
         subject_id=payload.subject_id, name=name, description=payload.description.strip(),
         available_from=available_from, deadline=deadline, rubric_id=payload.rubric_id,
-        starter_code=starter_code, starter_code_filename=starter_filename,
+        submission_types=types, starter_code=starter_code, starter_code_filename=starter_filename,
         created_by_id=instructor.id,
     )
     db.add(assignment)
@@ -1263,6 +1274,14 @@ def update_assignment(
     if "rubric_id" in payload.model_fields_set:
         _check_assignment_rubric(db, assignment.subject_id, payload.rubric_id)
         assignment.rubric_id = payload.rubric_id
+    if payload.submission_types is not None:
+        types = _normalise_submission_types(payload.submission_types)
+        if types != assignment.accepted_types():
+            has_submissions = db.query(Submission.id).filter(Submission.assignment_id == assignment.id).first()
+            if has_submissions:
+                raise HTTPException(
+                    409, "The accepted submission types can't be changed after students have submitted to this assignment.")
+            assignment.submission_types = types
 
     if name != assignment.name:
         # Keep linked submissions and stored similarity results under the new
@@ -1410,6 +1429,32 @@ def _save_video_upload(file: UploadFile, submission_uuid: str) -> str:
     return str(dest.relative_to(BASE_DIR))
 
 
+_TYPE_LABELS = {"code": "code (.zip or a source file)", "report": "report (PDF or DOCX)", "video": "video"}
+
+
+def _normalise_submission_types(types: list[str]) -> list[str]:
+    chosen = [t for t in SUBMISSION_TYPES if t in set(types)]
+    if not chosen:
+        raise HTTPException(400, "Choose at least one submission type (code, report or video).")
+    return chosen
+
+
+def _accepted_label(assignment: Assignment) -> str:
+    return ", ".join(_TYPE_LABELS[t] for t in assignment.accepted_types())
+
+
+def _reject_unaccepted_types(assignment: Assignment, **uploads) -> None:
+    """Refuse files of a kind the instructor did not enable for this assignment."""
+    accepted = set(assignment.accepted_types())
+    rejected = [kind for kind, upload in uploads.items() if upload and kind not in accepted]
+    if rejected:
+        raise HTTPException(
+            400,
+            f"'{assignment.name}' accepts only: {_accepted_label(assignment)}. "
+            f"Remove the {', '.join(rejected)} file(s) you uploaded.",
+        )
+
+
 @app.post("/submissions", response_model=SubmissionOut)
 def create_submission(
     background_tasks: BackgroundTasks,
@@ -1430,7 +1475,8 @@ def create_submission(
     _require_open(assignment)
     code, report, video = (f if f is not None and f.filename else None for f in (code, report, video))
     if not (code or report or video):
-        raise HTTPException(400, "Upload at least one file (code, report or presentation video).")
+        raise HTTPException(400, f"Upload at least one file: {_accepted_label(assignment)}.")
+    _reject_unaccepted_types(assignment, code=code, report=report, video=video)
     existing = (
         db.query(Submission)
         .filter(Submission.assignment_id == assignment.id, Submission.student_id == student.id)
@@ -1548,6 +1594,7 @@ def update_submission(
     code, report, video = (f if f is not None and f.filename else None for f in (code, report, video))
     if not (code or report or video):
         raise HTTPException(400, "Choose at least one file to replace.")
+    _reject_unaccepted_types(submission.assignment, code=code, report=report, video=video)
 
     batch = uuid.uuid4().hex[:8]
     try:
