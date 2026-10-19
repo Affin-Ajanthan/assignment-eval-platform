@@ -88,11 +88,19 @@ class LanguageMismatch:
     code_languages: list[str]
 
     @property
+    def named(self) -> str:
+        """The other languages the text names, most-mentioned first."""
+        return ", ".join(DISPLAY_NAMES[l] for l, _ in sorted(self.mentioned.items(), key=lambda kv: -kv[1]))
+
+    @property
+    def code(self) -> str:
+        return ", ".join(DISPLAY_NAMES[l] for l in self.code_languages)
+
+    @property
     def flag(self) -> str:
         named = ", ".join(f"{DISPLAY_NAMES[l]} ({n} mention{'s' if n != 1 else ''})"
                           for l, n in sorted(self.mentioned.items(), key=lambda kv: -kv[1]))
-        code = ", ".join(DISPLAY_NAMES[l] for l in self.code_languages)
-        return (f"language mismatch: the {self.source} talks about {named} but the submitted code is {code} "
+        return (f"language mismatch: the {self.source} talks about {named} but the submitted code is {self.code} "
                 f"-- check that the {self.source} belongs to this submission")
 
 

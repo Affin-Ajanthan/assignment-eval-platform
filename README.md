@@ -497,3 +497,9 @@ Instructor	 instructor@school.local	Instructor@123
 Student 1	student1@school.local	       Student1@123
 Student 2	student2@school.local      	Student2@123
 Student 3	student3@school.local	      Student3@123
+
+
+
+The CUDA libraries I installed aren’t in requirements.txt. That’s on purpose: they’re about 1 GB and only help on machines with an NVIDIA GPU. Without them Whisper still works, just slowly on the CPU, and the backend console now says so. If teammates with NVIDIA GPUs want the speed-up, they can run this once:
+
+pip install nvidia-cublas-cu12 "nvidia-cudnn-cu12==9.*"

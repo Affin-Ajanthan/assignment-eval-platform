@@ -33,8 +33,10 @@ from app.evaluator.semantic_consistency import (
     clean_text,
     consistency_threshold,
     extract_code_documentation,
+    extract_code_text,
     extract_documentation,
     set_consistency_service,
+    strip_comments,
 )
 from app.evaluator.video_analysis import Transcriber, TranscriptionResult
 from app.main import app
@@ -578,3 +580,95 @@ def test_real_fifty_students_performance(minilm):
     assert elapsed < 60, f"50 students took {elapsed:.1f}s"
     flagged = [i for i, r in enumerate(results) if r.status == "review_recommended"]
     assert flagged == [i for i in range(50) if i % 5 == 0]  # exactly the mismatched reports
+
+
+# --------------------------------------------------------------------------
+# Fallback: code without documentation is compared by its own text
+# --------------------------------------------------------------------------
+
+UNCOMMENTED_LIBRARY = '''
+class LibraryLoan:
+    def borrow_book(self, member, book):
+        print("Book borrowed by member, due date set, fines apply to late returns")
+'''
+
+
+def test_strip_comments_keeps_names_and_strings():
+    assert strip_comments('x = 1  # set x\nprint("# not a comment")\n', "a.py").split() == \
+        ["x", "=", "1", 'print("#', "not", "a", 'comment")']
+    cs = strip_comments('/* header */\nint total; // running total\nputs("// kept");\n', "a.c")
+    assert "header" not in cs and "running" not in cs
+    assert "int total;" in cs and '"// kept"' in cs
+    assert "loop" not in strip_comments("# loop over marks\nmarks.each { |m| puts m }\n", "a.rb")
+
+
+def test_extract_code_text_reads_source_files_only(tmp_path):
+    (tmp_path / "main.go").write_text('// entry\nfmt.Println("Add student")\n', encoding="utf-8")
+    (tmp_path / "README.md").write_text("A long readme", encoding="utf-8")
+    (tmp_path / "data.csv").write_text("id,name", encoding="utf-8")
+    text = extract_code_text(tmp_path)
+    assert 'fmt.Println("Add student")' in text
+    assert "entry" not in text and "readme" not in text and "id,name" not in text
+
+
+def test_undocumented_code_is_compared_by_its_own_text_and_labelled():
+    r = _check(_service(), code="", code_text=UNCOMMENTED_LIBRARY)
+    assert r.code_report is not None and r.code_transcript is not None
+    code = r.components["code"]
+    assert code.available and code.source == "code_text"
+    assert "code's own text was compared instead" in code.note
+    assert "code documentation" not in r.reason
+    assert _no_banned_words(r.reason, code.note)
+
+
+def test_documentation_wins_over_code_text_when_present():
+    r = _check(_service(), code_text="completely unrelated weather station rainfall sensors")
+    assert r.components["code"].source == "documentation"
+    assert r.components["code"].note is None
+
+
+def test_fallback_review_reason_says_code_not_code_documentation():
+    r = _check(_service(), code="", code_text="weather station sensors rainfall humidity temperature dashboard",
+               report="library loans books due dates fines members borrow",
+               transcript="library loans books due dates fines members return")
+    assert r.status == "review_recommended"
+    assert "The submitted code shows limited semantic overlap with the report and video transcript" in r.reason
+
+
+def test_no_code_text_either_is_still_unavailable_not_zero():
+    r = _check(_service(), code="", code_text="x = 1")
+    assert r.components["code"].available is False and r.code_report is None
+
+
+def test_pipeline_compares_undocumented_code(tmp_path):
+    code_dir = tmp_path / "code"
+    code_dir.mkdir()
+    (code_dir / "library.py").write_text(UNCOMMENTED_LIBRARY, encoding="utf-8")
+    report = make_pdf(tmp_path / "report.pdf", LIBRARY_REPORT.strip().split("\n\n"))
+    result = evaluate_submission(code_dir=code_dir, report_path=report, criteria=CRITERIA,
+                                 consistency_service=_service())
+    sc = result.semantic_consistency
+    assert sc.code_report is not None
+    assert sc.components["code"].source == "code_text"
+
+
+def test_every_uploadable_code_language_is_read():
+    import app.main as main
+    from app.evaluator.semantic_consistency import CODE_EXTENSIONS
+    assert set(main._ANALYZED_EXTENSIONS) - {".ipynb"} <= CODE_EXTENSIONS
+
+
+def test_php_hash_comments_are_comments():
+    src = '<?php\n# load the marks file\n$x = "# kept"; // tail note\n/* block */ echo "Add student";\n'
+    stripped = strip_comments(src, "main.php")
+    assert "load the marks" not in stripped and "tail note" not in stripped and "block" not in stripped
+    assert '"# kept"' in stripped and 'echo "Add student"' in stripped
+    # one-word comments ("block") are dropped as noise
+    assert extract_documentation(src, "main.php") == "load the marks file tail note"
+
+
+def test_cxx_and_hh_files_are_read(tmp_path):
+    (tmp_path / "grades.cxx").write_text('// average marks per student\nstd::cout << "Average";\n', encoding="utf-8")
+    (tmp_path / "grades.hh").write_text("class Student { int id; };\n", encoding="utf-8")
+    assert extract_code_documentation(tmp_path) == "average marks per student"
+    assert 'std::cout << "Average"' in extract_code_text(tmp_path) and "class Student" in extract_code_text(tmp_path)
