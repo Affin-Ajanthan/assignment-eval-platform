@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   apiFetch,
   Assignment,
@@ -40,6 +40,7 @@ export default function InstructorPage() {
   const [similarityAssignment, setSimilarityAssignment] = useState("");
   const [similarityResult, setSimilarityResult] = useState<SimilarityCheckResult | null>(null);
   const [similarityMsg, setSimilarityMsg] = useState<MessageState>(null);
+  const [similarityRunning, setSimilarityRunning] = useState(false);
 
   // Auto-evaluation panel
   const [autoevalSubmissionId, setAutoevalSubmissionId] = useState<number | null>(null);
@@ -47,6 +48,13 @@ export default function InstructorPage() {
   const [autoevalResult, setAutoevalResult] = useState<AutoEvaluation | null>(null);
   const [autoevalMsg, setAutoevalMsg] = useState<MessageState>(null);
   const [autoevalRunning, setAutoevalRunning] = useState(false);
+  // The panel renders at the bottom of the page: bring it into view on every
+  // "Auto-evaluate" click (a counter, so clicking the same student again works too).
+  const autoevalPanelRef = useRef<HTMLElement>(null);
+  const [autoevalScrollRequest, setAutoevalScrollRequest] = useState(0);
+  useEffect(() => {
+    if (autoevalScrollRequest > 0) autoevalPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [autoevalScrollRequest]);
   const [useRubricModel, setUseRubricModel] = useRubricModelSetting();
   const [useAiDetection, setUseAiDetection] = useAiDetectionSetting();
 
@@ -61,6 +69,12 @@ export default function InstructorPage() {
   const [criterionScores, setCriterionScores] = useState<Record<string, string>>({});
   const [gradingComments, setGradingComments] = useState("");
   const [gradingMsg, setGradingMsg] = useState<MessageState>(null);
+  // Same as the auto-evaluation panel: scroll the grading panel into view when it is opened.
+  const gradingPanelRef = useRef<HTMLElement>(null);
+  const [gradingScrollRequest, setGradingScrollRequest] = useState(0);
+  useEffect(() => {
+    if (gradingScrollRequest > 0) gradingPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [gradingScrollRequest]);
 
   const loadRubrics = useCallback(async (forSubject: number) => {
     setRubrics(await apiFetch<Rubric[]>(`/rubrics?subject_id=${forSubject}`));
@@ -155,6 +169,7 @@ export default function InstructorPage() {
       setSimilarityMsg({ text: "No assignments with submissions yet.", kind: "error" });
       return;
     }
+    setSimilarityRunning(true);
     try {
       const result = await apiFetch<SimilarityCheckResult>(
         `/subjects/${subjectId}/assignments/${encodeURIComponent(similarityAssignment)}/check-similarity`,
@@ -170,6 +185,8 @@ export default function InstructorPage() {
       });
     } catch (err) {
       setSimilarityMsg({ text: `Similarity check failed: ${err instanceof Error ? err.message : err}`, kind: "error" });
+    } finally {
+      setSimilarityRunning(false);
     }
   }
 
@@ -180,6 +197,7 @@ export default function InstructorPage() {
     setAutoevalResult(null);
     setAutoevalMsg(null);
     setAutoevalRubricId(rubrics[0]?.id ?? null);
+    setAutoevalScrollRequest((n) => n + 1);
   }
 
   async function handleRunAutoeval() {
@@ -218,6 +236,7 @@ export default function InstructorPage() {
     const assignmentRubric = assignments.find((a) => a.id === submission?.assignment_id)?.rubric_id ?? null;
     setGradingRubricId(rubricId ?? assignmentRubric ?? rubrics[0]?.id ?? null);
     setCriterionScores(prefill);
+    setGradingScrollRequest((n) => n + 1);
   }
 
   const gradingRubric = rubrics.find((r) => r.id === gradingRubricId) || null;
@@ -293,7 +312,7 @@ export default function InstructorPage() {
 
           {/* Similarity check */}
           <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-bold">Similarity check</h2>
+            <h2 className="text-lg font-bold">Similarity Code Check</h2>
             <p className="mt-1 text-sm text-gray-600">
               Compares every code submission for one assignment pairwise and flags likely copies. The PDF reports
               can be compared below.
@@ -305,6 +324,7 @@ export default function InstructorPage() {
               id="similarity-assignment"
               value={similarityAssignment}
               onChange={(e) => setSimilarityAssignment(e.target.value)}
+              disabled={similarityRunning}
               className="mt-1 mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
             >
               {assignmentNames.map((a) => (
@@ -316,9 +336,10 @@ export default function InstructorPage() {
             <button
               type="button"
               onClick={handleRunSimilarity}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+              disabled={similarityRunning}
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
             >
-              Check similarity
+              {similarityRunning ? "Comparing code..." : "Check similarity"}
             </button>
             <Message state={similarityMsg} />
             {similarityResult && (
@@ -609,7 +630,10 @@ export default function InstructorPage() {
 
           {/* Auto-evaluation panel */}
           {autoevalSubmissionId !== null && (
-            <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+            <section
+              ref={autoevalPanelRef}
+              className="mt-6 scroll-mt-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm"
+            >
               <h2 className="text-lg font-bold">
                 Auto-evaluation {studentLabel(autoevalSubmissionId)}
               </h2>
@@ -705,7 +729,10 @@ export default function InstructorPage() {
 
           {/* Grading panel */}
           {gradingSubmissionId !== null && (
-            <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+            <section
+              ref={gradingPanelRef}
+              className="mt-6 scroll-mt-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm"
+            >
               <h2 className="text-lg font-bold">Grade submission {studentLabel(gradingSubmissionId)}</h2>
               <label className="mt-3 block text-sm font-semibold" htmlFor="grading-rubric">
                 Rubric
