@@ -105,3 +105,58 @@ def test_report_mismatch_becomes_a_pipeline_review_flag(tmp_path):
                      "-- check that the report belongs to this submission"]
     # a review signal only: marks still come from the grader
     assert result.recommended_score is not None
+
+
+# ---- the consistency verdict follows a language mismatch -----------------
+
+class _Sentences:
+    """Fake MiniLM: hashed bag of words, so shared vocabulary scores high."""
+
+    def encode(self, texts):
+        import zlib
+
+        import numpy as np
+        out = np.zeros((len(texts), 256))
+        for i, t in enumerate(texts):
+            for w in t.lower().split():
+                out[i, zlib.crc32(w.strip(".,").encode()) % 256] += 1
+        return out / np.maximum(np.linalg.norm(out, axis=1, keepdims=True), 1e-9)
+
+
+def _evaluate(tmp_path, report_body):
+    from app.evaluator.semantic_consistency import SentenceEmbeddingService
+    code_dir = tmp_path / "code"
+    code_dir.mkdir()
+    (code_dir / "main.rb").write_text(
+        "# Student performance system: store student marks, average and grade, sort students\n"
+        "puts 'Add student'\n", encoding="utf-8")
+    from helpers import make_pdf
+    report = make_pdf(tmp_path / "report.pdf", [report_body])
+    service = SentenceEmbeddingService(encoder_factory=_Sentences, enabled=True)
+    return evaluate_submission(
+        code_dir=code_dir, report_path=report, video_path=None,
+        criteria=[Criterion(name="Correctness", description="works", max_points=10)],
+        grader=HeuristicRubricGrader(), ai_detection=False, consistency_service=service,
+    )
+
+
+TOPIC = "Student performance system: store student marks, average and grade, sort students. "
+
+
+def test_language_mismatch_turns_a_high_topic_score_into_review(tmp_path):
+    result = _evaluate(tmp_path, TOPIC + "Written in the Go programming language with golang slices.\n")
+    sc = result.semantic_consistency
+    assert sc.overall is not None and sc.overall >= 0.5  # the topic really does match
+    assert sc.status == "review_recommended"
+    assert "the report names Go while the submitted code is Ruby" in sc.reason
+    assert sc.reason.startswith(f"The topic matches ({round(sc.overall * 100)}% overall)")
+    # one language flag, no duplicate consistency flag
+    assert sum(f.startswith("language mismatch") for f in result.review_flags) == 1
+    assert not any(f.startswith("cross-modal semantic consistency") for f in result.review_flags)
+
+
+def test_matching_language_keeps_its_verdict(tmp_path):
+    result = _evaluate(tmp_path, TOPIC + "Written in Ruby; Ruby blocks sort the students.\n")
+    assert result.semantic_consistency.overall is not None
+    assert result.semantic_consistency.status in ("consistent", "limited_data")
+    assert "names" not in result.semantic_consistency.reason

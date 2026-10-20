@@ -157,6 +157,9 @@ class Assignment(Base):
     # before the report similarity check. Instructor-only.
     report_template_text = Column(String, nullable=True)
     report_template_filename = Column(String, nullable=True)
+    # Optional: the only programming languages students may submit code in
+    # (ids from app/code_languages.py). NULL accepts every supported language.
+    code_languages = Column(JSON, nullable=True)
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)

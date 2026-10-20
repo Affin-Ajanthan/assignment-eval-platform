@@ -6,6 +6,7 @@ import { combineLocal, formatDateTime, splitLocal } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import ReportTemplateControl from "@/components/instructor/ReportTemplateControl";
+import { CODE_LANGUAGES, CodeLanguageId, languageNames } from "@/lib/codeLanguages";
 
 const STATUS_STYLE: Record<AssignmentStatus, { text: string; cls: string }> = {
   upcoming: { text: "Not yet open", cls: "bg-gray-100 text-gray-700" },
@@ -24,6 +25,7 @@ type FormState = {
   types: SubmissionType[];
   starterCode: string; // "" = no starter code
   starterFilename: string;
+  languages: CodeLanguageId[]; // [] = any supported language
 };
 
 const TYPE_OPTIONS: { value: SubmissionType; label: string; hint: string }[] = [
@@ -49,6 +51,7 @@ const EMPTY: FormState = {
   types: ["code", "report", "video"],
   starterCode: "",
   starterFilename: "",
+  languages: [],
 };
 
 // Must match the backend's _CODE_EXTENSIONS (app/main.py).
@@ -94,6 +97,7 @@ export default function AssignmentsSection({
       types: a.submission_types,
       starterCode: a.starter_code,
       starterFilename: a.starter_code_filename,
+      languages: a.code_languages ?? [],
     });
   }
 
@@ -134,6 +138,8 @@ export default function AssignmentsSection({
       submission_types: form.types,
       starter_code: hasStarter ? form.starterCode : "",
       starter_code_filename: hasStarter ? form.starterFilename.trim() : "",
+      // Only meaningful when students submit code; otherwise no restriction.
+      code_languages: form.types.includes("code") ? form.languages : [],
     };
     setSaving(true);
     try {
@@ -240,6 +246,41 @@ export default function AssignmentsSection({
               : "Students can upload only the kinds you tick. Pick at least one."}
           </p>
         </fieldset>
+
+        {form.types.includes("code") && (
+          <fieldset className="mt-3">
+            <legend className="text-sm font-semibold">
+              Programming language <span className="font-normal text-gray-500">(optional)</span>
+            </legend>
+            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+              {CODE_LANGUAGES.map((l) => (
+                <label key={l.id} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.languages.includes(l.id)}
+                    disabled={typesLocked}
+                    onChange={() =>
+                      set(
+                        "languages",
+                        form.languages.includes(l.id)
+                          ? form.languages.filter((x) => x !== l.id)
+                          : [...form.languages, l.id],
+                      )
+                    }
+                  />
+                  {l.name}
+                </label>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-gray-500">
+              {typesLocked
+                ? "Locked: students have already submitted to this assignment."
+                : form.languages.length
+                  ? `Students must submit code in ${languageNames(form.languages)}; code in any other language is refused.`
+                  : "None ticked: students can submit code in any supported language."}
+            </p>
+          </fieldset>
+        )}
 
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <fieldset>
@@ -367,6 +408,9 @@ export default function AssignmentsSection({
                     {STATUS_STYLE[a.status].text}
                   </span>
                   <p className="mt-1 text-xs text-gray-600">Accepts: {a.submission_types.map(typeLabel).join(", ")}</p>
+                  {a.submission_types.includes("code") && a.code_languages?.length > 0 && (
+                    <p className="text-xs text-gray-600">Language: {languageNames(a.code_languages)}</p>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <button

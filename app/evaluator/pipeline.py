@@ -37,6 +37,7 @@ from .semantic_consistency import (
     check_semantic_consistency,
     consistency_threshold,
     extract_code_documentation,
+    extract_code_text,
 )
 from .video_analysis import Transcriber, VideoAnalysis, analyze_video
 
@@ -196,8 +197,10 @@ def evaluate_submission(
     # language (a C# video with Go code) still reads as consistent.
     report_text = (report_extraction.text if report_extraction and report_extraction.ok
                    else report_analysis.content.text if report_analysis else None)
-    for mismatch in language_mismatches(code_dir, transcript=video_transcript, report_text=report_text):
+    mismatches = language_mismatches(code_dir, transcript=video_transcript, report_text=report_text)
+    for mismatch in mismatches:
         review_flags.append(mismatch.flag)
+    _downgrade_for_language_mismatch(semantic_consistency, mismatches)
     if code_reports and not report_path and not video_path:
         review_flags.append("only code was submitted -- report and video are still missing")
 
@@ -221,6 +224,22 @@ _EXTRACTION_NOTES = {
 }
 
 
+def _downgrade_for_language_mismatch(result: SemanticConsistencyResult | None, mismatches) -> None:
+    """A high topic score must not read as "Consistent" when a part names a
+    different programming language from the code: the same project idea in
+    another language matches on topic. The scores stay as computed; only the
+    verdict and its reason change. The language flag itself is already in
+    the review flags, so no second flag is added here."""
+    if not mismatches or result is None or result.overall is None:
+        return
+    if result.status not in ("consistent", "limited_data"):
+        return
+    parts = "; ".join(f"the {m.source} names {m.named} while the submitted code is {m.code}" for m in mismatches)
+    result.status = "review_recommended"
+    result.reason = (f"The topic matches ({round(result.overall * 100)}% overall), but {parts}. "
+                     "This part may belong to a different submission. Review recommended.")
+
+
 def _semantic_consistency(code_dir, report_extraction, video_analysis, service, *, report_submitted, video_submitted):
     """Uses the MarkItDown report text and the transcript the video stage
     already produced -- nothing is transcribed twice. Guarded so a failure
@@ -228,6 +247,7 @@ def _semantic_consistency(code_dir, report_extraction, video_analysis, service, 
     try:
         return check_semantic_consistency(
             code_documentation=extract_code_documentation(code_dir) if code_dir else None,
+            code_text=extract_code_text(code_dir) if code_dir else None,
             report_text=report_extraction.text if report_extraction and report_extraction.ok else None,
             report_extraction=report_extraction.meta() if report_extraction else None,
             report_unavailable_note=_EXTRACTION_NOTES.get(report_extraction.status) if report_extraction else None,

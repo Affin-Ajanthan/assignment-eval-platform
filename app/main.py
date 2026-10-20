@@ -93,6 +93,8 @@ from .similarity.ai_heuristics import score_source as _score_ai_code
 from .similarity.core import Fingerprint, compare_all, fingerprint_source, subtract_starter
 from .similarity.python_cleanup import names_in
 from .notebook import NOTEBOOK_SUFFIX, read_code
+from . import code_languages as _langs
+from .code_languages import CodeLanguage
 from .similarity import report_similarity as _report_sim
 from . import exports as _exports
 from .similarity.semantic import (
@@ -121,6 +123,7 @@ add_missing_columns("submissions", {"assignment_id": "INTEGER REFERENCES assignm
 add_missing_columns("assignments", {"submission_types": "JSON"})
 add_missing_columns("assignments", {"starter_code": "TEXT", "starter_code_filename": "VARCHAR"})
 add_missing_columns("assignments", {"report_template_text": "TEXT", "report_template_filename": "VARCHAR"})
+add_missing_columns("assignments", {"code_languages": "JSON"})
 
 
 # --------------------------------------------------------------------------
@@ -260,6 +263,8 @@ class AssignmentIn(BaseModel):
     # which submitted files it is subtracted from.
     starter_code: str = Field(default="", max_length=_STARTER_CODE_MAX)
     starter_code_filename: str = Field(default="", max_length=200)
+    # Optional: the only languages students may submit code in. Empty = any.
+    code_languages: list[CodeLanguage] = Field(default_factory=list)
 
 
 class AssignmentUpdate(BaseModel):
@@ -271,6 +276,7 @@ class AssignmentUpdate(BaseModel):
     submission_types: Optional[list[SubmissionType]] = None
     starter_code: Optional[str] = Field(default=None, max_length=_STARTER_CODE_MAX)  # "" removes it
     starter_code_filename: Optional[str] = Field(default=None, max_length=200)
+    code_languages: Optional[list[CodeLanguage]] = None  # [] removes the restriction
 
 
 class AssignmentOut(BaseModel):
@@ -297,6 +303,8 @@ class AssignmentOut(BaseModel):
     # Template PDF cut out of student reports before the report similarity check.
     report_template_filename: str = ""
     report_template_words: int = 0
+    # Languages students must use for code; empty = any supported language.
+    code_languages: list[str] = []
 
 
 class MySubmissionOut(BaseModel):
@@ -325,6 +333,7 @@ class StudentAssignmentOut(BaseModel):
     deadline: UTCDateTime
     status: str  # open | closed (upcoming assignments aren't listed)
     submission_types: list[str]
+    code_languages: list[str] = []  # empty = any supported language
     my_submission: Optional[MySubmissionOut]
 
 
@@ -1175,6 +1184,7 @@ def _assignment_out(db: Session, a: Assignment) -> AssignmentOut:
         starter_code=a.starter_code or "", starter_code_filename=a.starter_code_filename or "",
         report_template_filename=a.report_template_filename or "",
         report_template_words=len((a.report_template_text or "").split()),
+        code_languages=a.code_languages or [],
     )
 
 
@@ -1216,6 +1226,7 @@ def _student_assignment_out(db: Session, student: User, a: Assignment, now: date
         name=a.name, description=a.description or "",
         available_from=_as_utc(a.available_from), deadline=_as_utc(a.deadline), status=status,
         submission_types=a.accepted_types(),
+        code_languages=a.code_languages or [],
         my_submission=_my_submission_out(mine, status == "open") if mine else None,
     )
 
@@ -1235,6 +1246,7 @@ def create_assignment(payload: AssignmentIn, instructor: User = Depends(require_
         subject_id=payload.subject_id, name=name, description=payload.description.strip(),
         available_from=available_from, deadline=deadline, rubric_id=payload.rubric_id,
         submission_types=types, starter_code=starter_code, starter_code_filename=starter_filename,
+        code_languages=_langs.normalise_languages(payload.code_languages),
         created_by_id=instructor.id,
     )
     db.add(assignment)
@@ -1317,6 +1329,15 @@ def update_assignment(
                 raise HTTPException(
                     409, "The accepted submission types can't be changed after students have submitted to this assignment.")
             assignment.submission_types = types
+    if payload.code_languages is not None:
+        languages = _langs.normalise_languages(payload.code_languages)
+        if languages != (assignment.code_languages or None):
+            has_submissions = db.query(Submission.id).filter(Submission.assignment_id == assignment.id).first()
+            if has_submissions:
+                raise HTTPException(
+                    409, "The required programming language can't be changed after students have submitted "
+                         "to this assignment.")
+            assignment.code_languages = languages
 
     if name != assignment.name:
         # Keep linked submissions and stored similarity results under the new
@@ -1458,11 +1479,20 @@ def _write_limited(file: UploadFile, dest: Path, limit: int, what: str) -> None:
             out.write(chunk)
 
 
-def _save_code_upload(file: UploadFile, submission_uuid: str) -> str:
+def _wrong_language(assignment: Assignment, what: str) -> _UploadRejected:
+    return _UploadRejected(
+        400,
+        f"'{assignment.name}' must be written in {_langs.describe(assignment.code_languages)}. "
+        f"{what} Upload your code in the required language.",
+    )
+
+
+def _save_code_upload(file: UploadFile, submission_uuid: str, assignment: Optional[Assignment] = None) -> str:
     """Saves the code upload under uploads/<uuid>/code/. A .zip is
     extracted in place so the evaluator's static/similarity analysis
     (which walks a directory) works the same whether the student
-    uploaded one file or a whole project."""
+    uploaded one file or a whole project. When the assignment requires
+    particular languages, code in any other language is refused."""
     filename = _safe_filename(file.filename)
     suffix = Path(filename).suffix.lower()
     if suffix not in _UPLOAD_CODE_EXTENSIONS:
@@ -1471,6 +1501,9 @@ def _save_code_upload(file: UploadFile, submission_uuid: str) -> str:
             f"'{filename}' can't be checked: {suffix or 'files without an extension'} is not a supported "
             f"language. Upload a .zip or a single file in one of: {_ACCEPTED_LANGUAGES_TEXT}.",
         )
+    allowed = _langs.allowed_extensions(assignment.code_languages if assignment else None)
+    if allowed is not None and suffix != ".zip" and suffix not in allowed:
+        raise _wrong_language(assignment, f"'{filename}' is {_langs.language_of(suffix)}.")
     code_dir = _submission_dir(submission_uuid) / "code"
     code_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1502,6 +1535,16 @@ def _save_code_upload(file: UploadFile, submission_uuid: str) -> str:
                 f"'{filename}' contains no code in a supported language, so it can't be checked. "
                 f"Include your source files in one of: {_ACCEPTED_LANGUAGES_TEXT}.",
             )
+        if allowed is not None:
+            # Non-code files (README, data) are fine; code in another language is not.
+            others = sorted(
+                p.relative_to(code_dir).as_posix() for p in code_dir.rglob("*")
+                if p.is_file() and p.suffix.lower() in _ANALYZED_EXTENSIONS and p.suffix.lower() not in allowed
+            )
+            if others:
+                shown = ", ".join(f"{name} ({_langs.language_of(Path(name).suffix.lower())})" for name in others[:5])
+                more = f" and {len(others) - 5} more" if len(others) > 5 else ""
+                raise _wrong_language(assignment, f"'{filename}' contains code in another language: {shown}{more}.")
     else:
         _write_limited(file, code_dir / filename, _CODE_MAX_BYTES, "code file")
 
@@ -1594,7 +1637,7 @@ def create_submission(
     # code_path points at a DIRECTORY (uploads/<uuid>/code/); report_path
     # and video_path point at the uploaded FILE itself.
     try:
-        code_path = _save_code_upload(code, submission_uuid) if code else None
+        code_path = _save_code_upload(code, submission_uuid, assignment) if code else None
         report_path = _save_report_upload(report, submission_uuid) if report else None
         video_path = _save_video_upload(video, submission_uuid) if video else None
     except _UploadRejected as exc:
@@ -1703,7 +1746,7 @@ def update_submission(
 
     batch = uuid.uuid4().hex[:8]
     try:
-        new_code = _save_code_upload(code, batch) if code else None
+        new_code = _save_code_upload(code, batch, submission.assignment) if code else None
         new_report = _save_report_upload(report, batch) if report else None
         new_video = _save_video_upload(video, batch) if video else None
     except _UploadRejected as exc:

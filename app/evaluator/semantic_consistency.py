@@ -16,9 +16,11 @@ for the same idea still scores high -- unlike the keyword-overlap check in
 
 Inputs, all reused from the rest of the pipeline where they exist:
 
-- code documentation: docstrings and comments only (``extract_code_documentation``),
-  never the code itself -- this checks whether the student's *explanation*
-  matches the other two components;
+- code documentation: docstrings and comments only (``extract_code_documentation``)
+  -- this checks whether the student's *explanation* matches the other two
+  components. When the code has no documentation at all, the code's own text
+  with comments removed (``extract_code_text``: its names and printed
+  messages) is compared instead, and the result says so;
 - report: the text ``report_analysis.extract_report`` already produced;
 - transcript: the text the video stage already transcribed (nothing is
   transcribed a second time).
@@ -102,12 +104,14 @@ def _feature_enabled() -> bool:
 # --------------------------------------------------------------------------
 
 _HASH_LANGS = {".py", ".rb", ".sh", ".r", ".pl", ".yaml", ".yml"}
-_C_LANGS = {".java", ".js", ".jsx", ".ts", ".tsx", ".c", ".h", ".cpp", ".hpp", ".cc", ".cs",
-            ".go", ".rs", ".kt", ".swift", ".php", ".scala"}
+_C_LANGS = {".java", ".js", ".jsx", ".ts", ".tsx", ".c", ".h", ".cpp", ".hpp", ".cc", ".cxx", ".hh", ".hxx",
+            ".cs", ".go", ".rs", ".kt", ".swift", ".php", ".scala"}
 CODE_EXTENSIONS = _HASH_LANGS | _C_LANGS
 
 _STRINGS = r'"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])*\''
 _C_COMMENT_RE = re.compile(rf"(?P<s>{_STRINGS}|`(?:\\.|[^`\\])*`)|(?P<line>//[^\n]*)|(?P<block>/\*[\s\S]*?\*/)")
+# PHP takes both C-style comments and shell-style "#" comments.
+_PHP_COMMENT_RE = re.compile(rf"(?P<s>{_STRINGS})|(?P<line>(?://|#)[^\n]*)|(?P<block>/\*[\s\S]*?\*/)")
 _HASH_COMMENT_RE = re.compile(rf'(?P<s>"""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\'|{_STRINGS})|(?P<line>#[^\n]*)')
 
 # Tool directives, license headers and similar lines that carry no
@@ -121,6 +125,12 @@ _BOILERPLATE_RE = re.compile(
 )
 _TAG_PREFIX_RE = re.compile(r"^(todo|fixme|note|hack|xxx)\b[:\s-]*", re.IGNORECASE)
 _CODE_CHARS = set("(){}[];=<>+*&|")
+
+
+def _comment_pattern(ext: str) -> re.Pattern:
+    if ext == ".php":
+        return _PHP_COMMENT_RE
+    return _HASH_COMMENT_RE if ext in _HASH_LANGS else _C_COMMENT_RE
 
 
 def _clean_comment(text: str) -> str:
@@ -174,7 +184,7 @@ def extract_documentation(source: str, filename: str) -> str:
                      if m.lastgroup == "line" or m.group().startswith(('"""', "'''"))]
             parts = [p.strip("\"'") for p in parts]
     else:
-        pattern = _HASH_COMMENT_RE if ext in _HASH_LANGS else _C_COMMENT_RE
+        pattern = _comment_pattern(ext)
         parts = [m.group() for m in pattern.finditer(source) if m.lastgroup in ("line", "block")]
     cleaned = (_clean_comment(p) for p in parts)
     return " ".join(p for p in cleaned if p)
@@ -186,6 +196,41 @@ README_MAX_CHARS = 50_000
 
 def _is_readme(path: Path) -> bool:
     return path.stem.lower() == "readme" and path.suffix.lower() in README_SUFFIXES
+
+
+def strip_comments(source: str, filename: str) -> str:
+    """The source with comments removed and string literals kept: what is
+    left are the names and the messages the program prints, which carry the
+    meaning when a student wrote no documentation."""
+    ext = Path(filename).suffix.lower()
+    pattern = _comment_pattern(ext)
+    return pattern.sub(lambda m: m.group() if m.lastgroup == "s" else "", source)
+
+
+# Enough code text to characterise a student program; generated or vendored
+# files beyond this would only slow the comparison down.
+CODE_TEXT_MAX_CHARS = 100_000
+
+
+def extract_code_text(code_dir: Path) -> str:
+    """Fallback for ``extract_code_documentation``: every source file's text
+    with comments stripped, capped at ``CODE_TEXT_MAX_CHARS``."""
+    texts, total = [], 0
+    for path in sorted(Path(code_dir).rglob("*")):
+        if not path.is_file():
+            continue
+        suffix = path.suffix.lower()
+        if suffix == NOTEBOOK_SUFFIX:
+            text = strip_comments(notebook_code(path.read_text(encoding="utf-8", errors="ignore")), "cell.py")
+        elif suffix in CODE_EXTENSIONS:
+            text = strip_comments(path.read_text(encoding="utf-8", errors="ignore"), path.name)
+        else:
+            continue
+        texts.append(text[:CODE_TEXT_MAX_CHARS - total])
+        total += len(texts[-1])
+        if total >= CODE_TEXT_MAX_CHARS:
+            break
+    return "\n".join(t for t in texts if t.strip())
 
 
 def extract_code_documentation(code_dir: Path) -> str:
@@ -476,7 +521,10 @@ class ComponentInfo:
     available: bool
     words: int = 0
     chunks: int = 0
-    note: str | None = None  # why it's unavailable, shown in the UI
+    note: str | None = None  # why it's unavailable (or how it was read), shown in the UI
+    # "documentation" (comments/docstrings/README) or "code_text" (the code
+    # itself, used when there is no documentation); None when unavailable.
+    source: str | None = None
 
 
 @dataclass
@@ -503,19 +551,21 @@ def _join_labels(labels: list[str]) -> str:
     return labels[0] if len(labels) == 1 else ", ".join(labels[:-1]) + " and " + labels[-1]
 
 
-def _review_reason(scores: dict[tuple[str, str], float], threshold: float) -> str:
+def _review_reason(scores: dict[tuple[str, str], float], threshold: float,
+                   labels: dict[str, str] = COMPONENT_LABELS) -> str:
     low = [pair for pair, s in scores.items() if s < threshold]
     if len(scores) == 3 and len(low) == 3:
-        detail = "The code documentation, report and video transcript describe substantially different content."
+        detail = (f"The {labels['code']}, report and video transcript describe substantially "
+                  "different content.")
     elif len(low) == 2:
         (a1, b1), (a2, b2) = low
         odd = ({a1, b1} & {a2, b2}).pop()
-        others = [COMPONENT_LABELS[c] for c in (a1, b1, a2, b2) if c != odd]
-        detail = (f"The submitted {COMPONENT_LABELS[odd]} shows limited semantic overlap with the "
+        others = [labels[c] for c in (a1, b1, a2, b2) if c != odd]
+        detail = (f"The submitted {labels[odd]} shows limited semantic overlap with the "
                   f"{_join_labels(others)}.")
     else:
         a, b = (low or [min(scores, key=scores.get)])[0]
-        detail = f"The submitted {COMPONENT_LABELS[a]} and {COMPONENT_LABELS[b]} show limited semantic overlap."
+        detail = f"The submitted {labels[a]} and {labels[b]} show limited semantic overlap."
     return f"{detail} Some submitted components may describe different content. Review recommended."
 
 
@@ -547,6 +597,7 @@ def _check(
     report_unavailable_note: str | None = None,
     code_documentation: str | None,
     report_text: str | None,
+    code_text: str | None = None,
     transcript: str | None,
     code_submitted: bool = True,
     report_submitted: bool = True,
@@ -571,8 +622,18 @@ def _check(
     for name, text in texts.items():
         words = len(text.split())
         if words >= MIN_WORDS:
-            components[name] = ComponentInfo(available=True, words=words)
+            components[name] = ComponentInfo(available=True, words=words,
+                                             source="documentation" if name == "code" else None)
             continue
+        if name == "code" and code_submitted:
+            fallback = clean_text(code_text)
+            if len(fallback.split()) >= MIN_WORDS:
+                texts["code"] = fallback
+                components["code"] = ComponentInfo(
+                    available=True, words=len(fallback.split()), source="code_text",
+                    note="No code documentation found (no comments, docstrings or README), so the code's own "
+                         "text was compared instead: its names and printed messages")
+                continue
         if name == "code":
             note = "No code submitted" if not code_submitted else "No code documentation found (no comments, docstrings or README)"
         elif name == "report":
@@ -627,17 +688,21 @@ def _check(
             scores[(a, b)] = round(max(0.0, min(1.0, cos)), 4)
     overall = round(sum(scores.values()) / len(scores), 4)
 
+    labels = dict(COMPONENT_LABELS)
+    if components["code"].source == "code_text":
+        labels["code"] = "code"
+
     if overall < threshold:
-        status, reason = "review_recommended", _review_reason(scores, threshold)
+        status, reason = "review_recommended", _review_reason(scores, threshold, labels)
     elif len(available) == 3:
         status = "consistent"
-        reason = ("The submitted code documentation, report, and video transcript show a high degree of "
+        reason = (f"The submitted {labels['code']}, report, and video transcript show a high degree of "
                   "semantic consistency.")
     else:
         status = "limited_data"
         missing = next(c.note for c in components.values() if not c.available)
         a, b = available
-        reason = (f"Only the {COMPONENT_LABELS[a]} and {COMPONENT_LABELS[b]} could be compared; they appear "
+        reason = (f"Only the {labels[a]} and {labels[b]} could be compared; they appear "
                   f"semantically consistent. {missing}.")
 
     return SemanticConsistencyResult(
