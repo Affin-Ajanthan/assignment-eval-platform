@@ -1,3 +1,5 @@
+import type { CodeLanguageId } from "@/lib/codeLanguages";
+
 // Shared API client: talks to the FastAPI backend and manages the
 // logged-in session (token + user, kept in localStorage so a refresh
 // doesn't sign you out).
@@ -79,6 +81,8 @@ export interface Assignment {
   /** Template PDF cut out of student reports before the report similarity check. */
   report_template_filename: string;
   report_template_words: number;
+  /** Languages students must write their code in; empty = any supported language. */
+  code_languages: CodeLanguageId[];
 }
 
 /** A student's own submission: status and final total only. */
@@ -105,6 +109,8 @@ export interface StudentAssignment {
   deadline: string;
   status: "open" | "closed";
   submission_types: SubmissionType[];
+  /** Languages the code must be written in; empty = any supported language. */
+  code_languages: CodeLanguageId[];
   my_submission: MySubmission | null;
 }
 
@@ -271,7 +277,8 @@ export interface AutoEvaluation {
   /** Null on evaluations stored before this feature existed. */
   cross_modal_consistency: CrossModalConsistency | null;
   /** Null on evaluations stored before AI-signal details were kept. */
-  ai_signals?: { report: AISignal | null; code: AISignal | null } | null;
+  /** `disabled`: the instructor switched AI-content detection off for this run. */
+  ai_signals?: { report: AISignal | null; code: AISignal | null; disabled?: boolean } | null;
   created_at: string;
 }
 
@@ -297,7 +304,17 @@ export interface CrossModalConsistency {
   model: string;
   warning: string | null;
   components: Partial<
-    Record<ConsistencyComponent, { available: boolean; words: number; chunks: number; note: string | null }>
+    Record<
+      ConsistencyComponent,
+      {
+        available: boolean;
+        words: number;
+        chunks: number;
+        note: string | null;
+        /** "code_text": the code had no documentation, so its own text was compared. */
+        source?: "documentation" | "code_text" | null;
+      }
+    >
   >;
   /** How the report text was obtained; null when no report was submitted. */
   report_extraction?: ReportExtraction | null;

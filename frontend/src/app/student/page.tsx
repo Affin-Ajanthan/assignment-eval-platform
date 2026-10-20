@@ -8,23 +8,11 @@ import AccountBar from "@/components/AccountBar";
 import Message, { MessageState } from "@/components/Message";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import SubmissionFiles from "@/components/SubmissionFiles";
+import { CODE_LANGUAGES, languageNames, languagesFor } from "@/lib/codeLanguages";
 
 const fileInput = "mt-1 mb-3 block w-full text-sm";
-// Languages the code checks read. Must match _ANALYZED_EXTENSIONS in the backend
-// (app/main.py), which refuses any other code file at upload.
-const CODE_LANGUAGES: { name: string; extensions: string[] }[] = [
-  { name: "Python", extensions: [".py", ".ipynb"] },
-  { name: "Java", extensions: [".java"] },
-  { name: "JavaScript", extensions: [".js"] },
-  { name: "C", extensions: [".c", ".h"] },
-  { name: "C++", extensions: [".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx"] },
-  { name: "C#", extensions: [".cs"] },
-  { name: "Go", extensions: [".go"] },
-  { name: "Ruby", extensions: [".rb"] },
-  { name: "PHP", extensions: [".php"] },
-];
-const CODE_EXTENSIONS = [".zip", ...CODE_LANGUAGES.flatMap((l) => l.extensions)];
-const CODE_ACCEPT = CODE_EXTENSIONS.join(",");
+// Every supported code extension (app/code_languages.py refuses anything else).
+const CODE_EXTENSIONS = [".zip", ...new Set(CODE_LANGUAGES.flatMap((l) => l.extensions))];
 const REPORT_ACCEPT = ".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const VIDEO_ACCEPT = ".mp4,.mov,.avi,.mkv,.webm,.m4v,video/*";
 // Shown under each upload field. These must match the backend limits in app/main.py.
@@ -55,6 +43,10 @@ function UploadForm({
   const [submitting, setSubmitting] = useState(false);
   const id = (field: string) => `${field}-${assignment.id}`;
   const accepts = (kind: SubmissionType) => assignment.submission_types.includes(kind);
+  // The instructor may require particular languages; otherwise every supported one.
+  const restricted = (assignment.code_languages ?? []).length > 0;
+  const languages = languagesFor(assignment.code_languages);
+  const allowedExtensions = [".zip", ...new Set(languages.flatMap((l) => l.extensions))];
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -66,6 +58,13 @@ function UploadForm({
       if (!CODE_EXTENSIONS.includes(ext)) {
         setMessage({
           text: `"${codeFile.name}" can't be checked: ${ext || "files without an extension"} is not a supported language. Upload a .zip or one file in a language listed under the Code field.`,
+          kind: "error",
+        });
+        return;
+      }
+      if (!allowedExtensions.includes(ext)) {
+        setMessage({
+          text: `This assignment must be written in ${languageNames(assignment.code_languages)}. "${codeFile.name}" is in another language.`,
           kind: "error",
         });
         return;
@@ -114,24 +113,27 @@ function UploadForm({
             Code (zip or single file)
           </label>
           <div id={id("code-help")} className="mt-1 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-700">
-            <p className="font-semibold">Accepted languages</p>
+            <p className="font-semibold">
+              {restricted ? "Required language for this assignment" : "Accepted languages"}
+            </p>
             <ul className="mt-1 grid gap-x-4 gap-y-0.5 sm:grid-cols-3">
-              {CODE_LANGUAGES.map((l) => (
+              {languages.map((l) => (
                 <li key={l.name}>
                   {l.name} <span className="text-gray-500">({l.extensions.join(", ")})</span>
                 </li>
               ))}
             </ul>
             <p className="mt-1 text-gray-600">
-              A .zip may also contain other files (README, data), but it must include code in one of these
-              languages. Other languages, such as TypeScript, Kotlin, Swift or Rust, are not accepted yet.
+              {restricted
+                ? "Your instructor requires this language. Code in any other language is refused, including inside a .zip; other files (README, data) are fine."
+                : "A .zip may also contain other files (README, data), but it must include code in one of these languages. Other languages, such as TypeScript, Kotlin, Swift or Rust, are not accepted yet."}
             </p>
           </div>
           <input
             id={id("code")}
             type="file"
             ref={codeRef}
-            accept={CODE_ACCEPT}
+            accept={allowedExtensions.join(",")}
             aria-describedby={id("code-help")}
             className={fileInput}
           />
@@ -209,6 +211,9 @@ function AssignmentCard({
           <h3 className="text-lg font-bold">{a.name}</h3>
           <p className="text-xs text-gray-500">{a.subject_name}</p>
           <p className="text-xs text-gray-500">Accepts: {a.submission_types.map((t) => TYPE_LABEL[t]).join(", ")}</p>
+          {a.submission_types.includes("code") && a.code_languages?.length > 0 && (
+            <p className="text-xs text-gray-500">Language: {languageNames(a.code_languages)}</p>
+          )}
         </div>
         <span
           className={`rounded px-2 py-0.5 text-xs font-semibold ${

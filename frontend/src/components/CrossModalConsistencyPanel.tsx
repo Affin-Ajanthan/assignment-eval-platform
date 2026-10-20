@@ -24,6 +24,12 @@ function pct(x: number): string {
   return `${Math.round(x * 100)}%`;
 }
 
+/** Unavailable components, and code compared without documentation, explain themselves. */
+function hasNote(c: CrossModalConsistency, k: ConsistencyComponent): boolean {
+  const info = c.components[k];
+  return !!info && (info.available === false || info.source === "code_text");
+}
+
 /** Why a comparison has no score: the missing component's own note, or "not evaluated". */
 function missingNote(c: CrossModalConsistency, parts: ConsistencyComponent[]): string {
   const notes = parts.map((p) => c.components[p]).filter((x) => x && !x.available).map((x) => x!.note);
@@ -101,10 +107,10 @@ export default function CrossModalConsistencyPanel({ result }: { result: CrossMo
             {result.reason}
           </p>
 
-          {(Object.keys(LABELS) as ConsistencyComponent[]).some((k) => result.components[k]?.available === false) && (
+          {(Object.keys(LABELS) as ConsistencyComponent[]).some((k) => hasNote(result, k)) && (
             <ul className="mt-2 ml-5 list-disc text-xs text-gray-600">
               {(Object.keys(LABELS) as ConsistencyComponent[])
-                .filter((k) => result.components[k]?.available === false)
+                .filter((k) => hasNote(result, k))
                 .map((k) => (
                   <li key={k}>
                     {LABELS[k]}: {result.components[k]!.note}

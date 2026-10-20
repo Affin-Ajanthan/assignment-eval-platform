@@ -6,7 +6,11 @@ import { methodLabel } from "@/components/AISignalsPanel";
 import { formatMark } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
 import DownloadExcelButton from "@/components/instructor/DownloadExcelButton";
-import RubricModelToggle, { useRubricModelSetting } from "@/components/instructor/RubricModelToggle";
+import RubricModelToggle, {
+  AiDetectionToggle,
+  useAiDetectionSetting,
+  useRubricModelSetting,
+} from "@/components/instructor/RubricModelToggle";
 
 const STATUS_STYLE: Record<string, string> = {
   evaluated: "bg-green-50 text-green-800",
@@ -61,6 +65,7 @@ export default function BatchEvaluateSection({
   const [rubricId, setRubricId] = useState<number | null>(null);
   const [skipDone, setSkipDone] = useState(false);
   const [useRubricModel, setUseRubricModel] = useRubricModelSetting();
+  const [useAiDetection, setUseAiDetection] = useAiDetectionSetting();
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<BatchEvaluationResult | null>(null);
   const [msg, setMsg] = useState<MessageState>(null);
@@ -89,7 +94,7 @@ export default function BatchEvaluateSection({
     try {
       const res = await apiFetch<BatchEvaluationResult>(
         `/subjects/${subjectId}/assignments/${encodeURIComponent(assignment)}/auto-evaluate`,
-        { method: "POST", json: { rubric_id: rubricId, skip_already_evaluated: skipDone, use_rubric_model: useRubricModel } }
+        { method: "POST", json: { rubric_id: rubricId, skip_already_evaluated: skipDone, use_rubric_model: useRubricModel, use_ai_detection: useAiDetection } }
       );
       setResult(res);
       setMsg({
@@ -155,6 +160,7 @@ export default function BatchEvaluateSection({
       </div>
 
       <RubricModelToggle on={useRubricModel} onChange={setUseRubricModel} disabled={running} />
+      <AiDetectionToggle on={useAiDetection} onChange={setUseAiDetection} disabled={running} />
 
       <label className="mt-3 flex items-center gap-2 text-sm">
         <input type="checkbox" checked={skipDone} disabled={running} onChange={(e) => setSkipDone(e.target.checked)} />
