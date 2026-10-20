@@ -236,6 +236,8 @@ export interface BatchEvaluationItem {
   similarity_flagged: boolean | null;
   /** AI-content review flag (code or report); never changes marks. Null when the submission failed. */
   ai_flagged: boolean | null;
+  /** Level, score and method behind ai_flagged; null when failed or stored before these details. */
+  ai_signals?: { report: AISignal | null; code: AISignal | null } | null;
 }
 
 export interface BatchEvaluationResult {

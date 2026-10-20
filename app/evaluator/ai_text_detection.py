@@ -150,9 +150,17 @@ class FastDetectGPTScorer:
         return len(self.tokenizer(text, add_special_tokens=False)["input_ids"])
 
     def chunk_curvatures(self, text: str, chunk_tokens: int, max_chunks: int) -> tuple[list[float], int]:
-        torch = self._torch
         ids = self.tokenizer(text, add_special_tokens=False)["input_ids"]
-        chunks = select_chunks(ids, chunk_tokens, max_chunks)
+        return self.score_chunks(select_chunks(ids, chunk_tokens, max_chunks)), len(ids)
+
+    def all_chunks(self, text: str, chunk_tokens: int) -> list[list[int]]:
+        """Every chunk ``chunk_curvatures`` could pick from, in order
+        (used by scripts/tune_ai_chunks.py to try several chunk limits)."""
+        ids = self.tokenizer(text, add_special_tokens=False)["input_ids"]
+        return select_chunks(ids, chunk_tokens, max_chunks=len(ids) + 1)
+
+    def score_chunks(self, chunks: list[list[int]]) -> list[float]:
+        torch = self._torch
         scores = []
         with torch.inference_mode():
             for chunk in chunks:
@@ -165,7 +173,7 @@ class FastDetectGPTScorer:
                 mean_ref = (probs * lprobs).sum(-1)
                 var_ref = (probs * lprobs.square()).sum(-1) - mean_ref.square()
                 scores.append(float((ll.sum() - mean_ref.sum()) / var_ref.sum().clamp_min(1e-6).sqrt()))
-        return scores, len(ids)
+        return scores
 
 
 class AITextDetector:

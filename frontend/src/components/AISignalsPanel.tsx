@@ -6,7 +6,7 @@ const BADGE: Record<AISignal["signal"], { text: string; cls: string }> = {
   high: { text: "High", cls: "bg-red-50 text-red-700" },
 };
 
-function methodLabel(method: string): string {
+export function methodLabel(method: string): string {
   if (method.startsWith("fast-detectgpt:")) return `Fast-DetectGPT (${method.split(":")[1]})`;
   return "Style heuristic";
 }

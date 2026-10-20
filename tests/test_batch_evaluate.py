@@ -199,6 +199,18 @@ def test_skipped_rows_show_stored_marks_and_flags(monkeypatch):
         assert item["ai_flagged"] is True and item["similarity_flagged"] is False
 
 
+
+def test_batch_rows_carry_ai_signal_method_and_score(monkeypatch):
+    _high_ai_signal(monkeypatch)
+    subject, tok, rubric, assignment, subs = _setup(1, assignment="AI Signal Details")
+    first = _batch(subject, assignment, tok, rubric["id"]).json()["results"][0]
+    code = first["ai_signals"]["code"]
+    assert (code["signal"], code["score"], code["method"]) == ("high", 90, "style-heuristic")
+    assert first["ai_signals"]["report"] is None  # no report submitted
+    # skipped rows show the stored details too
+    again = _batch(subject, assignment, tok, rubric["id"], skip_already_evaluated=True).json()["results"][0]
+    assert again["status"] == "skipped" and again["ai_signals"] == first["ai_signals"]
+
 # ---- AI-content detection switch ---------------------------------------
 
 def test_ai_detection_switch_off_skips_detectors_and_flags(monkeypatch):
@@ -243,3 +255,4 @@ def test_report_ai_text_signal_off_never_loads_the_detector(monkeypatch):
     monkeypatch.setattr(ai_text_detection, "get_ai_text_detector", must_not_load)
     result = report_analysis.ai_text_signal("Some report text. " * 50, enabled=False)
     assert (result.signal, result.method, result.score) == ("off", "off", 0)
+

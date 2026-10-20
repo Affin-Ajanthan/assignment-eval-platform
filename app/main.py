@@ -73,7 +73,7 @@ from .evaluator.document_extraction import (
 )
 from .evaluator.pipeline import evaluate_submission as _run_pipeline
 from .evaluator.semantic_consistency import get_consistency_service
-from .evaluator.ai_text_detection import get_ai_text_detector
+from .evaluator.ai_text_detection import get_ai_text_detector, model_name as ai_text_model_name
 from .evaluator.rubric_grading import Criterion as _EvalCriterion, HeuristicRubricGrader
 from .models import (
     SUBMISSION_TYPES,
@@ -591,6 +591,9 @@ class BatchEvaluationItemOut(BaseModel):
     # Review flags shown as their own table columns; None when the submission failed.
     similarity_flagged: Optional[bool] = None
     ai_flagged: Optional[bool] = None
+    # Level, score and method behind ai_flagged, so the table can show which
+    # detector ran. None when the submission failed or predates these details.
+    ai_signals: Optional[AISignalsOut] = None
 
 
 class BatchAutoEvaluateOut(BaseModel):
@@ -639,7 +642,19 @@ app.add_middleware(
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    # The AI-text detector falls back to the style heuristic silently when its
+    # model is off or fails to load; this makes that visible. Public endpoint,
+    # so only the error type is shown -- the full message is in the server log.
+    detector = get_ai_text_detector()
+    return {
+        "status": "ok",
+        "ai_text_detector": {
+            "status": detector.status,  # not_loaded (still loading) | ready | unavailable | disabled
+            "model": ai_text_model_name(),
+            "fallback_to_heuristic": detector.status in ("unavailable", "disabled"),
+            "error": detector.error.split(":", 1)[0] if detector.error else None,
+        },
+    }
 
 
 # ---- helpers ---------------------------------------------------------------
@@ -2424,7 +2439,8 @@ def auto_evaluate_assignment(
                 recommended_score=prev.recommended_score, recommended_max=prev.recommended_max,
                 grader=prev.grader, model=prev.model, review_flags=list(prev.review_flags or []),
                 similarity_flagged=prev.similarity_flagged,
-                ai_flagged=_ai_flagged(prev.code_ai_flagged, prev.report_ai_signal)))
+                ai_flagged=_ai_flagged(prev.code_ai_flagged, prev.report_ai_signal),
+                ai_signals=prev.ai_signals))
             continue
         try:
             ev = _run_auto_evaluation(db, submission, rubric, use_rubric_model=payload.use_rubric_model,
@@ -2440,7 +2456,8 @@ def auto_evaluate_assignment(
             recommended_score=ev.recommended_score, recommended_max=ev.recommended_max,
             grader=ev.grader, model=ev.model, review_flags=list(ev.review_flags or []),
             similarity_flagged=ev.similarity_flagged,
-            ai_flagged=_ai_flagged(ev.code_ai_flagged, ev.report_ai_signal)))
+            ai_flagged=_ai_flagged(ev.code_ai_flagged, ev.report_ai_signal),
+            ai_signals=ev.ai_signals))
 
     def _count(status: str) -> int:
         return sum(1 for r in results if r.status == status)
