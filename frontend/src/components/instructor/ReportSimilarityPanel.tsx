@@ -80,7 +80,7 @@ export default function ReportSimilarityPanel({
 
   return (
     <div className="mt-6 border-t border-gray-200 pt-4">
-      <h3 className="font-bold">Report similarity (PDF)</h3>
+      <h3 className="font-bold">Report Similarity (PDF) Check</h3>
       <p className="mt-1 text-sm text-gray-600">
         Compares the PDF reports of the selected assignment: identical passages and similar meaning. Page numbers,
         running headers/footers and text that appears in most reports (such as the assignment brief) are ignored.
