@@ -10,12 +10,26 @@ import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import SubmissionFiles from "@/components/SubmissionFiles";
 
 const fileInput = "mt-1 mb-3 block w-full text-sm";
-const CODE_ACCEPT = ".zip,.py,.java,.js,.ts,.jsx,.tsx,.c,.cpp,.h,.hpp,.cs,.go,.rb,.kt,.swift,.php,.rs";
+// Languages the code checks read. Must match _ANALYZED_EXTENSIONS in the backend
+// (app/main.py), which refuses any other code file at upload.
+const CODE_LANGUAGES: { name: string; extensions: string[] }[] = [
+  { name: "Python", extensions: [".py", ".ipynb"] },
+  { name: "Java", extensions: [".java"] },
+  { name: "JavaScript", extensions: [".js"] },
+  { name: "C", extensions: [".c", ".h"] },
+  { name: "C++", extensions: [".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx"] },
+  { name: "C#", extensions: [".cs"] },
+  { name: "Go", extensions: [".go"] },
+  { name: "Ruby", extensions: [".rb"] },
+  { name: "PHP", extensions: [".php"] },
+];
+const CODE_EXTENSIONS = [".zip", ...CODE_LANGUAGES.flatMap((l) => l.extensions)];
+const CODE_ACCEPT = CODE_EXTENSIONS.join(",");
 const REPORT_ACCEPT = ".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const VIDEO_ACCEPT = ".mp4,.mov,.avi,.mkv,.webm,.m4v,video/*";
 // Shown under each upload field. These must match the backend limits in app/main.py.
 const UPLOAD_HINTS = {
-  code: "A single source file (.py, .java, .js, .c, .cpp and more) or a .zip. Max 50 MB; a .zip may unpack to at most 200 MB.",
+  code: "A single source file in one of the languages above, or a .zip. Max 50 MB; a .zip may unpack to at most 200 MB.",
   report: "PDF or DOCX. Max 25 MB.",
   video: "MP4, MOV, AVI, MKV, WEBM or M4V. Max 1 GB.",
 };
@@ -46,7 +60,18 @@ function UploadForm({
     e.preventDefault();
     setMessage(null);
     const formData = new FormData();
-    if (codeRef.current?.files?.[0]) formData.append("code", codeRef.current.files[0]);
+    const codeFile = codeRef.current?.files?.[0];
+    if (codeFile) {
+      const ext = codeFile.name.includes(".") ? codeFile.name.slice(codeFile.name.lastIndexOf(".")).toLowerCase() : "";
+      if (!CODE_EXTENSIONS.includes(ext)) {
+        setMessage({
+          text: `"${codeFile.name}" can't be checked: ${ext || "files without an extension"} is not a supported language. Upload a .zip or one file in a language listed under the Code field.`,
+          kind: "error",
+        });
+        return;
+      }
+      formData.append("code", codeFile);
+    }
     if (reportRef.current?.files?.[0]) formData.append("report", reportRef.current.files[0]);
     if (videoRef.current?.files?.[0]) formData.append("video", videoRef.current.files[0]);
     if (![...formData.keys()].length) {
@@ -88,7 +113,28 @@ function UploadForm({
           <label className="block text-sm font-semibold" htmlFor={id("code")}>
             Code (zip or single file)
           </label>
-          <input id={id("code")} type="file" ref={codeRef} accept={CODE_ACCEPT} className={fileInput} />
+          <div id={id("code-help")} className="mt-1 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-700">
+            <p className="font-semibold">Accepted languages</p>
+            <ul className="mt-1 grid gap-x-4 gap-y-0.5 sm:grid-cols-3">
+              {CODE_LANGUAGES.map((l) => (
+                <li key={l.name}>
+                  {l.name} <span className="text-gray-500">({l.extensions.join(", ")})</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1 text-gray-600">
+              A .zip may also contain other files (README, data), but it must include code in one of these
+              languages. Other languages, such as TypeScript, Kotlin, Swift or Rust, are not accepted yet.
+            </p>
+          </div>
+          <input
+            id={id("code")}
+            type="file"
+            ref={codeRef}
+            accept={CODE_ACCEPT}
+            aria-describedby={id("code-help")}
+            className={fileInput}
+          />
           <p className="mb-3 text-xs text-gray-500">{UPLOAD_HINTS.code}</p>
         </>
       )}

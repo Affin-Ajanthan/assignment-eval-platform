@@ -59,6 +59,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable, Protocol
 
+from ..notebook import NOTEBOOK_SUFFIX, notebook_code, notebook_markdown
+
 log = logging.getLogger(__name__)
 
 MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
@@ -197,7 +199,14 @@ def extract_code_documentation(code_dir: Path) -> str:
     for path in sorted(Path(code_dir).rglob("*")):
         if not path.is_file():
             continue
-        if path.suffix.lower() in CODE_EXTENSIONS:
+        if path.suffix.lower() == NOTEBOOK_SUFFIX:
+            # Comments in the code cells plus the markdown cells (the student's own explanations).
+            raw = path.read_text(encoding="utf-8", errors="ignore")
+            doc = "\n".join(part for part in (
+                extract_documentation(notebook_code(raw), path.name + ".py"),
+                markdown_to_text(notebook_markdown(raw)[:README_MAX_CHARS]),
+            ) if part)
+        elif path.suffix.lower() in CODE_EXTENSIONS:
             doc = extract_documentation(path.read_text(encoding="utf-8", errors="ignore"), path.name)
         elif _is_readme(path):
             doc = markdown_to_text(path.read_text(encoding="utf-8", errors="ignore")[:README_MAX_CHARS])

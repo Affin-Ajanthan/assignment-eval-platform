@@ -20,7 +20,7 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
-from app.db import BASE_DIR, UPLOAD_DIR
+from app.db import BASE_DIR, PROJECT_DIR, UPLOAD_DIR
 from app.evaluator import document_extraction as dx
 from app.evaluator.document_extraction import (
     EXTRACTED_MARKDOWN_NAME,
@@ -388,7 +388,7 @@ def test_crafted_filenames_cannot_escape_the_submission_folder():
         new_dir = UPLOAD_DIR / (_upload_dirs() - before).pop()
         written = [p for p in new_dir.rglob("*") if p.is_file()]
         assert len(written) == 1 and written[0].parent == new_dir / "code"
-    assert (BASE_DIR / "app" / "main.py").read_text(encoding="utf-8").startswith('"""')
+    assert (PROJECT_DIR / "app" / "main.py").read_text(encoding="utf-8").startswith('"""')
 
 
 def test_zip_entries_pointing_outside_are_skipped():
@@ -409,7 +409,7 @@ def test_zip_entries_pointing_outside_are_skipped():
 def test_invalid_code_and_video_types_are_rejected():
     subject, _, student_tok, _ = _setup()
     r = _submit(student_tok, subject["id"], {"code": ("tool.exe", io.BytesIO(b"MZ"), "application/octet-stream")})
-    assert r.status_code == 400 and "source-code" in r.json()["detail"]
+    assert r.status_code == 400 and "not a supported language" in r.json()["detail"]
     r = _submit(student_tok, subject["id"], {"video": ("talk.exe", io.BytesIO(b"MZ"), "application/octet-stream")})
     assert r.status_code == 400 and "MP4" in r.json()["detail"]
     r = _submit(student_tok, subject["id"], {"code": ("project.zip", io.BytesIO(b"not a zip"), "application/zip")})
