@@ -461,7 +461,8 @@ rejection), covering the same flow the automated backend tests cover.
   (default 32768, the Qwen3 model card's recommended output length). The
   large window needs several GB of extra memory; lower both variables
   (e.g. 8192 / 2000) on a machine with little GPU memory. Sampling follows the Qwen3 model card's non-thinking
-  settings (temperature 0.7, top_p 0.8, top_k 20, min_p 0), so grading the
+  settings (temperature 0.7, top_p 0.8, top_k 20, min_p 0, plus
+  presence_penalty 0.5 against repetition, `OLLAMA_PRESENCE_PENALTY`), so grading the
   same submission twice can give slightly different marks; set
   `OLLAMA_TEMPERATURE=0` for repeatable marks. A timed-out or malformed reply is retried once before
   the submission is marked failed. In our evaluation, qwen3:4b tended to grade strong

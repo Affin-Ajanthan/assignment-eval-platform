@@ -498,6 +498,9 @@ OLLAMA_SAMPLING = {
     "top_p": 0.8,
     "top_k": 20,
     "min_p": 0,
+    # The card suggests 0-2 against endless repetition; higher values can mix
+    # languages into the reply, so stay low.
+    "presence_penalty": float(os.environ.get("OLLAMA_PRESENCE_PENALTY", "0.5")),
 }
 
 

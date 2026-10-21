@@ -116,6 +116,7 @@ def test_ollama_grader_parses_json_reply_and_requests_qwen3():
     assert payload["model"] == "qwen3:8b"
     assert payload["options"]["temperature"] == rubric_grading.OLLAMA_SAMPLING["temperature"]
     assert payload["options"]["top_p"] == 0.8 and payload["options"]["top_k"] == 20
+    assert payload["options"]["presence_penalty"] == rubric_grading.OLLAMA_SAMPLING["presence_penalty"]
     assert payload["options"]["num_ctx"] == OLLAMA_NUM_CTX
     assert payload["think"] is False
 
