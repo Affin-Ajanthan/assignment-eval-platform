@@ -319,9 +319,8 @@ _SCORING_SCALE = (
 )
 
 
-# Prompt budgets in characters. They keep the prompt within the 8192 tokens of
-# num_ctx left over after the reply; which parts fill them depends on the
-# criteria, not on position.
+# Prompt budgets in characters. They bound the prompt size (num_ctx is 8192
+# tokens); which parts fill them depends on the criteria, not on position.
 CODE_BUDGET = 8000
 REPORT_BUDGET = 6000
 TRANSCRIPT_BUDGET = 3000
@@ -483,13 +482,15 @@ def _build_prompt(criteria: list[Criterion], evidence: Evidence) -> str:
 
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3:8b")
-# Longest reply allowed per call: the output length the Qwen3 model card
-# recommends. The JSON reply itself is a few hundred tokens.
-OLLAMA_NUM_PREDICT = int(os.environ.get("OLLAMA_NUM_PREDICT", "32768"))
+# Longest reply allowed per call. The JSON reply is ~900 tokens for an 11-criterion
+# rubric; without a cap, a runaway reply keeps the call going until it times out.
+# (The Qwen3 card's 32768 is meant for thinking mode, which is off here.)
+OLLAMA_NUM_PREDICT = int(os.environ.get("OLLAMA_NUM_PREDICT", "2000"))
 # Context window requested for every call. It must hold the prompt AND the reply,
-# or Ollama drops the start of the prompt. 40960 is Qwen3's configured window:
-# 32768 for the reply plus 8192 for the prompt (the rubric prompt is ~5k tokens).
-OLLAMA_NUM_CTX = int(os.environ.get("OLLAMA_NUM_CTX", "40960"))
+# or Ollama drops the start of the prompt. The rubric prompt is ~5k tokens, so
+# prompt + reply is ~6k. Qwen3's full 40960 window was measured ~75% slower on a
+# 6 GB GPU (more of the model is pushed onto the CPU) for no benefit.
+OLLAMA_NUM_CTX = int(os.environ.get("OLLAMA_NUM_CTX", "8192"))
 # Sampling settings the Qwen3 model card recommends for non-thinking mode
 # (every call sends think=False). Greedy decoding (temperature 0) is discouraged
 # by the card; set OLLAMA_TEMPERATURE=0 to get repeatable marks back.

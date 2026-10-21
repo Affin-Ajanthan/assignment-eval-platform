@@ -456,11 +456,11 @@ rejection), covering the same flow the automated backend tests cover.
   correctly") can be under-scored. When any input is cut, the submission
   gets a review flag so the instructor checks the marks for those
   criteria. Each grading call requests a context window of
-  `OLLAMA_NUM_CTX` tokens (default 40960) so the prompt is not silently
+  `OLLAMA_NUM_CTX` tokens (default 8192) so the prompt is not silently
   cut off by Ollama, and a reply of at most `OLLAMA_NUM_PREDICT` tokens
-  (default 32768, the Qwen3 model card's recommended output length). The
-  large window needs several GB of extra memory; lower both variables
-  (e.g. 8192 / 2000) on a machine with little GPU memory. Sampling follows the Qwen3 model card's non-thinking
+  (default 2000). A grading prompt plus reply is about 6,200 tokens. The
+  Qwen3 model card's larger values (40960 / 32768) were measured about 75%
+  slower on a 6 GB GPU with no benefit, so they are not the default. Sampling follows the Qwen3 model card's non-thinking
   settings (temperature 0.7, top_p 0.8, top_k 20, min_p 0, plus
   presence_penalty 0.5 against repetition, `OLLAMA_PRESENCE_PENALTY`), so grading the
   same submission twice can give slightly different marks; set
