@@ -363,7 +363,9 @@ class SubmissionOut(BaseModel):
 
 class GradeIn(BaseModel):
     rubric_id: int
-    criterion_scores: dict[str, float]
+    criterion_scores: dict[str, float] = Field(default_factory=dict)
+    # Final mark only, without per-criterion marks. Send this OR criterion_scores.
+    total_score: Optional[float] = None
     comments: Optional[str] = None
 
 
@@ -1936,19 +1938,32 @@ def grade_submission(
     if rubric.subject_id != submission.subject_id:
         raise HTTPException(400, "That rubric belongs to a different subject than this submission")
 
-    valid_names = {c["name"] for c in rubric.criteria}
-    max_points = {c["name"]: c["max_points"] for c in rubric.criteria}
-    unknown = set(payload.criterion_scores) - valid_names
-    if unknown:
-        raise HTTPException(400, f"Unknown criteria for this rubric: {sorted(unknown)}")
-    for name, score in payload.criterion_scores.items():
-        if score < 0 or score > max_points[name]:
+    if payload.total_score is not None:
+        # Final mark only: no per-criterion marks are stored, rather than
+        # inventing a split the instructor never decided.
+        if payload.criterion_scores:
+            raise HTTPException(400, "Send either criterion_scores or total_score, not both")
+        if payload.total_score < 0 or payload.total_score > rubric.max_total:
             raise HTTPException(
                 400,
-                f"Score for '{name}' must be between 0 and {max_points[name]}, got {score}",
+                f"Final mark must be between 0 and {rubric.max_total}, got {payload.total_score}",
             )
+        total = payload.total_score
+    else:
+        valid_names = {c["name"] for c in rubric.criteria}
+        max_points = {c["name"]: c["max_points"] for c in rubric.criteria}
+        unknown = set(payload.criterion_scores) - valid_names
+        if unknown:
+            raise HTTPException(400, f"Unknown criteria for this rubric: {sorted(unknown)}")
+        for name, score in payload.criterion_scores.items():
+            if score < 0 or score > max_points[name]:
+                raise HTTPException(
+                    400,
+                    f"Score for '{name}' must be between 0 and {max_points[name]}, got {score}",
+                )
+        total = sum(payload.criterion_scores.values())
 
-    total = sum(payload.criterion_scores.values())
+
     grade = Grade(
         submission_id=submission_id,
         rubric_id=payload.rubric_id,

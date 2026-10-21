@@ -8,6 +8,7 @@ import {
   Rubric,
   SimilarityCheckResult,
   Submission,
+  SubmissionFile,
 } from "@/lib/api";
 import { useRequireRole } from "@/lib/useRequireRole";
 import AccountBar from "@/components/AccountBar";
@@ -26,6 +27,17 @@ import RubricModelToggle, {
 import RubricsSection from "@/components/instructor/RubricsSection";
 import { formatDateTime, formatMark } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
+
+/** Inline error for one criterion's mark, or null when it is fine. An empty box
+ * is not an error (it is saved as 0). */
+function scoreError(value: string | undefined, maxPoints: number): string | null {
+  if (value === undefined || value.trim() === "") return null;
+  const score = Number(value);
+  if (!Number.isFinite(score)) return "Enter a number.";
+  if (score < 0) return "Can't be below 0.";
+  if (score > maxPoints) return `Max is ${maxPoints}.`;
+  return null;
+}
 
 export default function InstructorPage() {
   const { user, ready } = useRequireRole("instructor");
@@ -61,12 +73,15 @@ export default function InstructorPage() {
   // Grading panel
   const [gradingSubmissionId, setGradingSubmissionId] = useState<number | null>(null);
   // Which submission's uploaded files are expanded in the submissions table.
-  const [filesOpenFor, setFilesOpenFor] = useState<number | null>(null);
+  const [filesOpenFor, setFilesOpenFor] = useState<{ id: number; kind: SubmissionFile["kind"] } | null>(null);
   // Which assignment's submissions the table shows: "all", "a:<assignment id>",
   // or "n:<name>" for submissions whose assignment was deleted (kept as records).
   const [submissionFilter, setSubmissionFilter] = useState("all");
   const [gradingRubricId, setGradingRubricId] = useState<number | null>(null);
   const [criterionScores, setCriterionScores] = useState<Record<string, string>>({});
+  // "final": one overall mark (e.g. 70 / 100) instead of a mark per criterion.
+  const [gradingMode, setGradingMode] = useState<"criteria" | "final">("criteria");
+  const [finalMark, setFinalMark] = useState("");
   const [gradingComments, setGradingComments] = useState("");
   const [gradingMsg, setGradingMsg] = useState<MessageState>(null);
   // Same as the auto-evaluation panel: scroll the grading panel into view when it is opened.
@@ -236,22 +251,38 @@ export default function InstructorPage() {
     const assignmentRubric = assignments.find((a) => a.id === submission?.assignment_id)?.rubric_id ?? null;
     setGradingRubricId(rubricId ?? assignmentRubric ?? rubrics[0]?.id ?? null);
     setCriterionScores(prefill);
+    setGradingMode("criteria");
+    setFinalMark("");
     setGradingScrollRequest((n) => n + 1);
   }
 
   const gradingRubric = rubrics.find((r) => r.id === gradingRubricId) || null;
+  const scoreErrors: Record<string, string> = {};
+  for (const c of gradingRubric?.criteria ?? []) {
+    const error = scoreError(criterionScores[c.name], c.max_points);
+    if (error) scoreErrors[c.name] = error;
+  }
+  const finalMarkError = scoreError(finalMark, gradingRubric?.max_total ?? 0);
+  const cannotSave =
+    gradingMode === "final" ? finalMark.trim() === "" || finalMarkError !== null : Object.keys(scoreErrors).length > 0;
 
   async function handleSaveGrade() {
-    if (gradingSubmissionId === null || gradingRubricId === null) return;
+    if (gradingSubmissionId === null || gradingRubricId === null || cannotSave) return;
     setGradingMsg(null);
-    const scores: Record<string, number> = {};
-    for (const c of gradingRubric?.criteria ?? []) {
-      scores[c.name] = parseFloat(criterionScores[c.name] || "0");
+    let marks: { criterion_scores: Record<string, number> } | { total_score: number };
+    if (gradingMode === "final") {
+      marks = { total_score: Number(finalMark) };
+    } else {
+      const scores: Record<string, number> = {};
+      for (const c of gradingRubric?.criteria ?? []) {
+        scores[c.name] = parseFloat(criterionScores[c.name] || "0");
+      }
+      marks = { criterion_scores: scores };
     }
     try {
       await apiFetch(`/submissions/${gradingSubmissionId}/grade`, {
         method: "POST",
-        json: { rubric_id: gradingRubricId, criterion_scores: scores, comments: gradingComments },
+        json: { rubric_id: gradingRubricId, ...marks, comments: gradingComments },
       });
       setGradingMsg({ text: "Grade saved.", kind: "success" });
       if (subjectId !== null) await loadSubmissions(subjectId);
@@ -545,7 +576,7 @@ export default function InstructorPage() {
                   <th className="border border-gray-200 px-3 py-1.5">Submitted</th>
                   <th className="border border-gray-200 px-3 py-1.5">Status</th>
                   <th className="border border-gray-200 px-3 py-1.5">Mark</th>
-                  <th className="border border-gray-200 px-3 py-1.5"></th>
+                  <th className="border border-gray-200 px-3 py-1.5">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -570,11 +601,23 @@ export default function InstructorPage() {
                         <span className="text-gray-400">none</span>
                       ) : (
                         <div className="flex flex-wrap gap-1">
-                          {s.submitted_types.map((kind) => (
-                            <span key={kind} className="rounded bg-blue-50 px-2 py-0.5 text-xs font-semibold capitalize text-blue-800">
-                              {kind}
-                            </span>
-                          ))}
+                          {s.submitted_types.map((kind) => {
+                            const open = filesOpenFor?.id === s.id && filesOpenFor.kind === kind;
+                            return (
+                              <button
+                                key={kind}
+                                type="button"
+                                aria-expanded={open}
+                                title={open ? `Hide ${kind} files` : `Open ${kind} files`}
+                                onClick={() => setFilesOpenFor(open ? null : { id: s.id, kind })}
+                                className={`rounded px-2 py-0.5 text-xs font-semibold capitalize underline-offset-2 hover:underline ${
+                                  open ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-800 hover:bg-blue-100"
+                                }`}
+                              >
+                                {kind}
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
                     </td>
@@ -589,36 +632,41 @@ export default function InstructorPage() {
                       </span>
                     </td>
                     <td className="border border-gray-200 px-3 py-1.5">{formatMark(s.final_mark, s.max_mark)}</td>
-                    <td className="space-x-1 border border-gray-200 px-3 py-1.5">
-                      <button
-                        type="button"
-                        onClick={() => openGradingPanel(s.id)}
-                        className="rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700"
-                      >
-                        {s.status === "graded" ? "Re-grade" : "Grade"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openAutoevalPanel(s.id)}
-                        className="rounded-md bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700"
-                      >
-                        Auto-evaluate
-                      </button>
-                      <button
-                        type="button"
-                        aria-expanded={filesOpenFor === s.id}
-                        onClick={() => setFilesOpenFor(filesOpenFor === s.id ? null : s.id)}
-                        className="rounded-md bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700"
-                      >
-                        {filesOpenFor === s.id ? "Hide files" : "Files"}
-                      </button>
+                    <td className="border border-gray-200 px-3 py-1.5">
+                      <div className="flex gap-1 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => openGradingPanel(s.id)}
+                          className="rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+                        >
+                          {s.status === "graded" ? "Re-grade" : "Grade"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openAutoevalPanel(s.id)}
+                          className="rounded-md bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700"
+                        >
+                          Auto-evaluate
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                  {filesOpenFor === s.id && (
+                  {filesOpenFor?.id === s.id && (
                     <tr>
                       <td colSpan={7} className="border border-gray-200 bg-white px-3 py-3">
-                        <p className="mb-2 text-sm font-semibold">Files submitted by {s.student_name}</p>
-                        <SubmissionFiles submissionId={s.id} />
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold">
+                            <span className="capitalize">{filesOpenFor.kind}</span> submitted by {s.student_name}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setFilesOpenFor(null)}
+                            className="rounded-md bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700"
+                          >
+                            Close
+                          </button>
+                        </div>
+                        <SubmissionFiles key={filesOpenFor.kind} submissionId={s.id} kind={filesOpenFor.kind} />
                       </td>
                     </tr>
                   )}
@@ -750,36 +798,113 @@ export default function InstructorPage() {
                 ))}
               </select>
 
-              <div className="space-y-2">
-                {gradingRubric?.criteria.map((c) => (
-                  <div key={c.name} className="flex items-center gap-3">
-                    <label className="flex-1 text-sm">
-                      {c.name}{" "}
-                      <small className="text-gray-500">
-                        ({c.description || "no description"}, max {c.max_points})
-                      </small>
-                    </label>
+              <fieldset className="mb-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2">
+                <legend className="sr-only">How to grade</legend>
+                <div className="flex flex-wrap gap-4 text-sm">
+                  <label className="flex items-center gap-1.5">
                     <input
-                      type="number"
-                      min={0}
-                      max={c.max_points}
-                      step={0.5}
-                      value={criterionScores[c.name] ?? ""}
-                      onChange={(e) => setCriterionScores((prev) => ({ ...prev, [c.name]: e.target.value }))}
-                      className="w-24 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                      type="radio"
+                      name="grading-mode"
+                      checked={gradingMode === "criteria"}
+                      onChange={() => setGradingMode("criteria")}
                     />
+                    Mark each criterion
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      name="grading-mode"
+                      checked={gradingMode === "final"}
+                      onChange={() => setGradingMode("final")}
+                    />
+                    Final mark only
+                  </label>
+                </div>
+                {gradingMode === "final" && (
+                  <div className="mt-2">
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm font-semibold" htmlFor="final-mark">
+                        Final mark
+                      </label>
+                      <input
+                        id="final-mark"
+                        type="text"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        value={finalMark}
+                        placeholder="70"
+                        aria-invalid={Boolean(finalMarkError)}
+                        aria-describedby={finalMarkError ? "final-mark-error" : undefined}
+                        onChange={(e) => setFinalMark(e.target.value)}
+                        className={`w-24 rounded-md border px-2 py-1.5 text-sm ${
+                          finalMarkError ? "border-red-500 bg-red-50" : "border-gray-300"
+                        }`}
+                      />
+                      <span className="text-sm">/ {gradingRubric?.max_total ?? 0}</span>
+                    </div>
+                    {finalMarkError && (
+                      <p id="final-mark-error" className="mt-1 text-xs text-red-700">
+                        {finalMarkError}
+                      </p>
+                    )}
+                    <p className="mt-1 text-xs text-gray-600">
+                      No per-criterion marks are saved. Students see only this final mark.
+                    </p>
                   </div>
-                ))}
-              </div>
+                )}
+              </fieldset>
 
-              <p className="mt-3 text-sm font-semibold">
-                Final mark:{" "}
-                {(gradingRubric?.criteria ?? []).reduce((sum, c) => sum + (parseFloat(criterionScores[c.name]) || 0), 0)} /{" "}
-                {gradingRubric?.max_total ?? 0}
-                <span className="ml-2 text-xs font-normal text-gray-500">
-                  Students see only this final mark, not the per-criterion scores or comments.
-                </span>
-              </p>
+              {gradingMode === "criteria" && (
+                <>
+                  <div className="space-y-2">
+                    {gradingRubric?.criteria.map((c) => {
+                      const error = scoreErrors[c.name];
+                      const inputId = `score-${c.name}`;
+                      return (
+                        <div key={c.name} className="flex items-start gap-3">
+                          <label className="flex-1 pt-1.5 text-sm" htmlFor={inputId}>
+                            {c.name}{" "}
+                            <small className="text-gray-500">
+                              ({c.description || "no description"}, max {c.max_points})
+                            </small>
+                          </label>
+                          <div className="w-28 shrink-0">
+                            <input
+                              id={inputId}
+                              // Text, not type="number": a number box reports "abc" as empty,
+                              // which would hide the error and save 0.
+                              type="text"
+                              inputMode="decimal"
+                              autoComplete="off"
+                              value={criterionScores[c.name] ?? ""}
+                              aria-invalid={Boolean(error)}
+                              aria-describedby={error ? `${inputId}-error` : undefined}
+                              onChange={(e) => setCriterionScores((prev) => ({ ...prev, [c.name]: e.target.value }))}
+                              className={`w-full rounded-md border px-2 py-1.5 text-sm ${
+                                error ? "border-red-500 bg-red-50" : "border-gray-300"
+                              }`}
+                            />
+                            {error && (
+                              <p id={`${inputId}-error`} className="mt-1 text-xs text-red-700">
+                                {error}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <p className="mt-3 text-sm font-semibold">
+                    Final mark:{" "}
+                    {(gradingRubric?.criteria ?? []).reduce((sum, c) => sum + (parseFloat(criterionScores[c.name]) || 0), 0)} /{" "}
+                    {gradingRubric?.max_total ?? 0}
+                    <span className="ml-2 text-xs font-normal text-gray-500">
+                      Students see only this final mark, not the per-criterion scores or comments.
+                    </span>
+                  </p>
+                </>
+              )}
 
               <label className="mt-3 block text-sm font-semibold" htmlFor="grading-comments">
                 Comments (internal)
@@ -797,7 +922,15 @@ export default function InstructorPage() {
                 <button
                   type="button"
                   onClick={handleSaveGrade}
-                  className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                  disabled={cannotSave}
+                  title={
+                    cannotSave
+                      ? gradingMode === "final" && finalMark.trim() === ""
+                        ? "Enter the final mark first"
+                        : "Fix the marks shown in red first"
+                      : undefined
+                  }
+                  className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Save grade
                 </button>

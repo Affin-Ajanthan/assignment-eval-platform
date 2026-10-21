@@ -172,3 +172,43 @@ def test_grade_rejects_out_of_range_score():
         headers=auth_headers(instructor_tok),
     )
     assert r.status_code == 400
+
+
+def _two_criteria_submission(assignment_name):
+    subject, instructor_tok, student_tok = setup_subject_with_users(client)
+    rubric = client.post(
+        "/rubrics",
+        json={"name": "Final mark rubric", "subject_id": subject["id"], "criteria": [
+            {"name": "Correctness", "max_points": 70}, {"name": "Report", "max_points": 30}]},
+        headers=auth_headers(instructor_tok),
+    ).json()
+    submission = client.post(
+        "/submissions",
+        data={"subject_id": subject["id"], "assignment_id": ensure_assignment(client, subject["id"], assignment_name)["id"]},
+        files={"code": ("solution.py", io.BytesIO(b"x = 1"), "text/x-python")},
+        headers=auth_headers(student_tok),
+    ).json()
+    return rubric, submission, instructor_tok, student_tok
+
+
+def test_grade_with_final_mark_only():
+    rubric, submission, instructor_tok, student_tok = _two_criteria_submission("Assignment F")
+    r = client.post(
+        f"/submissions/{submission['id']}/grade",
+        json={"rubric_id": rubric["id"], "total_score": 70, "comments": "Overall judgement"},
+        headers=auth_headers(instructor_tok),
+    )
+    assert r.status_code == 200
+    assert r.json()["total_score"] == 70
+    assert r.json()["criterion_scores"] == {}  # no invented per-criterion split
+    mine = client.get("/submissions", headers=auth_headers(student_tok)).json()
+    assert [(s["final_mark"], s["max_mark"]) for s in mine] == [(70, 100)]
+
+
+def test_grade_final_mark_rejects_out_of_range_and_mixed_input():
+    rubric, submission, instructor_tok, _ = _two_criteria_submission("Assignment G")
+    url = f"/submissions/{submission['id']}/grade"
+    for body in ({"total_score": 101}, {"total_score": -1},
+                 {"total_score": 50, "criterion_scores": {"Correctness": 50}}):
+        r = client.post(url, json={"rubric_id": rubric["id"], **body}, headers=auth_headers(instructor_tok))
+        assert r.status_code == 400, body

@@ -28,8 +28,15 @@ function formatSize(bytes: number): string {
 }
 
 /** Lists a submission's uploaded files with View / Open / Download. The API
- * decides who may see them (the owning student, the subject's instructors). */
-export default function SubmissionFiles({ submissionId }: { submissionId: number }) {
+ * decides who may see them (the owning student, the subject's instructors).
+ * With `kind`, only that kind of file is listed. */
+export default function SubmissionFiles({
+  submissionId,
+  kind: onlyKind,
+}: {
+  submissionId: number;
+  kind?: SubmissionFile["kind"];
+}) {
   const [files, setFiles] = useState<SubmissionFile[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -87,13 +94,18 @@ export default function SubmissionFiles({ submissionId }: { submissionId: number
   if (!files) return <p className="text-sm text-gray-500">Loading files...</p>;
   if (files.length === 0) return <p className="text-sm text-gray-600">No files found for this submission.</p>;
 
-  const kinds = (Object.keys(KIND_LABEL) as SubmissionFile["kind"][]).filter((k) => files.some((f) => f.kind === k));
+  const kinds = (Object.keys(KIND_LABEL) as SubmissionFile["kind"][]).filter(
+    (k) => (!onlyKind || k === onlyKind) && files.some((f) => f.kind === k),
+  );
+  if (kinds.length === 0) {
+    return <p className="text-sm text-gray-600">No {KIND_LABEL[onlyKind!].toLowerCase()} files found for this submission.</p>;
+  }
 
   return (
     <div className="space-y-3" data-testid="submission-files">
       {kinds.map((kind) => (
         <div key={kind}>
-          <p className="text-sm font-semibold">{KIND_LABEL[kind]}</p>
+          {!onlyKind && <p className="text-sm font-semibold">{KIND_LABEL[kind]}</p>}
           <ul className="mt-1 space-y-1">
             {files
               .filter((f) => f.kind === kind)
