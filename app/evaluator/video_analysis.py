@@ -39,7 +39,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .rubric_grading import OLLAMA_SAMPLING, OLLAMA_URL, _ollama_available, _ollama_post
+from .rubric_grading import (OLLAMA_NUM_CTX, OLLAMA_NUM_PREDICT, OLLAMA_SAMPLING, OLLAMA_URL,
+                             _ollama_available, _ollama_post)
 
 logger = logging.getLogger(__name__)
 
@@ -331,7 +332,8 @@ class OllamaFrameDescriber(FrameDescriber):
                 }],
                 "stream": False,
                 "think": False,
-                "options": {**OLLAMA_SAMPLING, "num_predict": 160},
+                "options": {**OLLAMA_SAMPLING, "num_ctx": OLLAMA_NUM_CTX,
+                            "num_predict": OLLAMA_NUM_PREDICT},
             }
             try:
                 reply = self.post(f"{self.url}/api/chat", payload, self.timeout)
