@@ -262,6 +262,11 @@ export default function InstructorPage() {
     const error = scoreError(criterionScores[c.name], c.max_points);
     if (error) scoreErrors[c.name] = error;
   }
+  // Running total of the valid marks only; an invalid mark adds nothing until it is fixed.
+  const criteriaTotal = (gradingRubric?.criteria ?? []).reduce(
+    (sum, c) => sum + (scoreErrors[c.name] ? 0 : Number(criterionScores[c.name] || 0)),
+    0,
+  );
   const finalMarkError = scoreError(finalMark, gradingRubric?.max_total ?? 0);
   const cannotSave =
     gradingMode === "final" ? finalMark.trim() === "" || finalMarkError !== null : Object.keys(scoreErrors).length > 0;
@@ -798,9 +803,16 @@ export default function InstructorPage() {
                 ))}
               </select>
 
-              <fieldset className="mb-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2">
-                <legend className="sr-only">How to grade</legend>
-                <div className="flex flex-wrap gap-4 text-sm">
+              {/* A plain div, not <fieldset>: browsers draw a fieldset's border through its legend. */}
+              <div
+                role="radiogroup"
+                aria-labelledby="grading-mode-label"
+                className="mb-3 rounded-md border border-blue-100 bg-blue-50 p-3"
+              >
+                <p id="grading-mode-label" className="text-sm font-semibold">
+                  How to grade
+                </p>
+                <div className="mt-2 flex flex-wrap gap-4 text-sm">
                   <label className="flex items-center gap-1.5">
                     <input
                       type="radio"
@@ -832,7 +844,7 @@ export default function InstructorPage() {
                         inputMode="decimal"
                         autoComplete="off"
                         value={finalMark}
-                        placeholder="70"
+                        placeholder={`max ${gradingRubric?.max_total ?? 0}`}
                         aria-invalid={Boolean(finalMarkError)}
                         aria-describedby={finalMarkError ? "final-mark-error" : undefined}
                         onChange={(e) => setFinalMark(e.target.value)}
@@ -852,7 +864,7 @@ export default function InstructorPage() {
                     </p>
                   </div>
                 )}
-              </fieldset>
+              </div>
 
               {gradingMode === "criteria" && (
                 <>
@@ -877,6 +889,7 @@ export default function InstructorPage() {
                               inputMode="decimal"
                               autoComplete="off"
                               value={criterionScores[c.name] ?? ""}
+                              placeholder={`max ${c.max_points}`}
                               aria-invalid={Boolean(error)}
                               aria-describedby={error ? `${inputId}-error` : undefined}
                               onChange={(e) => setCriterionScores((prev) => ({ ...prev, [c.name]: e.target.value }))}
@@ -897,8 +910,10 @@ export default function InstructorPage() {
 
                   <p className="mt-3 text-sm font-semibold">
                     Final mark:{" "}
-                    {(gradingRubric?.criteria ?? []).reduce((sum, c) => sum + (parseFloat(criterionScores[c.name]) || 0), 0)} /{" "}
-                    {gradingRubric?.max_total ?? 0}
+                    {criteriaTotal} / {gradingRubric?.max_total ?? 0}
+                    {Object.keys(scoreErrors).length > 0 && (
+                      <span className="ml-2 text-xs font-normal text-red-700">Marks shown in red are not counted.</span>
+                    )}
                     <span className="ml-2 text-xs font-normal text-gray-500">
                       Students see only this final mark, not the per-criterion scores or comments.
                     </span>
