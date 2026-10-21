@@ -490,6 +490,15 @@ OLLAMA_NUM_CTX = int(os.environ.get("OLLAMA_NUM_CTX", "8192"))
 # Longest reply allowed per grading call. The JSON reply is a few hundred tokens;
 # without a cap, a runaway reply keeps the call going until the request times out.
 OLLAMA_NUM_PREDICT = int(os.environ.get("OLLAMA_NUM_PREDICT", "2000"))
+# Sampling settings the Qwen3 model card recommends for non-thinking mode
+# (every call sends think=False). Greedy decoding (temperature 0) is discouraged
+# by the card; set OLLAMA_TEMPERATURE=0 to get repeatable marks back.
+OLLAMA_SAMPLING = {
+    "temperature": float(os.environ.get("OLLAMA_TEMPERATURE", "0.7")),
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0,
+}
 
 
 def _ollama_post(url: str, payload: dict, timeout: float) -> dict:
@@ -565,7 +574,7 @@ class OllamaRubricGrader(RubricGrader):
                     "stream": False,
                     "think": False,
                     "format": _ollama_response_schema(),
-                    "options": {"temperature": 0, "num_ctx": OLLAMA_NUM_CTX,
+                    "options": {**OLLAMA_SAMPLING, "num_ctx": OLLAMA_NUM_CTX,
                                 "num_predict": OLLAMA_NUM_PREDICT},
                 }, self.timeout)
             except (TimeoutError, OSError) as exc:  # includes urllib timeouts and HTTP 500s

@@ -458,7 +458,10 @@ rejection), covering the same flow the automated backend tests cover.
   criteria. Each grading call requests a context window of
   `OLLAMA_NUM_CTX` tokens (default 8192) so the prompt is not silently
   cut off by Ollama, and a reply of at most `OLLAMA_NUM_PREDICT` tokens
-  (default 2000). A timed-out or malformed reply is retried once before
+  (default 2000). Sampling follows the Qwen3 model card's non-thinking
+  settings (temperature 0.7, top_p 0.8, top_k 20, min_p 0), so grading the
+  same submission twice can give slightly different marks; set
+  `OLLAMA_TEMPERATURE=0` for repeatable marks. A timed-out or malformed reply is retried once before
   the submission is marked failed. In our evaluation, qwen3:4b tended to grade strong
   answers slightly strictly in our evaluation (Mohler short-answer set,
   2,273 answers: MAE 0.82 marks out of 5, 81% within 1 mark, versus
