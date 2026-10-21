@@ -89,7 +89,8 @@ def test_describer_sends_each_frame_as_base64_to_the_vision_model():
     assert len(post.calls) == 2                       # one call per frame
     url, payload = post.calls[0]
     assert url.endswith("/api/chat") and payload["model"] == "qwen3-vl:4b"
-    assert payload["think"] is False and payload["options"]["temperature"] == 0
+    assert payload["think"] is False
+    assert payload["options"]["temperature"] == rubric_grading.OLLAMA_SAMPLING["temperature"]
     assert base64.b64decode(payload["messages"][0]["images"][0]) == b"\xff\xd8jpeg-one"
     assert "do not guess" in payload["messages"][0]["content"]
 

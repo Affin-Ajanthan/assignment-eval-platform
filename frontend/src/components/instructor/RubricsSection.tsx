@@ -239,7 +239,7 @@ export default function RubricsSection({
       <ul className="mt-2 space-y-3">
         {rubrics.map((r) => (
           <li key={r.id} className="rounded-md border border-gray-200 p-4" data-testid="rubric-card">
-            <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="flex items-start justify-between gap-3">
               {renaming?.rubricId === r.id ? (
                 <div className="flex flex-1 flex-wrap gap-2">
                   <input
@@ -264,8 +264,8 @@ export default function RubricsSection({
                   </button>
                 </div>
               ) : (
-                <div>
-                  <h4 className="font-bold">{r.name}</h4>
+                <div className="min-w-0 flex-1">
+                  <h4 className="break-words font-bold">{r.name}</h4>
                   <p className="text-sm text-gray-600">
                     {r.criteria.length} criteria · Total maximum points: <strong>{r.max_total}</strong>
                     {r.assignment_names.length > 0 && ` · Used by: ${r.assignment_names.join(", ")}`}
@@ -279,7 +279,7 @@ export default function RubricsSection({
                 </div>
               )}
               {renaming?.rubricId !== r.id && (
-                <div className="flex gap-2">
+                <div className="flex shrink-0 gap-2">
                   <button
                     type="button"
                     className={grayBtn}
@@ -344,13 +344,13 @@ export default function RubricsSection({
                       </div>
                     </>
                   ) : (
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
                         <p className="font-semibold">{c.name}</p>
-                        {c.description && <p className="text-sm text-gray-600">{c.description}</p>}
+                        {c.description && <p className="break-words text-sm text-gray-600">{c.description}</p>}
                         <p className="text-sm">Maximum points: {c.max_points}</p>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex shrink-0 gap-2">
                         <button
                           type="button"
                           className={grayBtn}

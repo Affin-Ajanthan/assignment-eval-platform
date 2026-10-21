@@ -482,14 +482,27 @@ def _build_prompt(criteria: list[Criterion], evidence: Evidence) -> str:
 
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3:8b")
-# Context window requested for every grading call. Ollama's default is smaller
-# than a full rubric prompt (source + report + transcript can reach ~5k tokens),
-# and Ollama silently drops the start of an over-long prompt. 8192 covers the
-# current input caps with room to spare.
-OLLAMA_NUM_CTX = int(os.environ.get("OLLAMA_NUM_CTX", "8192"))
-# Longest reply allowed per grading call. The JSON reply is a few hundred tokens;
-# without a cap, a runaway reply keeps the call going until the request times out.
+# Longest reply allowed per call. The JSON reply is ~900 tokens for an 11-criterion
+# rubric; without a cap, a runaway reply keeps the call going until it times out.
+# (The Qwen3 card's 32768 is meant for thinking mode, which is off here.)
 OLLAMA_NUM_PREDICT = int(os.environ.get("OLLAMA_NUM_PREDICT", "2000"))
+# Context window requested for every call. It must hold the prompt AND the reply,
+# or Ollama drops the start of the prompt. The rubric prompt is ~5k tokens, so
+# prompt + reply is ~6k. Qwen3's full 40960 window was measured ~75% slower on a
+# 6 GB GPU (more of the model is pushed onto the CPU) for no benefit.
+OLLAMA_NUM_CTX = int(os.environ.get("OLLAMA_NUM_CTX", "8192"))
+# Sampling settings the Qwen3 model card recommends for non-thinking mode
+# (every call sends think=False). Greedy decoding (temperature 0) is discouraged
+# by the card; set OLLAMA_TEMPERATURE=0 to get repeatable marks back.
+OLLAMA_SAMPLING = {
+    "temperature": float(os.environ.get("OLLAMA_TEMPERATURE", "0.7")),
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0,
+    # The card suggests 0-2 against endless repetition; higher values can mix
+    # languages into the reply, so stay low.
+    "presence_penalty": float(os.environ.get("OLLAMA_PRESENCE_PENALTY", "0.5")),
+}
 
 
 def _ollama_post(url: str, payload: dict, timeout: float) -> dict:
@@ -565,7 +578,7 @@ class OllamaRubricGrader(RubricGrader):
                     "stream": False,
                     "think": False,
                     "format": _ollama_response_schema(),
-                    "options": {"temperature": 0, "num_ctx": OLLAMA_NUM_CTX,
+                    "options": {**OLLAMA_SAMPLING, "num_ctx": OLLAMA_NUM_CTX,
                                 "num_predict": OLLAMA_NUM_PREDICT},
                 }, self.timeout)
             except (TimeoutError, OSError) as exc:  # includes urllib timeouts and HTTP 500s
