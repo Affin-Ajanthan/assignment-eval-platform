@@ -694,6 +694,12 @@ def _require_subjects_exist(db: Session, subject_ids: list[int]) -> None:
         raise HTTPException(400, f"Unknown subject id(s): {sorted(missing)}")
 
 
+def _require_two_decimals(label: str, score: float) -> None:
+    """Manual marks have at most 2 decimal places (7.25 is fine, 7.3333 is not)."""
+    if round(score, 2) != score:
+        raise HTTPException(400, f"{label} must have at most 2 decimal places, got {score}")
+
+
 def _require_assignment_rubric(submission: Submission, rubric: Rubric) -> None:
     """An assignment with a rubric is graded (and auto-evaluated) with that rubric
     only, so marks never end up on another rubric. Without one, any rubric of the
@@ -1960,6 +1966,7 @@ def grade_submission(
                 400,
                 f"Final mark must be between 0 and {rubric.max_total}, got {payload.total_score}",
             )
+        _require_two_decimals("Final mark", payload.total_score)
         total = payload.total_score
     else:
         valid_names = {c["name"] for c in rubric.criteria}
@@ -1973,7 +1980,8 @@ def grade_submission(
                     400,
                     f"Score for '{name}' must be between 0 and {max_points[name]}, got {score}",
                 )
-        total = sum(payload.criterion_scores.values())
+            _require_two_decimals(f"Score for '{name}'", score)
+        total = round(sum(payload.criterion_scores.values()), 2)  # no 0.1 + 0.2 float noise
 
 
     grade = Grade(

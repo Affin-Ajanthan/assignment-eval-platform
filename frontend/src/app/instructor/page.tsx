@@ -38,7 +38,13 @@ function scoreError(value: string | undefined, maxPoints: number): string | null
   if (!Number.isFinite(score)) return "Enter a number.";
   if (score < 0) return "Can't be below 0.";
   if (score > maxPoints) return `Max is ${maxPoints}.`;
+  if (roundMark(score) !== score) return "Use at most 2 decimal places.";
   return null;
+}
+
+/** A mark rounded to the 2 decimal places the API accepts. */
+function roundMark(score: number): number {
+  return Math.round(score * 100) / 100;
 }
 
 /** The rubric for grading or auto-evaluating one submission. When the assignment
@@ -298,7 +304,7 @@ export default function InstructorPage() {
   function useAutoevalScoresForGrading() {
     if (!autoevalResult || autoevalSubmissionId === null) return;
     const prefill: Record<string, string> = {};
-    for (const c of autoevalResult.criterion_breakdown) prefill[c.name] = String(c.score);
+    for (const c of autoevalResult.criterion_breakdown) prefill[c.name] = String(roundMark(c.score));
     setAutoevalSubmissionId(null);
     openGradingPanel(autoevalSubmissionId, autoevalResult.rubric_id, prefill);
   }

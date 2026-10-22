@@ -237,3 +237,15 @@ def test_assignment_with_rubric_is_graded_only_with_that_rubric():
     assert client.post(f"{url}/auto-evaluate", headers=H, json={"rubric_id": other["id"]}).status_code == 400
     assert client.post(f"{url}/grade", headers=H,
                        json={"rubric_id": own["id"], "criterion_scores": {"Only": 5}}).status_code == 200
+
+
+def test_grade_marks_allow_at_most_two_decimal_places():
+    rubric, submission, instructor_tok, _ = _two_criteria_submission("Assignment D")
+    url = f"/submissions/{submission['id']}/grade"
+    H = auth_headers(instructor_tok)
+    for body in ({"criterion_scores": {"Correctness": 7.3333}}, {"total_score": 70.125}):
+        r = client.post(url, json={"rubric_id": rubric["id"], **body}, headers=H)
+        assert r.status_code == 400 and "2 decimal places" in r.json()["detail"], body
+    ok = client.post(url, json={"rubric_id": rubric["id"], "criterion_scores": {"Correctness": 0.1, "Report": 0.2}},
+                     headers=H)
+    assert ok.status_code == 200 and ok.json()["total_score"] == 0.3  # not 0.30000000000000004
