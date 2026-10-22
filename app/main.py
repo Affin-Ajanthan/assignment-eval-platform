@@ -694,6 +694,17 @@ def _require_subjects_exist(db: Session, subject_ids: list[int]) -> None:
         raise HTTPException(400, f"Unknown subject id(s): {sorted(missing)}")
 
 
+def _require_assignment_rubric(submission: Submission, rubric: Rubric) -> None:
+    """An assignment with a rubric is graded (and auto-evaluated) with that rubric
+    only, so marks never end up on another rubric. Without one, any rubric of the
+    subject is allowed."""
+    assignment = submission.assignment
+    if assignment is not None and assignment.rubric_id is not None and assignment.rubric_id != rubric.id:
+        raise HTTPException(
+            400, f"This assignment is graded with the rubric '{assignment.rubric.name}', not '{rubric.name}'"
+        )
+
+
 def _can_view_submission(user: User, submission: Submission, db: Session) -> bool:
     if user.role == "admin":
         return True
@@ -1937,6 +1948,7 @@ def grade_submission(
         raise HTTPException(403, "You are not assigned to this subject")
     if rubric.subject_id != submission.subject_id:
         raise HTTPException(400, "That rubric belongs to a different subject than this submission")
+    _require_assignment_rubric(submission, rubric)
 
     if payload.total_score is not None:
         # Final mark only: no per-criterion marks are stored, rather than
@@ -2276,6 +2288,7 @@ def auto_evaluate(
         raise HTTPException(403, "You are not assigned to this subject")
     if rubric.subject_id != submission.subject_id:
         raise HTTPException(400, "That rubric belongs to a different subject than this submission")
+    _require_assignment_rubric(submission, rubric)
     return _run_auto_evaluation(db, submission, rubric, use_rubric_model=payload.use_rubric_model,
                                 use_ai_detection=payload.use_ai_detection)
 

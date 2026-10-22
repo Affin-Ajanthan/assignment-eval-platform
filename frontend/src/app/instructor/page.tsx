@@ -41,6 +41,51 @@ function scoreError(value: string | undefined, maxPoints: number): string | null
   return null;
 }
 
+/** The rubric for grading or auto-evaluating one submission. When the assignment
+ * has a rubric it is fixed (the API refuses any other); otherwise any rubric of
+ * the subject can be picked. */
+function RubricField({
+  id,
+  rubrics,
+  value,
+  locked,
+  onChange,
+}: {
+  id: string;
+  rubrics: Rubric[];
+  value: number | null;
+  locked: boolean;
+  onChange: (rubricId: number) => void;
+}) {
+  const current = rubrics.find((r) => r.id === value);
+  return (
+    <div className="mt-3 mb-3">
+      <label className="block text-sm font-semibold" htmlFor={id}>
+        Rubric
+      </label>
+      {locked ? (
+        <p id={id} className="mt-1 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+          {current ? `${current.name} (${current.max_total} pts)` : "Rubric not found"}
+          <span className="ml-2 text-xs text-gray-500">Set by the assignment</span>
+        </p>
+      ) : (
+        <select
+          id={id}
+          value={value ?? ""}
+          onChange={(e) => onChange(parseInt(e.target.value, 10))}
+          className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+        >
+          {rubrics.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.name} ({r.max_total} pts)
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
+  );
+}
+
 export default function InstructorPage() {
   const { user, ready } = useRequireRole("instructor");
 
@@ -215,13 +260,20 @@ export default function InstructorPage() {
     }
   }
 
+  // The rubric a submission's assignment is graded with; null when the
+  // assignment has none (then any rubric of the subject may be used).
+  function assignmentRubricFor(submissionId: number | null): number | null {
+    const submission = submissions.find((s) => s.id === submissionId);
+    return assignments.find((a) => a.id === submission?.assignment_id)?.rubric_id ?? null;
+  }
+
   // ---- Auto-evaluation ----
 
   function openAutoevalPanel(submissionId: number) {
     setAutoevalSubmissionId(submissionId);
     setAutoevalResult(null);
     setAutoevalMsg(null);
-    setAutoevalRubricId(rubrics[0]?.id ?? null);
+    setAutoevalRubricId(assignmentRubricFor(submissionId) ?? rubrics[0]?.id ?? null);
     setAutoevalScrollRequest((n) => n + 1);
   }
 
@@ -258,8 +310,8 @@ export default function InstructorPage() {
     setGradingMsg(null);
     setGradingComments("");
     const submission = submissions.find((s) => s.id === submissionId);
-    const assignmentRubric = assignments.find((a) => a.id === submission?.assignment_id)?.rubric_id ?? null;
-    setGradingRubricId(rubricId ?? assignmentRubric ?? rubrics[0]?.id ?? null);
+    // The assignment's own rubric always wins: grading with another one is refused.
+    setGradingRubricId(assignmentRubricFor(submissionId) ?? rubricId ?? rubrics[0]?.id ?? null);
     setCriterionScores(prefill);
     setGradingMode("criteria");
     setFinalMark("");
@@ -281,8 +333,18 @@ export default function InstructorPage() {
     try {
       const grade = await apiFetch<Grade | null>(`/submissions/${submissionId}/grade`);
       if (gradeLoadFor.current !== submissionId || !grade) return; // another panel was opened meanwhile
-      if (rubrics.some((r) => r.id === grade.rubric_id)) setGradingRubricId(grade.rubric_id);
       setGradingComments(grade.comments ?? "");
+      const lockedRubric = assignmentRubricFor(submissionId);
+      if (lockedRubric !== null && grade.rubric_id !== lockedRubric) {
+        // Graded before the assignment's rubric changed: those marks belong to
+        // other criteria, so the marks start blank.
+        setSavedGradeNote(
+          `The saved grade (${grade.total_score}) used a different rubric than this assignment now uses. ` +
+            "Enter the marks again with the rubric below.",
+        );
+        return;
+      }
+      if (rubrics.some((r) => r.id === grade.rubric_id)) setGradingRubricId(grade.rubric_id);
       // A grade saved with "Final mark only" has no per-criterion marks.
       if (Object.keys(grade.criterion_scores).length === 0) {
         setGradingMode("final");
@@ -772,21 +834,13 @@ export default function InstructorPage() {
                 Runs the automated evaluator (static analysis, AI-content heuristics, cross-modal consistency,
                 rubric grading) against this submission.
               </p>
-              <label className="mt-3 block text-sm font-semibold" htmlFor="autoeval-rubric">
-                Rubric
-              </label>
-              <select
+              <RubricField
                 id="autoeval-rubric"
-                value={autoevalRubricId ?? ""}
-                onChange={(e) => setAutoevalRubricId(parseInt(e.target.value, 10))}
-                className="mt-1 mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-              >
-                {rubrics.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
-              </select>
+                rubrics={rubrics}
+                value={autoevalRubricId}
+                locked={assignmentRubricFor(autoevalSubmissionId) !== null}
+                onChange={setAutoevalRubricId}
+              />
               <RubricModelToggle on={useRubricModel} onChange={setUseRubricModel} disabled={autoevalRunning} />
               <AiDetectionToggle on={useAiDetection} onChange={setUseAiDetection} disabled={autoevalRunning} />
               <div className="mt-3 space-x-2">
@@ -869,21 +923,13 @@ export default function InstructorPage() {
               {savedGradeNote && (
                 <p className="mt-2 rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">{savedGradeNote}</p>
               )}
-              <label className="mt-3 block text-sm font-semibold" htmlFor="grading-rubric">
-                Rubric
-              </label>
-              <select
+              <RubricField
                 id="grading-rubric"
-                value={gradingRubricId ?? ""}
-                onChange={(e) => setGradingRubricId(parseInt(e.target.value, 10))}
-                className="mt-1 mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-              >
-                {rubrics.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name} ({r.max_total} pts)
-                  </option>
-                ))}
-              </select>
+                rubrics={rubrics}
+                value={gradingRubricId}
+                locked={assignmentRubricFor(gradingSubmissionId) !== null}
+                onChange={setGradingRubricId}
+              />
 
               {/* A plain div, not <fieldset>: browsers draw a fieldset's border through its legend. */}
               <div
