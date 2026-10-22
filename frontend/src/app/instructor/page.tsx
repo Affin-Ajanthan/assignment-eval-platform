@@ -802,113 +802,116 @@ export default function InstructorPage() {
               </p>
             )}
 
-            <table className="mt-3 w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 text-left">
-                  <th className="border border-gray-200 px-3 py-1.5">Student</th>
-                  <th className="border border-gray-200 px-3 py-1.5">Assignment</th>
-                  <th className="border border-gray-200 px-3 py-1.5">Files submitted</th>
-                  <th className="border border-gray-200 px-3 py-1.5">Submitted</th>
-                  <th className="border border-gray-200 px-3 py-1.5">Status</th>
-                  <th className="border border-gray-200 px-3 py-1.5">Mark</th>
-                  <th className="border border-gray-200 px-3 py-1.5">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {shownSubmissions.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="border border-gray-200 px-3 py-3 text-center text-gray-500">
-                      {submissionFilter === "all" ? "No submissions yet." : "No submissions for this assignment yet."}
-                    </td>
+            {/* Scrolls sideways inside the page on narrow screens instead of widening it. */}
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 text-left">
+                    <th className="border border-gray-200 px-3 py-1.5">Student</th>
+                    <th className="border border-gray-200 px-3 py-1.5">Assignment</th>
+                    <th className="border border-gray-200 px-3 py-1.5">Files submitted</th>
+                    <th className="border border-gray-200 px-3 py-1.5">Submitted</th>
+                    <th className="border border-gray-200 px-3 py-1.5">Status</th>
+                    <th className="border border-gray-200 px-3 py-1.5">Mark</th>
+                    <th className="border border-gray-200 px-3 py-1.5">Actions</th>
                   </tr>
-                )}
-                {shownSubmissions.map((s) => (
-                  <Fragment key={s.id}>
-                  <tr>
-                    <td className="border border-gray-200 px-3 py-1.5">
-                      {s.student_name}
-                      <br />
-                      <small className="text-gray-500">{s.student_email}</small>
-                    </td>
-                    <td className="border border-gray-200 px-3 py-1.5">{s.assignment_name}</td>
-                    <td className="border border-gray-200 px-3 py-1.5">
-                      {s.submitted_types.length === 0 ? (
-                        <span className="text-gray-400">none</span>
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {s.submitted_types.map((kind) => {
-                            const open = filesOpenFor?.id === s.id && filesOpenFor.kind === kind;
-                            return (
-                              <button
-                                key={kind}
-                                type="button"
-                                aria-expanded={open}
-                                title={open ? `Hide ${kind} files` : `Open ${kind} files`}
-                                onClick={() => setFilesOpenFor(open ? null : { id: s.id, kind })}
-                                className={`rounded px-2 py-0.5 text-xs font-semibold capitalize underline-offset-2 hover:underline ${
-                                  open ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-800 hover:bg-blue-100"
-                                }`}
-                              >
-                                {kind}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </td>
-                    <td className="border border-gray-200 px-3 py-1.5">{formatDateTime(s.submitted_at)}</td>
-                    <td className="border border-gray-200 px-3 py-1.5">
-                      <span
-                        className={`rounded px-2 py-0.5 text-xs ${
-                          s.status === "graded" ? "bg-green-50 text-green-800" : "bg-yellow-50 text-yellow-800"
-                        }`}
-                      >
-                        {s.status}
-                      </span>
-                    </td>
-                    <td className="border border-gray-200 px-3 py-1.5">{formatMark(s.final_mark, s.max_mark)}</td>
-                    <td className="border border-gray-200 px-3 py-1.5">
-                      <div className="flex gap-1 whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={() => confirmDiscardThen(() => openGradingPanel(s.id))}
-                          className="rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700"
-                        >
-                          {s.status === "graded" ? "Re-grade" : "Grade"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openAutoevalPanel(s.id)}
-                          className="rounded-md bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700"
-                        >
-                          Auto-evaluate
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  {filesOpenFor?.id === s.id && (
+                </thead>
+                <tbody>
+                  {shownSubmissions.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="border border-gray-200 bg-white px-3 py-3">
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                          <p className="text-sm font-semibold">
-                            <span className="capitalize">{filesOpenFor.kind}</span> submitted by {s.student_name}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => setFilesOpenFor(null)}
-                            className="rounded-md bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700"
-                          >
-                            Close
-                          </button>
-                        </div>
-                        <SubmissionFiles key={filesOpenFor.kind} submissionId={s.id} kind={filesOpenFor.kind} />
+                      <td colSpan={7} className="border border-gray-200 px-3 py-3 text-center text-gray-500">
+                        {submissionFilter === "all" ? "No submissions yet." : "No submissions for this assignment yet."}
                       </td>
                     </tr>
                   )}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
+                  {shownSubmissions.map((s) => (
+                    <Fragment key={s.id}>
+                    <tr>
+                      <td className="border border-gray-200 px-3 py-1.5">
+                        {s.student_name}
+                        <br />
+                        <small className="text-gray-500">{s.student_email}</small>
+                      </td>
+                      <td className="border border-gray-200 px-3 py-1.5">{s.assignment_name}</td>
+                      <td className="border border-gray-200 px-3 py-1.5">
+                        {s.submitted_types.length === 0 ? (
+                          <span className="text-gray-400">none</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {s.submitted_types.map((kind) => {
+                              const open = filesOpenFor?.id === s.id && filesOpenFor.kind === kind;
+                              return (
+                                <button
+                                  key={kind}
+                                  type="button"
+                                  aria-expanded={open}
+                                  title={open ? `Hide ${kind} files` : `Open ${kind} files`}
+                                  onClick={() => setFilesOpenFor(open ? null : { id: s.id, kind })}
+                                  className={`rounded px-2 py-0.5 text-xs font-semibold capitalize underline-offset-2 hover:underline ${
+                                    open ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-800 hover:bg-blue-100"
+                                  }`}
+                                >
+                                  {kind}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </td>
+                      <td className="border border-gray-200 px-3 py-1.5">{formatDateTime(s.submitted_at)}</td>
+                      <td className="border border-gray-200 px-3 py-1.5">
+                        <span
+                          className={`rounded px-2 py-0.5 text-xs ${
+                            s.status === "graded" ? "bg-green-50 text-green-800" : "bg-yellow-50 text-yellow-800"
+                          }`}
+                        >
+                          {s.status}
+                        </span>
+                      </td>
+                      <td className="border border-gray-200 px-3 py-1.5">{formatMark(s.final_mark, s.max_mark)}</td>
+                      <td className="border border-gray-200 px-3 py-1.5">
+                        <div className="flex gap-1 whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => confirmDiscardThen(() => openGradingPanel(s.id))}
+                            className="rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+                          >
+                            {s.status === "graded" ? "Re-grade" : "Grade"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openAutoevalPanel(s.id)}
+                            className="rounded-md bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700"
+                          >
+                            Auto-evaluate
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {filesOpenFor?.id === s.id && (
+                      <tr>
+                        <td colSpan={7} className="border border-gray-200 bg-white px-3 py-3">
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <p className="text-sm font-semibold">
+                              <span className="capitalize">{filesOpenFor.kind}</span> submitted by {s.student_name}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => setFilesOpenFor(null)}
+                              className="rounded-md bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700"
+                            >
+                              Close
+                            </button>
+                          </div>
+                          <SubmissionFiles key={filesOpenFor.kind} submissionId={s.id} kind={filesOpenFor.kind} />
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </section>
 
           {/* Auto-evaluation panel */}
