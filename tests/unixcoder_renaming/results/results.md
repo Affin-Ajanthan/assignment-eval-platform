@@ -24,7 +24,7 @@ Modes: **raw** = source as written; **cleaned** = comments stripped + whitespace
 |---|---|---|---|---|---|
 | TC08 | identifiers -> unrelated but valid names | 0.5040 / 0.5766 | 0.7256 / 0.7629 | 0.0000 / 0.0000 | 9/9 |
 | TC06 | short identifiers -> descriptive names | 0.4471 / 0.5217 | 0.6510 / 0.7255 | 0.0014 / 0.0068 | 7/9 |
-| TC11 | rename all identifiers + modify comments | 0.3200 / 0.3621 | 0.4527 / 0.4842 | -0.0000 / 0.0000 | 9/9 |
+| TC11 | rename all identifiers + modify comments | 0.3200 / 0.3622 | 0.4527 / 0.4842 | 0.0000 / 0.0000 | 9/9 |
 | TC07 | descriptive identifiers -> short names | 0.2766 / 0.3945 | 0.4839 / 0.5534 | 0.0014 / 0.0068 | 7/9 |
 | TC10 | rename all identifiers + change formatting | 0.2674 / 0.2930 | 0.4570 / 0.4881 | 0.0094 / 0.0278 | 0/9 |
 | TC15 | rename identifiers across the several functions | 0.1733 / 0.2443 | 0.3322 / 0.4043 | 0.0000 / 0.0000 | 9/9 |
@@ -36,7 +36,7 @@ Modes: **raw** = source as written; **cleaned** = comments stripped + whitespace
 | TC03 | rename function names | 0.0548 / 0.1228 | 0.1387 / 0.2556 | 0.0000 / 0.0000 | 9/9 |
 | TC13 | rename loop and conditional variables | 0.0454 / 0.0634 | 0.0704 / 0.0896 | 0.0000 / 0.0000 | 9/9 |
 | TC09 | rename class and method names | 0.0428 / 0.0631 | 0.1027 / 0.2037 | 0.0000 / 0.0000 | 9/9 |
-| TC12 | rename identifiers in the nested function | 0.0162 / 0.0264 | 0.0469 / 0.0662 | -0.0000 / 0.0000 | 8/8 |
+| TC12 | rename identifiers in the nested function | 0.0162 / 0.0264 | 0.0469 / 0.0662 | 0.0000 / 0.0000 | 8/8 |
 
 ## 3. Does identifier normalisation improve renamed-pair scores?
 
@@ -124,7 +124,7 @@ Normalisation raised the unrelated-pair score (vs cleaned) in 9/9 languages: Pyt
 | TC07 | Go | descriptive identifiers -> short names | 0.7431 | 0.5934 | 1.0000 | 0.0000 | yes |  |
 | TC07 | Java | descriptive identifiers -> short names | 0.7850 | 0.6380 | 0.9932 | 0.0068 | no |  |
 | TC07 | JavaScript | descriptive identifiers -> short names | 0.7098 | 0.4623 | 1.0000 | 0.0000 | yes |  |
-| TC07 | PHP | descriptive identifiers -> short names | 0.7114 | 0.4552 | 1.0000 | 0.0000 | yes |  |
+| TC07 | PHP | descriptive identifiers -> short names | 0.7114 | 0.4552 | 1.0000 | -0.0000 | yes |  |
 | TC07 | Python | descriptive identifiers -> short names | 0.6848 | 0.4542 | 1.0000 | 0.0000 | yes |  |
 | TC07 | Ruby | descriptive identifiers -> short names | 0.6055 | 0.4466 | 1.0000 | 0.0000 | yes |  |
 | TC08 | C | identifiers -> unrelated but valid names | 0.5055 | 0.2625 | 1.0000 | 0.0000 | yes |  |
@@ -133,7 +133,7 @@ Normalisation raised the unrelated-pair score (vs cleaned) in 9/9 languages: Pyt
 | TC08 | Go | identifiers -> unrelated but valid names | 0.4419 | 0.2600 | 1.0000 | 0.0000 | yes |  |
 | TC08 | Java | identifiers -> unrelated but valid names | 0.5290 | 0.3534 | 1.0000 | 0.0000 | yes |  |
 | TC08 | JavaScript | identifiers -> unrelated but valid names | 0.4630 | 0.2371 | 1.0000 | 0.0000 | yes |  |
-| TC08 | PHP | identifiers -> unrelated but valid names | 0.4234 | 0.2489 | 1.0000 | 0.0000 | yes |  |
+| TC08 | PHP | identifiers -> unrelated but valid names | 0.4234 | 0.2489 | 1.0000 | -0.0000 | yes |  |
 | TC08 | Python | identifiers -> unrelated but valid names | 0.5102 | 0.2408 | 1.0000 | 0.0000 | yes |  |
 | TC08 | Ruby | identifiers -> unrelated but valid names | 0.5499 | 0.2896 | 1.0000 | 0.0000 | yes |  |
 | TC09 | C | rename class and method names | 0.9381 | 0.8794 | 1.0000 | 0.0000 | yes | C has no classes: struct + functions taking it |
@@ -155,7 +155,7 @@ Normalisation raised the unrelated-pair score (vs cleaned) in 9/9 languages: Pyt
 | TC10 | Python | rename all identifiers + change formatting | 0.7503 | 0.5310 | 0.9901 | 0.0099 | no |  |
 | TC10 | Ruby | rename all identifiers + change formatting | 0.7204 | 0.5528 | 0.9897 | 0.0103 | no |  |
 | TC11 | C | rename all identifiers + modify comments | 0.7165 | 0.5352 | 1.0000 | 0.0000 | yes |  |
-| TC11 | C# | rename all identifiers + modify comments | 0.6379 | 0.5158 | 1.0000 | -0.0000 | yes |  |
+| TC11 | C# | rename all identifiers + modify comments | 0.6378 | 0.5158 | 1.0000 | 0.0000 | yes |  |
 | TC11 | C++ | rename all identifiers + modify comments | 0.6808 | 0.5569 | 1.0000 | 0.0000 | yes |  |
 | TC11 | Go | rename all identifiers + modify comments | 0.6640 | 0.5479 | 1.0000 | 0.0000 | yes |  |
 | TC11 | Java | rename all identifiers + modify comments | 0.6577 | 0.6164 | 1.0000 | 0.0000 | yes |  |
@@ -163,7 +163,7 @@ Normalisation raised the unrelated-pair score (vs cleaned) in 9/9 languages: Pyt
 | TC11 | PHP | rename all identifiers + modify comments | 0.7256 | 0.5327 | 1.0000 | 0.0000 | yes |  |
 | TC11 | Python | rename all identifiers + modify comments | 0.6657 | 0.5270 | 1.0000 | 0.0000 | yes |  |
 | TC11 | Ruby | rename all identifiers + modify comments | 0.7063 | 0.5561 | 1.0000 | 0.0000 | yes |  |
-| TC12 | C# | rename identifiers in the nested function | 0.9736 | 0.9406 | 1.0000 | -0.0000 | yes |  |
+| TC12 | C# | rename identifiers in the nested function | 0.9736 | 0.9406 | 1.0000 | 0.0000 | yes |  |
 | TC12 | C++ | rename identifiers in the nested function | 0.9831 | 0.9524 | 1.0000 | 0.0000 | yes |  |
 | TC12 | Go | rename identifiers in the nested function | 0.9832 | 0.9338 | 1.0000 | 0.0000 | yes |  |
 | TC12 | Java | rename identifiers in the nested function | 0.9792 | 0.9449 | 1.0000 | 0.0000 | yes |  |

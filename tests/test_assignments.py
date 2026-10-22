@@ -295,7 +295,8 @@ def test_student_sees_open_and_past_assignments_but_not_upcoming_ones():
     assert open_one["my_submission"] is None
     # No rubric or grading internals in the student view.
     assert set(open_one) == {"id", "subject_id", "subject_name", "name", "description", "available_from",
-                             "deadline", "status", "submission_types", "code_languages", "my_submission"}
+                             "deadline", "status", "submission_types", "code_languages",
+                                 "student_similarity_check", "student_ai_check", "my_submission"}
 
 
 def test_backend_enforces_the_submission_window():

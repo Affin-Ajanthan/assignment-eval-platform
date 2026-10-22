@@ -83,6 +83,9 @@ export interface Assignment {
   report_template_words: number;
   /** Languages students must write their code in; empty = any supported language. */
   code_languages: CodeLanguageId[];
+  /** Student self-checks before the deadline (on by default). */
+  student_similarity_check: boolean;
+  student_ai_check: boolean;
 }
 
 /** A student's own submission: status and final total only. */
@@ -111,6 +114,9 @@ export interface StudentAssignment {
   submission_types: SubmissionType[];
   /** Languages the code must be written in; empty = any supported language. */
   code_languages: CodeLanguageId[];
+  /** Which self-checks the instructor allows for this assignment. */
+  student_similarity_check: boolean;
+  student_ai_check: boolean;
   my_submission: MySubmission | null;
 }
 
@@ -479,4 +485,55 @@ export async function logout(): Promise<void> {
   } finally {
     clearSession();
   }
+}
+
+// ---- Student self-checks -----------------------------------------------------
+
+export type SelfCheckKind = "code_similarity" | "report_similarity" | "ai_content";
+export type SelfCheckBand = "low" | "moderate" | "high";
+
+/** What a student sees: bands, counts and passages of their OWN work only. */
+export interface SelfCheckResult {
+  band?: SelfCheckBand;
+  compared?: number;
+  similar_submissions?: number;
+  highlights?: { file: string; start_line: number; end_line: number; text: string; truncated: boolean }[];
+  passages?: string[];
+  note?: string;
+  /** AI-content check: one band per part, null when the part wasn't assessed. */
+  report?: SelfCheckBand | null;
+  code?: SelfCheckBand | null;
+}
+
+export interface SelfCheck {
+  id: number;
+  kind: SelfCheckKind;
+  status: "running" | "done" | "failed";
+  created_at: string;
+  finished_at: string | null;
+  error: string | null;
+  result: SelfCheckResult | null;
+}
+
+export interface SelfCheckStatus {
+  submission_id: number;
+  can_run: boolean;
+  similarity_enabled: boolean;
+  ai_enabled: boolean;
+  limit_per_hour: number;
+  remaining: Record<SelfCheckKind, number>;
+  latest: Record<SelfCheckKind, SelfCheck | null>;
+}
+
+/** Instructor view: how often each student ran each self-check. */
+export interface SelfCheckHistoryRow {
+  submission_id: number;
+  student_name: string;
+  student_email: string;
+  code_similarity_checks: number;
+  report_similarity_checks: number;
+  ai_checks: number;
+  last_check_at: string | null;
+  latest_kind: SelfCheckKind | null;
+  latest_status: SelfCheck["status"] | null;
 }

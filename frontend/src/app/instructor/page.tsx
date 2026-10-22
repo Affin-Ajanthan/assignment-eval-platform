@@ -20,6 +20,7 @@ import AssignmentsSection from "@/components/instructor/AssignmentsSection";
 import BatchEvaluateSection from "@/components/instructor/BatchEvaluateSection";
 import DownloadExcelButton from "@/components/instructor/DownloadExcelButton";
 import ReportSimilarityPanel from "@/components/instructor/ReportSimilarityPanel";
+import SelfCheckHistoryPanel from "@/components/instructor/SelfCheckHistoryPanel";
 import RubricModelToggle, {
   AiDetectionToggle,
   useAiDetectionSetting,
@@ -727,6 +728,9 @@ export default function InstructorPage() {
 
             <ReportSimilarityPanel subjectId={subjectId} assignmentNames={assignmentNames} />
           </section>
+
+          {/* Student self-check history */}
+          <SelfCheckHistoryPanel assignments={assignments} />
 
           {/* Evaluate a whole assignment */}
           {subjectId !== null && (

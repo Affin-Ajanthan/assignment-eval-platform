@@ -26,6 +26,8 @@ type FormState = {
   starterCode: string; // "" = no starter code
   starterFilename: string;
   languages: CodeLanguageId[]; // [] = any supported language
+  selfSimilarity: boolean; // students may run similarity self-checks before the deadline
+  selfAi: boolean; // students may run AI-content self-checks before the deadline
 };
 
 const TYPE_OPTIONS: { value: SubmissionType; label: string; hint: string }[] = [
@@ -52,6 +54,8 @@ const EMPTY: FormState = {
   starterCode: "",
   starterFilename: "",
   languages: [],
+  selfSimilarity: true,
+  selfAi: true,
 };
 
 // Must match the backend's _CODE_EXTENSIONS (app/main.py).
@@ -98,6 +102,8 @@ export default function AssignmentsSection({
       starterCode: a.starter_code,
       starterFilename: a.starter_code_filename,
       languages: a.code_languages ?? [],
+      selfSimilarity: a.student_similarity_check ?? true,
+      selfAi: a.student_ai_check ?? true,
     });
   }
 
@@ -140,6 +146,8 @@ export default function AssignmentsSection({
       starter_code_filename: hasStarter ? form.starterFilename.trim() : "",
       // Only meaningful when students submit code; otherwise no restriction.
       code_languages: form.types.includes("code") ? form.languages : [],
+      student_similarity_check: form.selfSimilarity,
+      student_ai_check: form.selfAi,
     };
     setSaving(true);
     try {
@@ -282,6 +290,28 @@ export default function AssignmentsSection({
           </fieldset>
         )}
 
+        <fieldset className="mt-3">
+          <legend className="text-sm font-semibold">Student self-checks before the deadline</legend>
+          <div className="mt-1 flex flex-wrap gap-4">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.selfSimilarity}
+                onChange={(e) => set("selfSimilarity", e.target.checked)}
+              />
+              Similarity check <span className="text-xs text-gray-500">(code and report)</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={form.selfAi} onChange={(e) => set("selfAi", e.target.checked)} />
+              AI-content detection
+            </label>
+          </div>
+          <p className="mt-1 text-xs text-gray-500">
+            Students see Low / Moderate / High bands and their own matching passages, never other students&apos; work.
+            You can change these at any time, even after students have submitted.
+          </p>
+        </fieldset>
+
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <fieldset>
             <legend className="text-sm font-semibold">Available from</legend>
@@ -411,6 +441,10 @@ export default function AssignmentsSection({
                   {a.submission_types.includes("code") && a.code_languages?.length > 0 && (
                     <p className="text-xs text-gray-600">Language: {languageNames(a.code_languages)}</p>
                   )}
+                  <p className="text-xs text-gray-600">
+                    Student self-checks: similarity {a.student_similarity_check ? "on" : "off"} · AI{" "}
+                    {a.student_ai_check ? "on" : "off"}
+                  </p>
                 </div>
                 <div className="flex gap-2">
                   <button

@@ -57,54 +57,67 @@ _GENERIC_KEYWORDS = {
 }
 
 
-def _normalize_python(source: str) -> list[str]:
+def _python_tokens(source: str) -> list[tuple[str, int]]:
     """Tokenize Python with the stdlib tokenizer; fold identifiers,
     numbers and strings down to generic placeholders so renamed
-    variables and changed literals still match structurally."""
-    tokens: list[str] = []
+    variables and changed literals still match structurally.
+    Each token comes with the source line it starts on."""
+    tokens: list[tuple[str, int]] = []
     try:
         reader = io.StringIO(source).readline
         for tok in py_tokenize.generate_tokens(reader):
-            tok_type, tok_string = tok.type, tok.string
+            tok_type, tok_string, line = tok.type, tok.string, tok.start[0]
             if tok_type in (py_tokenize.COMMENT, py_tokenize.NL,
                              py_tokenize.NEWLINE, py_tokenize.INDENT,
                              py_tokenize.DEDENT, py_tokenize.ENCODING,
                              py_tokenize.ENDMARKER):
                 continue
             if tok_type == py_tokenize.NAME:
-                tokens.append(tok_string if tok_string in _PY_KEEP_KEYWORDS
-                              else "ID")
+                tokens.append((tok_string if tok_string in _PY_KEEP_KEYWORDS
+                               else "ID", line))
             elif tok_type == py_tokenize.NUMBER:
-                tokens.append("NUM")
+                tokens.append(("NUM", line))
             elif tok_type == py_tokenize.STRING:
-                tokens.append("STR")
+                tokens.append(("STR", line))
             else:
-                tokens.append(tok_string)
+                tokens.append((tok_string, line))
     except (py_tokenize.TokenError, IndentationError, SyntaxError):
-        return _normalize_generic(source)
+        return _generic_tokens(source)
     return tokens
 
 
-def _normalize_generic(source: str) -> list[str]:
+def _generic_tokens(source: str) -> list[tuple[str, int]]:
     """Regex-based fallback tokenizer for non-Python languages (Java,
     JS/TS, C/C++, etc). Strips comments, folds identifiers/numbers/
-    strings to placeholders, keeps a small shared keyword set intact."""
-    tokens: list[str] = []
+    strings to placeholders, keeps a small shared keyword set intact.
+    Each token comes with the source line it starts on."""
+    tokens: list[tuple[str, int]] = []
+    line, last = 1, 0
     for match in _GENERIC_TOKEN_RE.finditer(source):
+        line += source.count("\n", last, match.start())
+        last = match.start()
         kind = match.lastgroup
         text = match.group()
         if kind in ("comment_line", "comment_block"):
             continue
         if kind == "string":
-            tokens.append("STR")
+            tokens.append(("STR", line))
         elif kind == "number":
-            tokens.append("NUM")
+            tokens.append(("NUM", line))
         elif kind == "ident":
-            tokens.append(text if text in _GENERIC_KEYWORDS else "ID")
+            tokens.append((text if text in _GENERIC_KEYWORDS else "ID", line))
         else:  # operator / punctuation
             if text.strip():
-                tokens.append(text)
+                tokens.append((text, line))
     return tokens
+
+
+def _normalize_python(source: str) -> list[str]:
+    return [t for t, _ in _python_tokens(source)]
+
+
+def _normalize_generic(source: str) -> list[str]:
+    return [t for t, _ in _generic_tokens(source)]
 
 
 _EXT_LANGUAGE = {
@@ -112,12 +125,17 @@ _EXT_LANGUAGE = {
 }
 
 
-def normalize_tokens(source: str, filename: str = "") -> list[str]:
-    """Dispatch to a language-specific normalizer by file extension."""
+def normalize_tokens_with_lines(source: str, filename: str = "") -> list[tuple[str, int]]:
+    """normalize_tokens, with the source line each token starts on."""
     ext = Path(filename).suffix.lower()
     if _EXT_LANGUAGE.get(ext) == "python":
-        return _normalize_python(source)
-    return _normalize_generic(source)
+        return _python_tokens(source)
+    return _generic_tokens(source)
+
+
+def normalize_tokens(source: str, filename: str = "") -> list[str]:
+    """Dispatch to a language-specific normalizer by file extension."""
+    return [t for t, _ in normalize_tokens_with_lines(source, filename)]
 
 
 # --------------------------------------------------------------------------
@@ -180,6 +198,33 @@ def fingerprint_source(submission_id: str, filename: str, source: str,
         token_count=len(tokens),
         hashes=winnow(kgram_hashes, window_size),
     )
+
+
+def matched_line_ranges(source: str, filename: str, shared: set[int], k: int = 5) -> list[tuple[int, int]]:
+    """Line ranges of ``source`` covered by a k-gram whose fingerprint is in
+    ``shared`` (fingerprints this file has in common with other submissions),
+    merged where they touch. Uses the same tokens and hashes as
+    fingerprint_source, so a range is exactly where a shared fingerprint came from."""
+    if not shared:
+        return []
+    tokens = normalize_tokens_with_lines(source, filename)
+    words = [t for t, _ in tokens]
+    lines = [ln for _, ln in tokens]
+    ranges: list[tuple[int, int]] = []
+    if len(words) < k:
+        if words and _stable_hash(words) in shared:
+            ranges.append((lines[0], lines[-1]))
+    else:
+        for i in range(len(words) - k + 1):
+            if _stable_hash(words[i:i + k]) in shared:
+                ranges.append((lines[i], lines[i + k - 1]))
+    merged: list[tuple[int, int]] = []
+    for start, end in sorted(ranges):
+        if merged and start <= merged[-1][1] + 1:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return merged
 
 
 def subtract_starter(fp: Fingerprint, starter: Fingerprint | None) -> Fingerprint:
