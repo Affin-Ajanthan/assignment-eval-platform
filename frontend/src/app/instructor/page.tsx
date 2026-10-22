@@ -455,9 +455,32 @@ export default function InstructorPage() {
     });
   }
 
-  function handleSaveGrade() {
+  const cannotSaveReason = !cannotSave
+    ? undefined
+    : loadingSavedGrade
+      ? "Loading the saved grade..."
+      : gradingMode === "final" && finalMark.trim() === ""
+        ? "Enter the final mark first"
+        : "Fix the marks shown in red first";
+
+  // "Save & next": the next ungraded submission after this one, in the table's
+  // order (wrapping round to the top); null when every other one is graded.
+  const nextUngradedId = (() => {
+    const i = shownSubmissions.findIndex((s) => s.id === gradingSubmissionId);
+    if (i === -1) return null;
+    const after = [...shownSubmissions.slice(i + 1), ...shownSubmissions.slice(0, i)];
+    return after.find((s) => s.status !== "graded")?.id ?? null;
+  })();
+
+  function handleSaveGrade(nextId: number | null = null) {
     if (cannotSave) return;
-    if (emptyCriteria.length === 0) return saveGrade();
+    const save = async () => {
+      const savedFor = gradingSubmissionId;
+      if (!(await saveGrade()) || nextId === null || savedFor === null) return;
+      openGradingPanel(nextId);
+      setGradingMsg({ text: `Grade saved for ${studentLabel(savedFor)}.`, kind: "success" });
+    };
+    if (emptyCriteria.length === 0) return save();
     setShowEmptyMarks(true);
     const n = emptyCriteria.length;
     setGradingConfirm({
@@ -468,13 +491,14 @@ export default function InstructorPage() {
       confirmLabel: "Save anyway",
       onConfirm: async () => {
         setGradingConfirm(null);
-        await saveGrade();
+        await save();
       },
     });
   }
 
-  async function saveGrade() {
-    if (gradingSubmissionId === null || gradingRubricId === null || cannotSave) return;
+  /** Saves the form; true when the grade was saved. */
+  async function saveGrade(): Promise<boolean> {
+    if (gradingSubmissionId === null || gradingRubricId === null || cannotSave) return false;
     setGradingMsg(null);
     let marks: { criterion_scores: Record<string, number> } | { total_score: number };
     if (gradingMode === "final") {
@@ -495,8 +519,10 @@ export default function InstructorPage() {
       setGradingBaseline(gradingSnapshot(gradingMode, criterionScores, finalMark, gradingComments));
       setSavedGradeNote(null); // it described the grade this one replaces
       if (subjectId !== null) await loadSubmissions(subjectId);
+      return true;
     } catch (err) {
       setGradingMsg({ text: `Failed to save grade: ${err instanceof Error ? err.message : err}`, kind: "error" });
+      return false;
     }
   }
 
@@ -1136,24 +1162,27 @@ export default function InstructorPage() {
                 rows={3}
               />
 
-              <div className="space-x-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={handleSaveGrade}
+                  onClick={() => handleSaveGrade()}
                   disabled={cannotSave}
-                  title={
-                    cannotSave
-                      ? loadingSavedGrade
-                        ? "Loading the saved grade..."
-                        : gradingMode === "final" && finalMark.trim() === ""
-                          ? "Enter the final mark first"
-                          : "Fix the marks shown in red first"
-                      : undefined
-                  }
+                  title={cannotSaveReason}
                   className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Save grade
                 </button>
+                {nextUngradedId !== null && (
+                  <button
+                    type="button"
+                    onClick={() => handleSaveGrade(nextUngradedId)}
+                    disabled={cannotSave}
+                    title={cannotSaveReason ?? `Save, then grade ${studentLabel(nextUngradedId)}`}
+                    className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Save &amp; next
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => confirmDiscardThen(closeGradingPanel)}
