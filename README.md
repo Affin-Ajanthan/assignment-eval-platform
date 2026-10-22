@@ -39,7 +39,7 @@ frontend/               Next.js 16 / React 19 / TypeScript / Tailwind app
   src/app/instructor/     rubrics, similarity check, auto-evaluate, manual grading
   src/lib/api.ts          shared API client (bearer token, session handling)
   (see frontend/README.md for frontend-specific run instructions)
-tests/                  66 tests, 1 real-model test that skips gracefully offline
+tests/                  831 tests; 23 marked `slow` use real models and skip gracefully offline
 sample_submissions/     demo data for the standalone similarity CLI
 ```
 
@@ -412,20 +412,22 @@ Backend:
 python -m pytest tests/ -v
 ```
 
-66 tests pass offline (accounts/roles/subject-scoping, report/code
+There are 831 tests. The 808 not marked `slow` pass offline
+(`python -m pytest tests/ -m "not slow"`; accounts/roles/subject-scoping, report/code
 analysis, similarity fingerprinting, rubric grading -- both the
 heuristic grader and the Ollama grader against a fake HTTP post, so no
 Ollama server or network call is needed. `conftest.py` sets
 `GRADER_BACKEND=heuristic` so ordinary tests never call a real model --
 video frame
 analysis, cross-modal consistency, the full pipeline, and the FastAPI
-endpoints including similarity-check and auto-evaluate). One additional
-test exercises real `faster-whisper` transcription end-to-end and skips
-(not fails) when the model can't be downloaded, which is exactly what
-happens in a network-restricted sandbox -- it would pass in a normal
-deployment. `conftest.py` wipes `portal.db` at the start of every test
-run so account-creation tests never collide with leftover data from a
-previous run.
+endpoints including similarity-check and auto-evaluate). The 23 tests
+marked `slow` exercise real models (e.g. `faster-whisper` transcription,
+UniXcoder, a running Ollama) and skip (not fail) when a model can't be
+downloaded or reached, which is exactly what happens in a
+network-restricted sandbox -- they pass in a normal deployment.
+`conftest.py` gives every test run its own empty database and uploads
+folder in a temporary directory, removed at the end, so the real
+`portal.db` and `uploads/` are never opened or changed by tests.
 
 Frontend:
 
@@ -465,11 +467,13 @@ rejection), covering the same flow the automated backend tests cover.
   presence_penalty 0.5 against repetition, `OLLAMA_PRESENCE_PENALTY`), so grading the
   same submission twice can give slightly different marks; set
   `OLLAMA_TEMPERATURE=0` for repeatable marks. A timed-out or malformed reply is retried once before
-  the submission is marked failed. In our evaluation, qwen3:4b tended to grade strong
-  answers slightly strictly in our evaluation (Mohler short-answer set,
-  2,273 answers: MAE 0.82 marks out of 5, 81% within 1 mark, versus
-  2.43 / 18% for a keyword baseline); keep instructor override as the
-  final word.
+  the submission is marked failed. In our evaluation, qwen3:8b with the
+  current grading prompt graded slightly strictly (299 answers from the
+  Mohler short-answer set: MAE 0.88 marks out of 5, 69% within 1 mark,
+  average 0.54 marks below the human graders, versus MAE 2.31 / 20% for
+  a keyword baseline; `eval/results/models_20261020_182000/`). That run
+  used temperature 0, before the sampling settings above; keep
+  instructor override as the final word.
 - `HeuristicRubricGrader` and the AI-content heuristics are keyword/style
   signals, not semantic understanding or validated classifiers. Treat
   every score and flag as a starting point for human review.
