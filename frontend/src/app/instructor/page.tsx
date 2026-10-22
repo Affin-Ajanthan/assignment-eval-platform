@@ -62,6 +62,12 @@ function gradingSnapshot(
   return JSON.stringify(hasMarks ? [mode, marks, comments.trim()] : [null, null, comments.trim()]);
 }
 
+const STATUS_FILTERS: { label: string; status: Submission["status"] | null }[] = [
+  { label: "All", status: null },
+  { label: "Submitted", status: "submitted" },
+  { label: "Graded", status: "graded" },
+];
+
 /** A mark rounded to the 2 decimal places the API accepts. */
 function roundMark(score: number): number {
   return Math.round(score * 100) / 100;
@@ -150,6 +156,7 @@ export default function InstructorPage() {
   // Which assignment's submissions the table shows: "all", "a:<assignment id>",
   // or "n:<name>" for submissions whose assignment was deleted (kept as records).
   const [submissionFilter, setSubmissionFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<Submission["status"] | null>(null); // null: all
   const [gradingRubricId, setGradingRubricId] = useState<number | null>(null);
   const [criterionScores, setCriterionScores] = useState<Record<string, string>>({});
   // "final": one overall mark (e.g. 70 / 100) instead of a mark per criterion.
@@ -225,6 +232,7 @@ export default function InstructorPage() {
   }, [submissionOptions, submissionFilter]);
   useEffect(() => {
     setSubmissionFilter("all");
+    setStatusFilter(null);
   }, [subjectId]);
 
   const selectedOption = submissionOptions.find((o) => o.key === submissionFilter) ?? null;
@@ -237,6 +245,9 @@ export default function InstructorPage() {
     const name = submissionFilter.slice(2);
     return submissions.filter((sub) => sub.assignment_id === null && sub.assignment_name === name);
   }, [submissions, submissionFilter]);
+  // The status filter narrows only the table; the assignment summary and
+  // "Save & next" still use every submission of the chosen assignment.
+  const tableSubmissions = statusFilter ? shownSubmissions.filter((s) => s.status === statusFilter) : shownSubmissions;
 
   const assignmentNames = useMemo(
     () => Array.from(new Set(submissions.map((s) => s.assignment_name))),
@@ -802,6 +813,30 @@ export default function InstructorPage() {
               </p>
             )}
 
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm" role="group" aria-label="Filter by status">
+              <span className="font-semibold">Show</span>
+              {STATUS_FILTERS.map((f) => {
+                const count = f.status ? shownSubmissions.filter((s) => s.status === f.status).length : shownSubmissions.length;
+                const active = statusFilter === f.status;
+                return (
+                  <button
+                    key={f.label}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => {
+                      setStatusFilter(f.status);
+                      setFilesOpenFor(null);
+                    }}
+                    className={`rounded-md px-3 py-1 text-xs font-semibold ${
+                      active ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    {f.label} ({count})
+                  </button>
+                );
+              })}
+            </div>
+
             {/* Scrolls sideways inside the page on narrow screens instead of widening it. */}
             <div className="mt-3 overflow-x-auto">
               <table className="w-full text-sm">
@@ -817,14 +852,18 @@ export default function InstructorPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {shownSubmissions.length === 0 && (
+                  {tableSubmissions.length === 0 && (
                     <tr>
                       <td colSpan={7} className="border border-gray-200 px-3 py-3 text-center text-gray-500">
-                        {submissionFilter === "all" ? "No submissions yet." : "No submissions for this assignment yet."}
+                        {shownSubmissions.length > 0
+                          ? `No ${statusFilter === "graded" ? "graded" : "ungraded"} submissions here.`
+                          : submissionFilter === "all"
+                            ? "No submissions yet."
+                            : "No submissions for this assignment yet."}
                       </td>
                     </tr>
                   )}
-                  {shownSubmissions.map((s) => (
+                  {tableSubmissions.map((s) => (
                     <Fragment key={s.id}>
                     <tr>
                       <td className="border border-gray-200 px-3 py-1.5">
