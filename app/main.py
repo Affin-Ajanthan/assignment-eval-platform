@@ -29,11 +29,13 @@ http://localhost:8000) and sign in.
 
 from __future__ import annotations
 
+import os
 import re
 import tempfile
 import shutil
 import uuid
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -60,7 +62,7 @@ from .auth import (
     student_subject_ids,
     verify_password,
 )
-from .db import BASE_DIR, UPLOAD_DIR, Base, add_missing_columns, engine, get_db
+from .db import BASE_DIR, UPLOAD_DIR, Base, SessionLocal, add_missing_columns, engine, get_db
 from .evaluator.document_extraction import (
     SUPPORTED_REPORT_EXTENSIONS,
     ReportValidationError,
@@ -2395,6 +2397,14 @@ def get_auto_evaluation(submission_id: int, user: User = Depends(get_current_use
     )
 
 
+# How many submissions a batch auto-evaluation grades at the same time. 1 (the
+# default) runs them one after another. More workers overlap the CPU steps
+# (unzipping, report extraction, code analysis) with grading, and with
+# OLLAMA_NUM_PARALLEL set to the same number Ollama grades that many at once.
+# All of them share one GPU, so the gain depends on its memory: measure first.
+AUTO_EVAL_WORKERS = max(1, int(os.environ.get("AUTO_EVAL_WORKERS", "1")))
+
+
 @app.post(
     "/subjects/{subject_id}/assignments/{assignment_name}/auto-evaluate",
     response_model=BatchAutoEvaluateOut,
@@ -2405,11 +2415,11 @@ def auto_evaluate_assignment(
 ):
     """Auto-evaluate every submission of one assignment against one rubric.
 
-    Submissions are processed one after another (a local LLM and Whisper
-    share one GPU, so there is nothing to gain from running them in
-    parallel). Each result is saved as soon as it is produced and one
+    Submissions are processed AUTO_EVAL_WORKERS at a time (one after another
+    by default). Each result is saved as soon as it is produced and one
     failing submission never aborts the rest, so after an interruption the
-    call can simply be repeated with ``skip_already_evaluated`` set.
+    call can simply be repeated with ``skip_already_evaluated`` set. Results
+    keep the submissions' order whatever order they finish in.
     Running the similarity check first lets its flags feed the grading.
     """
     if subject_id not in instructor_subject_ids(db, instructor):
@@ -2444,35 +2454,57 @@ def auto_evaluate_assignment(
         )
         stored = {row.submission_id: row for row in stored_rows}  # later rows overwrite earlier ones
 
-    results: list[BatchEvaluationItemOut] = []
-    for submission in submissions:
-        name = submission.student_name
+    results: list[BatchEvaluationItemOut | None] = [None] * len(submissions)
+    to_run: list[tuple[int, int]] = []  # (position in results, submission id)
+    for position, submission in enumerate(submissions):
         if submission.id in stored:
             prev = stored[submission.id]
-            results.append(BatchEvaluationItemOut(
-                submission_id=submission.id, student_name=name, status="skipped",
+            results[position] = BatchEvaluationItemOut(
+                submission_id=submission.id, student_name=submission.student_name, status="skipped",
                 recommended_score=prev.recommended_score, recommended_max=prev.recommended_max,
                 grader=prev.grader, model=prev.model, review_flags=list(prev.review_flags or []),
                 similarity_flagged=prev.similarity_flagged,
                 ai_flagged=_ai_flagged(prev.code_ai_flagged, prev.report_ai_signal),
-                ai_signals=prev.ai_signals))
-            continue
+                ai_signals=prev.ai_signals)
+        else:
+            to_run.append((position, submission.id))
+
+    rubric_id = rubric.id
+
+    def evaluate(submission_id: int) -> BatchEvaluationItemOut:
+        # Its own session: a SQLAlchemy session must not be shared between threads.
+        worker_db = SessionLocal()
         try:
-            ev = _run_auto_evaluation(db, submission, rubric, use_rubric_model=payload.use_rubric_model,
-                                      use_ai_detection=payload.use_ai_detection)
-        except Exception as exc:  # one bad submission must not stop the batch
-            db.rollback()
-            results.append(BatchEvaluationItemOut(
-                submission_id=submission.id, student_name=name, status="failed",
-                error=f"{exc.__class__.__name__}: {exc}"[:200]))
-            continue
-        results.append(BatchEvaluationItemOut(
-            submission_id=submission.id, student_name=name, status="evaluated",
-            recommended_score=ev.recommended_score, recommended_max=ev.recommended_max,
-            grader=ev.grader, model=ev.model, review_flags=list(ev.review_flags or []),
-            similarity_flagged=ev.similarity_flagged,
-            ai_flagged=_ai_flagged(ev.code_ai_flagged, ev.report_ai_signal),
-            ai_signals=ev.ai_signals))
+            submission = worker_db.get(Submission, submission_id)
+            name = submission.student_name
+            try:
+                ev = _run_auto_evaluation(worker_db, submission, worker_db.get(Rubric, rubric_id),
+                                          use_rubric_model=payload.use_rubric_model,
+                                          use_ai_detection=payload.use_ai_detection)
+            except Exception as exc:  # one bad submission must not stop the batch
+                worker_db.rollback()
+                return BatchEvaluationItemOut(
+                    submission_id=submission_id, student_name=name, status="failed",
+                    error=f"{exc.__class__.__name__}: {exc}"[:200])
+            return BatchEvaluationItemOut(
+                submission_id=submission_id, student_name=name, status="evaluated",
+                recommended_score=ev.recommended_score, recommended_max=ev.recommended_max,
+                grader=ev.grader, model=ev.model, review_flags=list(ev.review_flags or []),
+                similarity_flagged=ev.similarity_flagged,
+                ai_flagged=_ai_flagged(ev.code_ai_flagged, ev.report_ai_signal),
+                ai_signals=ev.ai_signals)
+        finally:
+            worker_db.close()
+
+    ids = [submission_id for _, submission_id in to_run]
+    workers = min(AUTO_EVAL_WORKERS, len(ids))
+    if workers <= 1:
+        items = [evaluate(submission_id) for submission_id in ids]
+    else:
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="auto-eval") as pool:
+            items = list(pool.map(evaluate, ids))  # map keeps the input order
+    for (position, _), item in zip(to_run, items):
+        results[position] = item
 
     def _count(status: str) -> int:
         return sum(1 for r in results if r.status == status)

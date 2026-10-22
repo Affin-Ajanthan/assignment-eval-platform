@@ -138,13 +138,19 @@ logged in.
    breakdown) is stored and shown on the dashboard.
    **Whole assignment at once**: `POST
    /subjects/{id}/assignments/{name}/auto-evaluate` with `{"rubric_id": ...}`
-   evaluates every submission of that assignment one after another (run
-   the similarity check first so its flags feed the grading). It returns a
-   per-submission status (`evaluated` / `skipped` / `failed`) and scores;
-   each result is saved as it is produced and one failing submission never
-   stops the rest. Send `"skip_already_evaluated": true` to resume an
-   interrupted run. It runs synchronously, so a large class with a local
-   LLM can take minutes.
+   evaluates every submission of that assignment (run the similarity
+   check first so its flags feed the grading). It returns a
+   per-submission status (`evaluated` / `skipped` / `failed`) and scores,
+   in submission order; each result is saved as it is produced and one
+   failing submission never stops the rest. Send
+   `"skip_already_evaluated": true` to resume an interrupted run. It runs
+   synchronously, so a large class with a local LLM can take minutes.
+   Submissions are evaluated `AUTO_EVAL_WORKERS` at a time (default 1:
+   one after another). To grade several at once, set it to e.g. 2 and set
+   Ollama's `OLLAMA_NUM_PARALLEL` to the same number (then restart
+   Ollama). Marks are unaffected; only the waiting time changes. All
+   workers share one GPU and each parallel request needs its own context
+   memory, so on a small GPU the gain is limited: measure before raising it.
 6. **Manual grading**: the instructor reviews the auto-evaluation --
    they can accept its scores as a starting point (one click copies
    them into the grading form) or override them entirely -- and saves
