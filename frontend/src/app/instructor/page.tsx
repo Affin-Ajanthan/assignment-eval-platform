@@ -7,6 +7,7 @@ import {
   AutoEvaluation,
   Rubric,
   SimilarityCheckResult,
+  Grade,
   Submission,
   SubmissionFile,
 } from "@/lib/api";
@@ -86,6 +87,11 @@ export default function InstructorPage() {
   // Set once Save is pressed with empty criterion boxes, so those boxes are highlighted.
   const [showEmptyMarks, setShowEmptyMarks] = useState(false);
   const [saveConfirm, setSaveConfirm] = useState<ConfirmRequest | null>(null);
+  // Re-grade: the saved grade is loaded into the form. gradeLoadFor ignores a
+  // reply that arrives after another submission's panel was opened.
+  const [loadingSavedGrade, setLoadingSavedGrade] = useState(false);
+  const [savedGradeNote, setSavedGradeNote] = useState<string | null>(null);
+  const gradeLoadFor = useRef<number | null>(null);
   const [gradingComments, setGradingComments] = useState("");
   const [gradingMsg, setGradingMsg] = useState<MessageState>(null);
   // Same as the auto-evaluation panel: scroll the grading panel into view when it is opened.
@@ -258,7 +264,49 @@ export default function InstructorPage() {
     setGradingMode("criteria");
     setFinalMark("");
     setShowEmptyMarks(false);
+    setSavedGradeNote(null);
+    setLoadingSavedGrade(false);
     setGradingScrollRequest((n) => n + 1);
+    gradeLoadFor.current = null;
+    // Re-grade starts from the saved grade, not a blank form. Auto-evaluation
+    // scores (prefill) take precedence: the instructor asked for those.
+    if (submission?.status === "graded" && Object.keys(prefill).length === 0) {
+      loadSavedGrade(submissionId);
+    }
+  }
+
+  async function loadSavedGrade(submissionId: number) {
+    gradeLoadFor.current = submissionId;
+    setLoadingSavedGrade(true);
+    try {
+      const grade = await apiFetch<Grade | null>(`/submissions/${submissionId}/grade`);
+      if (gradeLoadFor.current !== submissionId || !grade) return; // another panel was opened meanwhile
+      if (rubrics.some((r) => r.id === grade.rubric_id)) setGradingRubricId(grade.rubric_id);
+      setGradingComments(grade.comments ?? "");
+      // A grade saved with "Final mark only" has no per-criterion marks.
+      if (Object.keys(grade.criterion_scores).length === 0) {
+        setGradingMode("final");
+        setFinalMark(String(grade.total_score));
+      } else {
+        setCriterionScores(
+          Object.fromEntries(Object.entries(grade.criterion_scores).map(([name, score]) => [name, String(score)])),
+        );
+      }
+      setSavedGradeNote(
+        `Showing the saved grade (${grade.total_score})` +
+          (grade.graded_by ? ` by ${grade.graded_by}` : "") +
+          `, ${formatDateTime(grade.graded_at)}. Saving creates a new grade.`,
+      );
+    } catch (err) {
+      if (gradeLoadFor.current === submissionId) {
+        setGradingMsg({
+          text: `Could not load the saved grade: ${err instanceof Error ? err.message : err}`,
+          kind: "error",
+        });
+      }
+    } finally {
+      if (gradeLoadFor.current === submissionId) setLoadingSavedGrade(false);
+    }
   }
 
   const gradingRubric = rubrics.find((r) => r.id === gradingRubricId) || null;
@@ -274,7 +322,8 @@ export default function InstructorPage() {
   );
   const finalMarkError = scoreError(finalMark, gradingRubric?.max_total ?? 0);
   const cannotSave =
-    gradingMode === "final" ? finalMark.trim() === "" || finalMarkError !== null : Object.keys(scoreErrors).length > 0;
+    loadingSavedGrade ||
+    (gradingMode === "final" ? finalMark.trim() === "" || finalMarkError !== null : Object.keys(scoreErrors).length > 0);
   // Empty boxes are saved as 0, and the grey "max N" hint can make them look filled.
   const emptyCriteria =
     gradingMode === "criteria"
@@ -318,6 +367,7 @@ export default function InstructorPage() {
         json: { rubric_id: gradingRubricId, ...marks, comments: gradingComments },
       });
       setGradingMsg({ text: "Grade saved.", kind: "success" });
+      setSavedGradeNote(null); // it described the grade this one replaces
       if (subjectId !== null) await loadSubmissions(subjectId);
     } catch (err) {
       setGradingMsg({ text: `Failed to save grade: ${err instanceof Error ? err.message : err}`, kind: "error" });
@@ -815,6 +865,10 @@ export default function InstructorPage() {
               className="mt-6 scroll-mt-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm"
             >
               <h2 className="text-lg font-bold">Grade submission {studentLabel(gradingSubmissionId)}</h2>
+              {loadingSavedGrade && <p className="mt-1 text-sm text-gray-500">Loading the saved grade...</p>}
+              {savedGradeNote && (
+                <p className="mt-2 rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">{savedGradeNote}</p>
+              )}
               <label className="mt-3 block text-sm font-semibold" htmlFor="grading-rubric">
                 Rubric
               </label>
@@ -979,9 +1033,11 @@ export default function InstructorPage() {
                   disabled={cannotSave}
                   title={
                     cannotSave
-                      ? gradingMode === "final" && finalMark.trim() === ""
-                        ? "Enter the final mark first"
-                        : "Fix the marks shown in red first"
+                      ? loadingSavedGrade
+                        ? "Loading the saved grade..."
+                        : gradingMode === "final" && finalMark.trim() === ""
+                          ? "Enter the final mark first"
+                          : "Fix the marks shown in red first"
                       : undefined
                   }
                   className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
