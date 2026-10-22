@@ -27,6 +27,7 @@ import RubricModelToggle, {
 import RubricsSection from "@/components/instructor/RubricsSection";
 import { formatDateTime, formatMark } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
+import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 
 /** Inline error for one criterion's mark, or null when it is fine. An empty box
  * is not an error (it is saved as 0). */
@@ -82,6 +83,9 @@ export default function InstructorPage() {
   // "final": one overall mark (e.g. 70 / 100) instead of a mark per criterion.
   const [gradingMode, setGradingMode] = useState<"criteria" | "final">("criteria");
   const [finalMark, setFinalMark] = useState("");
+  // Set once Save is pressed with empty criterion boxes, so those boxes are highlighted.
+  const [showEmptyMarks, setShowEmptyMarks] = useState(false);
+  const [saveConfirm, setSaveConfirm] = useState<ConfirmRequest | null>(null);
   const [gradingComments, setGradingComments] = useState("");
   const [gradingMsg, setGradingMsg] = useState<MessageState>(null);
   // Same as the auto-evaluation panel: scroll the grading panel into view when it is opened.
@@ -253,6 +257,7 @@ export default function InstructorPage() {
     setCriterionScores(prefill);
     setGradingMode("criteria");
     setFinalMark("");
+    setShowEmptyMarks(false);
     setGradingScrollRequest((n) => n + 1);
   }
 
@@ -270,8 +275,31 @@ export default function InstructorPage() {
   const finalMarkError = scoreError(finalMark, gradingRubric?.max_total ?? 0);
   const cannotSave =
     gradingMode === "final" ? finalMark.trim() === "" || finalMarkError !== null : Object.keys(scoreErrors).length > 0;
+  // Empty boxes are saved as 0, and the grey "max N" hint can make them look filled.
+  const emptyCriteria =
+    gradingMode === "criteria"
+      ? (gradingRubric?.criteria ?? []).filter((c) => (criterionScores[c.name] ?? "").trim() === "")
+      : [];
 
-  async function handleSaveGrade() {
+  function handleSaveGrade() {
+    if (cannotSave) return;
+    if (emptyCriteria.length === 0) return saveGrade();
+    setShowEmptyMarks(true);
+    const n = emptyCriteria.length;
+    setSaveConfirm({
+      title: "Save with empty marks?",
+      message:
+        `${n} ${n === 1 ? "criterion is" : "criteria are"} empty and will be saved as 0:\n` +
+        emptyCriteria.map((c) => `• ${c.name} (max ${c.max_points})`).join("\n"),
+      confirmLabel: "Save anyway",
+      onConfirm: async () => {
+        setSaveConfirm(null);
+        await saveGrade();
+      },
+    });
+  }
+
+  async function saveGrade() {
     if (gradingSubmissionId === null || gradingRubricId === null || cannotSave) return;
     setGradingMsg(null);
     let marks: { criterion_scores: Record<string, number> } | { total_score: number };
@@ -871,6 +899,7 @@ export default function InstructorPage() {
                   <div className="space-y-2">
                     {gradingRubric?.criteria.map((c) => {
                       const error = scoreErrors[c.name];
+                      const empty = showEmptyMarks && (criterionScores[c.name] ?? "").trim() === "";
                       const inputId = `score-${c.name}`;
                       return (
                         <div key={c.name} className="flex items-start gap-3">
@@ -891,16 +920,26 @@ export default function InstructorPage() {
                               value={criterionScores[c.name] ?? ""}
                               placeholder={`max ${c.max_points}`}
                               aria-invalid={Boolean(error)}
-                              aria-describedby={error ? `${inputId}-error` : undefined}
+                              aria-describedby={error || empty ? `${inputId}-error` : undefined}
                               onChange={(e) => setCriterionScores((prev) => ({ ...prev, [c.name]: e.target.value }))}
                               className={`w-full rounded-md border px-2 py-1.5 text-sm ${
-                                error ? "border-red-500 bg-red-50" : "border-gray-300"
+                                error
+                                  ? "border-red-500 bg-red-50"
+                                  : empty
+                                    ? "border-amber-500 bg-amber-50"
+                                    : "border-gray-300"
                               }`}
                             />
-                            {error && (
+                            {error ? (
                               <p id={`${inputId}-error`} className="mt-1 text-xs text-red-700">
                                 {error}
                               </p>
+                            ) : (
+                              empty && (
+                                <p id={`${inputId}-error`} className="mt-1 text-xs text-amber-700">
+                                  Empty: saved as 0.
+                                </p>
+                              )
                             )}
                           </div>
                         </div>
@@ -958,6 +997,7 @@ export default function InstructorPage() {
                 </button>
               </div>
               <Message state={gradingMsg} />
+              <ConfirmDialog request={saveConfirm} onCancel={() => setSaveConfirm(null)} />
             </section>
           )}
         </>
