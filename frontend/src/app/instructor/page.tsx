@@ -42,6 +42,26 @@ function scoreError(value: string | undefined, maxPoints: number): string | null
   return null;
 }
 
+/** What the grading form holds, as a string to compare with the last loaded or
+ * saved state. The mode alone does not count: switching "Final mark only" on
+ * and off without typing anything is not an unsaved change. */
+function gradingSnapshot(
+  mode: "criteria" | "final",
+  scores: Record<string, string>,
+  finalMark: string,
+  comments: string,
+): string {
+  const marks =
+    mode === "final"
+      ? finalMark.trim()
+      : Object.entries(scores)
+          .map(([name, value]) => [name, value.trim()])
+          .filter(([, value]) => value !== "")
+          .sort(([a], [b]) => a.localeCompare(b));
+  const hasMarks = marks.length > 0;
+  return JSON.stringify(hasMarks ? [mode, marks, comments.trim()] : [null, null, comments.trim()]);
+}
+
 /** A mark rounded to the 2 decimal places the API accepts. */
 function roundMark(score: number): number {
   return Math.round(score * 100) / 100;
@@ -137,7 +157,9 @@ export default function InstructorPage() {
   const [finalMark, setFinalMark] = useState("");
   // Set once Save is pressed with empty criterion boxes, so those boxes are highlighted.
   const [showEmptyMarks, setShowEmptyMarks] = useState(false);
-  const [saveConfirm, setSaveConfirm] = useState<ConfirmRequest | null>(null);
+  const [gradingConfirm, setGradingConfirm] = useState<ConfirmRequest | null>(null);
+  // The form as last opened, loaded or saved; anything else is an unsaved change.
+  const [gradingBaseline, setGradingBaseline] = useState("");
   // Re-grade: the saved grade is loaded into the form. gradeLoadFor ignores a
   // reply that arrives after another submission's panel was opened.
   const [loadingSavedGrade, setLoadingSavedGrade] = useState(false);
@@ -305,8 +327,12 @@ export default function InstructorPage() {
     if (!autoevalResult || autoevalSubmissionId === null) return;
     const prefill: Record<string, string> = {};
     for (const c of autoevalResult.criterion_breakdown) prefill[c.name] = String(roundMark(c.score));
-    setAutoevalSubmissionId(null);
-    openGradingPanel(autoevalSubmissionId, autoevalResult.rubric_id, prefill);
+    const submissionId = autoevalSubmissionId;
+    const rubricId = autoevalResult.rubric_id;
+    confirmDiscardThen(() => {
+      setAutoevalSubmissionId(null);
+      openGradingPanel(submissionId, rubricId, prefill);
+    });
   }
 
   // ---- Manual grading ----
@@ -321,6 +347,8 @@ export default function InstructorPage() {
     setCriterionScores(prefill);
     setGradingMode("criteria");
     setFinalMark("");
+    // Auto-evaluation scores (prefill) are not saved yet, so they count as unsaved marks.
+    setGradingBaseline(gradingSnapshot("criteria", {}, "", ""));
     setShowEmptyMarks(false);
     setSavedGradeNote(null);
     setLoadingSavedGrade(false);
@@ -339,11 +367,13 @@ export default function InstructorPage() {
     try {
       const grade = await apiFetch<Grade | null>(`/submissions/${submissionId}/grade`);
       if (gradeLoadFor.current !== submissionId || !grade) return; // another panel was opened meanwhile
-      setGradingComments(grade.comments ?? "");
+      const comments = grade.comments ?? "";
+      setGradingComments(comments);
       const lockedRubric = assignmentRubricFor(submissionId);
       if (lockedRubric !== null && grade.rubric_id !== lockedRubric) {
         // Graded before the assignment's rubric changed: those marks belong to
         // other criteria, so the marks start blank.
+        setGradingBaseline(gradingSnapshot("criteria", {}, "", comments));
         setSavedGradeNote(
           `The saved grade (${grade.total_score}) used a different rubric than this assignment now uses. ` +
             "Enter the marks again with the rubric below.",
@@ -355,10 +385,13 @@ export default function InstructorPage() {
       if (Object.keys(grade.criterion_scores).length === 0) {
         setGradingMode("final");
         setFinalMark(String(grade.total_score));
+        setGradingBaseline(gradingSnapshot("final", {}, String(grade.total_score), comments));
       } else {
-        setCriterionScores(
-          Object.fromEntries(Object.entries(grade.criterion_scores).map(([name, score]) => [name, String(score)])),
+        const scores = Object.fromEntries(
+          Object.entries(grade.criterion_scores).map(([name, score]) => [name, String(score)]),
         );
+        setCriterionScores(scores);
+        setGradingBaseline(gradingSnapshot("criteria", scores, "", comments));
       }
       setSavedGradeNote(
         `Showing the saved grade (${grade.total_score})` +
@@ -398,19 +431,43 @@ export default function InstructorPage() {
       ? (gradingRubric?.criteria ?? []).filter((c) => (criterionScores[c.name] ?? "").trim() === "")
       : [];
 
+  const gradingDirty =
+    gradingSubmissionId !== null &&
+    gradingSnapshot(gradingMode, criterionScores, finalMark, gradingComments) !== gradingBaseline;
+
+  function closeGradingPanel() {
+    setGradingSubmissionId(null);
+    gradeLoadFor.current = null;
+  }
+
+  /** Runs `action` (which replaces or closes the grading form) straight away, or
+   * after the instructor confirms when the form has unsaved marks or comments. */
+  function confirmDiscardThen(action: () => void) {
+    if (!gradingDirty) return action();
+    setGradingConfirm({
+      title: "Discard unsaved marks?",
+      message: `The marks or comments you entered for ${studentLabel(gradingSubmissionId)} have not been saved.`,
+      confirmLabel: "Discard",
+      onConfirm: () => {
+        setGradingConfirm(null);
+        action();
+      },
+    });
+  }
+
   function handleSaveGrade() {
     if (cannotSave) return;
     if (emptyCriteria.length === 0) return saveGrade();
     setShowEmptyMarks(true);
     const n = emptyCriteria.length;
-    setSaveConfirm({
+    setGradingConfirm({
       title: "Save with empty marks?",
       message:
         `${n} ${n === 1 ? "criterion is" : "criteria are"} empty and will be saved as 0:\n` +
         emptyCriteria.map((c) => `• ${c.name} (max ${c.max_points})`).join("\n"),
       confirmLabel: "Save anyway",
       onConfirm: async () => {
-        setSaveConfirm(null);
+        setGradingConfirm(null);
         await saveGrade();
       },
     });
@@ -435,6 +492,7 @@ export default function InstructorPage() {
         json: { rubric_id: gradingRubricId, ...marks, comments: gradingComments },
       });
       setGradingMsg({ text: "Grade saved.", kind: "success" });
+      setGradingBaseline(gradingSnapshot(gradingMode, criterionScores, finalMark, gradingComments));
       setSavedGradeNote(null); // it described the grade this one replaces
       if (subjectId !== null) await loadSubmissions(subjectId);
     } catch (err) {
@@ -787,7 +845,7 @@ export default function InstructorPage() {
                       <div className="flex gap-1 whitespace-nowrap">
                         <button
                           type="button"
-                          onClick={() => openGradingPanel(s.id)}
+                          onClick={() => confirmDiscardThen(() => openGradingPanel(s.id))}
                           className="rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700"
                         >
                           {s.status === "graded" ? "Re-grade" : "Grade"}
@@ -1098,14 +1156,14 @@ export default function InstructorPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setGradingSubmissionId(null)}
+                  onClick={() => confirmDiscardThen(closeGradingPanel)}
                   className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
                 >
                   Cancel
                 </button>
               </div>
               <Message state={gradingMsg} />
-              <ConfirmDialog request={saveConfirm} onCancel={() => setSaveConfirm(null)} />
+              <ConfirmDialog request={gradingConfirm} onCancel={() => setGradingConfirm(null)} />
             </section>
           )}
         </>
