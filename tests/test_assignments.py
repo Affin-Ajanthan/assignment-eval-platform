@@ -28,6 +28,12 @@ from tests.auth_helpers import (
 client = TestClient(app)
 H = auth_headers
 
+
+def _parse_utc(value: str) -> datetime:
+    """The API's UTC timestamps end in "Z", which datetime.fromisoformat reads
+    only from Python 3.11; this works on 3.10 too."""
+    return datetime.fromisoformat(value[:-1] + "+00:00" if value.endswith("Z") else value)
+
 THREE_CRITERIA = [
     {"name": "Code Quality", "description": "Quality and structure of the submitted code", "max_points": 10},
     {"name": "Documentation", "description": "Quality of comments and documentation", "max_points": 10},
@@ -193,7 +199,7 @@ def test_create_edit_and_list_assignment():
     a = r.json()
     assert a["name"] == "Assignment 1" and a["rubric_name"] == "Assignment 1 Rubric" and a["max_points"] == 40
     # Stored as UTC, returned with an explicit offset.
-    assert datetime.fromisoformat(a["available_from"]) == datetime(2026, 10, 7, 3, 30, tzinfo=timezone.utc)
+    assert _parse_utc(a["available_from"]) == datetime(2026, 10, 7, 3, 30, tzinfo=timezone.utc)
     assert a["status"] == "open"
 
     r = client.put(f"/assignments/{a['id']}", json={
@@ -204,7 +210,7 @@ def test_create_edit_and_list_assignment():
     updated = r.json()
     assert updated["name"] == "Assignment 1 (Calculator)" and updated["description"] == "Sum and product of two numbers."
     assert updated["rubric_id"] is None
-    assert datetime.fromisoformat(updated["deadline"]) == datetime(2099, 10, 20, 23, 59, tzinfo=timezone.utc)
+    assert _parse_utc(updated["deadline"]) == datetime(2099, 10, 20, 23, 59, tzinfo=timezone.utc)
     listed = client.get(f"/assignments?subject_id={subject['id']}", headers=H(itok)).json()
     assert [x["name"] for x in listed] == ["Assignment 1 (Calculator)"]
 
@@ -285,11 +291,12 @@ def test_student_sees_open_and_past_assignments_but_not_upcoming_ones():
     open_one = next(a for a in listed if a["name"] == "Open one")
     assert open_one["description"] == "Implement a Python calculator."
     # Explicit UTC offset ("Z"), so browsers convert it to local time correctly.
-    assert datetime.fromisoformat(open_one["deadline"]).utcoffset() == timedelta(0)
+    assert _parse_utc(open_one["deadline"]).utcoffset() == timedelta(0)
     assert open_one["my_submission"] is None
     # No rubric or grading internals in the student view.
     assert set(open_one) == {"id", "subject_id", "subject_name", "name", "description", "available_from",
-                             "deadline", "status", "submission_types", "code_languages", "my_submission"}
+                             "deadline", "status", "submission_types", "code_languages",
+                                 "student_similarity_check", "student_ai_check", "my_submission"}
 
 
 def test_backend_enforces_the_submission_window():

@@ -8,6 +8,7 @@ import AccountBar from "@/components/AccountBar";
 import Message, { MessageState } from "@/components/Message";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import SubmissionFiles from "@/components/SubmissionFiles";
+import SelfCheckPanel from "@/components/student/SelfCheckPanel";
 import { CODE_LANGUAGES, languageNames, languagesFor } from "@/lib/codeLanguages";
 
 const fileInput = "mt-1 mb-3 block w-full text-sm";
@@ -281,6 +282,10 @@ function AssignmentCard({
         </div>
       )}
       {a.status === "closed" && !sub && <p className="mt-3 text-sm text-gray-600">The deadline has passed.</p>}
+
+      {a.status === "open" && sub && sub.status !== "graded" && !formMode && (
+        <SelfCheckPanel assignment={a} submission={sub} />
+      )}
 
       {formMode && (
         <UploadForm

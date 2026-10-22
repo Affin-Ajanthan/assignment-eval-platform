@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from fastapi.testclient import TestClient
 
 from app.main import app as fastapi_app
-from tests.auth_helpers import auth_headers, ensure_assignment, setup_subject_with_users, submit
+from tests.auth_helpers import auth_headers, create_assignment, ensure_assignment, setup_subject_with_users, submit
 
 client = TestClient(fastapi_app)
 
@@ -212,3 +212,40 @@ def test_grade_final_mark_rejects_out_of_range_and_mixed_input():
                  {"total_score": 50, "criterion_scores": {"Correctness": 50}}):
         r = client.post(url, json={"rubric_id": rubric["id"], **body}, headers=auth_headers(instructor_tok))
         assert r.status_code == 400, body
+
+
+def test_assignment_with_rubric_is_graded_only_with_that_rubric():
+    subject, instructor_tok, student_tok = setup_subject_with_users(client)
+    H = auth_headers(instructor_tok)
+
+    def rubric(name):
+        return client.post("/rubrics", headers=H, json={
+            "name": name, "subject_id": subject["id"], "criteria": [{"name": "Only", "max_points": 10}]}).json()
+
+    own, other = rubric("Own rubric"), rubric("Other rubric")
+    assignment = create_assignment(client, instructor_tok, subject["id"], "Locked rubric", rubric_id=own["id"])
+    submission = client.post(
+        "/submissions",
+        data={"subject_id": subject["id"], "assignment_id": assignment["id"]},
+        files={"code": ("solution.py", io.BytesIO(b"x = 1"), "text/x-python")},
+        headers=auth_headers(student_tok),
+    ).json()
+    url = f"/submissions/{submission['id']}"
+
+    wrong = client.post(f"{url}/grade", headers=H, json={"rubric_id": other["id"], "criterion_scores": {"Only": 5}})
+    assert wrong.status_code == 400 and "Own rubric" in wrong.json()["detail"]
+    assert client.post(f"{url}/auto-evaluate", headers=H, json={"rubric_id": other["id"]}).status_code == 400
+    assert client.post(f"{url}/grade", headers=H,
+                       json={"rubric_id": own["id"], "criterion_scores": {"Only": 5}}).status_code == 200
+
+
+def test_grade_marks_allow_at_most_two_decimal_places():
+    rubric, submission, instructor_tok, _ = _two_criteria_submission("Assignment D")
+    url = f"/submissions/{submission['id']}/grade"
+    H = auth_headers(instructor_tok)
+    for body in ({"criterion_scores": {"Correctness": 7.3333}}, {"total_score": 70.125}):
+        r = client.post(url, json={"rubric_id": rubric["id"], **body}, headers=H)
+        assert r.status_code == 400 and "2 decimal places" in r.json()["detail"], body
+    ok = client.post(url, json={"rubric_id": rubric["id"], "criterion_scores": {"Correctness": 0.1, "Report": 0.2}},
+                     headers=H)
+    assert ok.status_code == 200 and ok.json()["total_score"] == 0.3  # not 0.30000000000000004
