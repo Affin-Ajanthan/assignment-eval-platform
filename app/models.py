@@ -160,6 +160,11 @@ class Assignment(Base):
     # Optional: the only programming languages students may submit code in
     # (ids from app/code_languages.py). NULL accepts every supported language.
     code_languages = Column(JSON, nullable=True)
+    # Student self-checks while the assignment is open (POST
+    # /submissions/{id}/self-checks). On by default; the instructor can switch
+    # either off at any time. Enforced by the API, not just the UI.
+    student_similarity_check = Column(Boolean, nullable=False, default=True, server_default="1")
+    student_ai_check = Column(Boolean, nullable=False, default=True, server_default="1")
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
@@ -333,3 +338,27 @@ class AutoEvaluation(Base):
     # {"report": {signal, score, method, reasons} | null, "code": {...} | null}
     ai_signals = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
+
+
+class SelfCheck(Base):
+    """One self-check a student ran on their own submission before the
+    deadline: code similarity, report similarity or AI-content detection.
+
+    Kept apart from SimilarityFlag / AutoEvaluation: a self-check never
+    changes what the instructor's own checks show. ``result`` keeps the full
+    internal detail (exact scores, which submissions matched) for the
+    instructor; the student endpoint returns only bands and the student's own
+    matching passages."""
+
+    __tablename__ = "self_checks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    submission_id = Column(Integer, ForeignKey("submissions.id"), nullable=False, index=True)
+    student_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    assignment_id = Column(Integer, ForeignKey("assignments.id"), nullable=True, index=True)
+    kind = Column(String, nullable=False)  # "code_similarity" | "report_similarity" | "ai_content"
+    status = Column(String, nullable=False, default="running")  # "running" | "done" | "failed"
+    result = Column(JSON, nullable=True)
+    error = Column(String, nullable=True)
+    created_at = Column(DateTime, default=_utcnow, index=True)
+    finished_at = Column(DateTime, nullable=True)
