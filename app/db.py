@@ -25,7 +25,9 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 # PORTAL_DB_PATH lets the tests use a throwaway database; normally it is unset.
 DB_FILE = Path(os.environ.get("PORTAL_DB_PATH") or BASE_DIR / "portal.db")
 DATABASE_URL = f"sqlite:///{DB_FILE}"
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+# timeout: SQLite allows one writer at a time; concurrent batch auto-evaluation
+# workers wait up to 30 s for their turn instead of failing with "database is locked".
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False, "timeout": 30})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
