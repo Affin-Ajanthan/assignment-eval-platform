@@ -52,6 +52,51 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
+Backend settings can be kept in a `.env` file in the project folder (next
+to `requirements.txt`): copy `.env.example` to `.env`, change what you
+need, and start the server with `--env-file`:
+
+```bash
+uvicorn app.main:app --reload --port 8000 --env-file .env
+```
+
+`.env` is not committed (it is in `.gitignore`), so each computer keeps
+its own. A setting that is already set on the computer (for example with
+`setx`) wins over the same setting in `.env`.
+
+### Concurrent auto-evaluation
+
+"Evaluate a whole assignment" grades every **submission** (student) of
+one assignment. By default it grades them one after another; to grade
+several students at the same time, two settings must match:
+
+| Setting | Read by | Where to set it |
+|---|---|---|
+| `AUTO_EVAL_WORKERS` | the backend | `.env` (or `setx`), then restart the backend |
+| `OLLAMA_NUM_PARALLEL` | Ollama (a separate program; it does not read the project's `.env`) | `setx OLLAMA_NUM_PARALLEL 2` (Windows) or the environment Ollama starts in, then restart Ollama |
+
+**Use the same number for both** for the best result. With
+`AUTO_EVAL_WORKERS=4` but `OLLAMA_NUM_PARALLEL=1`, four submissions are
+prepared at once but the model still grades them one at a time (the
+others wait in Ollama's queue). With `OLLAMA_NUM_PARALLEL` higher than
+`AUTO_EVAL_WORKERS`, Ollama reserves memory the backend never uses.
+
+Marks are unaffected: each submission is still graded by the same model
+and prompt; only the total waiting time changes. All parallel gradings
+share one GPU, and each one needs its own context memory
+(`OLLAMA_NUM_CTX`, 8192 tokens by default), so the right number depends
+on the GPU:
+
+| GPU memory | Suggested value for both settings |
+|---|---|
+| 6 GB (qwen3:8b does not fully fit even alone) | 2, or 1 |
+| 12 GB | about 2 |
+| 16-24 GB | 3-4 |
+
+These are starting points, not measurements: time a batch with 1 and
+with your chosen number, and keep the higher one only if it is clearly
+faster. While a batch runs, `ollama ps` shows the loaded model.
+
 On first run the server prints a default admin login to the console
 (see "Accounts and access control" below). API docs are auto-generated
 at `http://localhost:8000/docs`.
@@ -146,11 +191,8 @@ logged in.
    `"skip_already_evaluated": true` to resume an interrupted run. It runs
    synchronously, so a large class with a local LLM can take minutes.
    Submissions are evaluated `AUTO_EVAL_WORKERS` at a time (default 1:
-   one after another). To grade several at once, set it to e.g. 2 and set
-   Ollama's `OLLAMA_NUM_PARALLEL` to the same number (then restart
-   Ollama). Marks are unaffected; only the waiting time changes. All
-   workers share one GPU and each parallel request needs its own context
-   memory, so on a small GPU the gain is limited: measure before raising it.
+   one after another); see "Concurrent auto-evaluation" below to grade
+   several students of the assignment at once.
 6. **Manual grading**: the instructor reviews the auto-evaluation --
    they can accept its scores as a starting point (one click copies
    them into the grading form) or override them entirely -- and saves
