@@ -123,6 +123,7 @@ add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON", "ai_
 # Submissions made before assignments existed keep assignment_id NULL (and
 # their free-text assignment_name); nothing else about them changes.
 add_missing_columns("submissions", {"assignment_id": "INTEGER REFERENCES assignments(id)"})
+add_missing_columns("grades", {"feedback": "TEXT"})
 add_missing_columns("assignments", {"submission_types": "JSON"})
 add_missing_columns("assignments", {"starter_code": "TEXT", "starter_code_filename": "VARCHAR"})
 add_missing_columns("assignments", {"report_template_text": "TEXT", "report_template_filename": "VARCHAR"})
@@ -381,7 +382,8 @@ class GradeIn(BaseModel):
     criterion_scores: dict[str, float] = Field(default_factory=dict)
     # Final mark only, without per-criterion marks. Send this OR criterion_scores.
     total_score: Optional[float] = None
-    comments: Optional[str] = None
+    comments: Optional[str] = None  # internal notes, instructors only
+    feedback: Optional[str] = Field(default=None, max_length=5000)  # for the student
 
 
 class GradeOut(BaseModel):
@@ -391,6 +393,7 @@ class GradeOut(BaseModel):
     criterion_scores: dict[str, float]
     total_score: float
     comments: Optional[str]
+    feedback: Optional[str] = None
     graded_by: Optional[str]
     graded_at: UTCDateTime
 
@@ -2022,6 +2025,7 @@ def grade_submission(
         criterion_scores=payload.criterion_scores,
         total_score=total,
         comments=payload.comments,
+        feedback=(payload.feedback or "").strip() or None,
         graded_by_id=instructor.id,
         graded_by=instructor.full_name,
     )

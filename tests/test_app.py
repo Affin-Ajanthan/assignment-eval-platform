@@ -249,3 +249,21 @@ def test_grade_marks_allow_at_most_two_decimal_places():
     ok = client.post(url, json={"rubric_id": rubric["id"], "criterion_scores": {"Correctness": 0.1, "Report": 0.2}},
                      headers=H)
     assert ok.status_code == 200 and ok.json()["total_score"] == 0.3  # not 0.30000000000000004
+
+
+def test_grade_stores_student_feedback_separately_from_internal_comments():
+    rubric, submission, instructor_tok, student_tok = _two_criteria_submission("Assignment Feedback")
+    url = f"/submissions/{submission['id']}/grade"
+    saved = client.post(url, headers=auth_headers(instructor_tok), json={
+        "rubric_id": rubric["id"], "criterion_scores": {"Correctness": 60, "Report": 20},
+        "comments": "Check for copying from last year", "feedback": "  Good sorting; explain the design more.  "})
+    assert saved.status_code == 200
+    assert saved.json()["feedback"] == "Good sorting; explain the design more."  # trimmed
+    assert saved.json()["comments"] == "Check for copying from last year"
+
+    fetched = client.get(url, headers=auth_headers(instructor_tok)).json()
+    assert fetched["feedback"] == "Good sorting; explain the design more."
+    # Blank feedback is stored as "no feedback".
+    blank = client.post(url, headers=auth_headers(instructor_tok), json={
+        "rubric_id": rubric["id"], "total_score": 70, "feedback": "   "})
+    assert blank.json()["feedback"] is None

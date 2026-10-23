@@ -146,7 +146,8 @@ export interface Grade {
   rubric_id: number;
   criterion_scores: Record<string, number>;
   total_score: number;
-  comments: string | null;
+  comments: string | null; // internal, instructors only
+  feedback: string | null; // for the student
   graded_by: string | null;
   graded_at: string;
 }

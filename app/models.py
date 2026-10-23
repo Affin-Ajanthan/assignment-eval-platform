@@ -278,7 +278,9 @@ class Grade(Base):
     # criterion_scores: {"<criterion name>": <points awarded>, ...}
     criterion_scores = Column(JSON, nullable=False)
     total_score = Column(Float, nullable=False)
-    comments = Column(String, nullable=True)
+    comments = Column(String, nullable=True)  # internal: instructors only, never shown to students
+    # Written for the student; shown to them with their marks.
+    feedback = Column(String, nullable=True)
     graded_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     graded_by = Column(String, nullable=True)  # instructor's display name, denormalized
     graded_at = Column(DateTime, default=_utcnow)
