@@ -86,9 +86,13 @@ export interface Assignment {
   /** Student self-checks before the deadline (on by default). */
   student_similarity_check: boolean;
   student_ai_check: boolean;
+  /** Students see no marks or feedback before this time; null = as soon as each is saved. */
+  marks_release_at: string | null;
+  /** Whether students can see marks and feedback now. */
+  marks_released: boolean;
 }
 
-/** A student's own submission: status and final total only. */
+/** A student's own submission: status, marks and feedback (once released). */
 export interface MySubmission {
   id: number;
   submitted_at: string;
@@ -98,6 +102,10 @@ export interface MySubmission {
   has_video: boolean;
   final_mark: number | null;
   max_mark: number | null;
+  /** Per-criterion marks; empty when graded with "Final mark only" or not graded. */
+  criterion_marks: { name: string; score: number; max_points: number }[];
+  /** The instructor's feedback for the student (never the internal comments). */
+  feedback: string | null;
   can_edit: boolean;
 }
 
@@ -117,6 +125,8 @@ export interface StudentAssignment {
   /** Which self-checks the instructor allows for this assignment. */
   student_similarity_check: boolean;
   student_ai_check: boolean;
+  /** Set only while marks are held back: when they will be released. */
+  marks_release_at: string | null;
   my_submission: MySubmission | null;
 }
 
@@ -146,7 +156,8 @@ export interface Grade {
   rubric_id: number;
   criterion_scores: Record<string, number>;
   total_score: number;
-  comments: string | null;
+  comments: string | null; // internal, instructors only
+  feedback: string | null; // for the student
   graded_by: string | null;
   graded_at: string;
 }
