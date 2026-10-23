@@ -320,10 +320,16 @@ class AssignmentOut(BaseModel):
     student_ai_check: bool = True
 
 
+class CriterionMarkOut(BaseModel):
+    name: str
+    score: float
+    max_points: float
+
+
 class MySubmissionOut(BaseModel):
-    """What a student sees about their own submission: status and the
-    final total only -- no criterion-level marks, comments or evaluator
-    output."""
+    """What a student sees about their own submission: status, the final
+    total, the per-criterion marks and the instructor's feedback for them
+    -- never the internal comments or the evaluator output."""
 
     id: int
     submitted_at: UTCDateTime
@@ -333,6 +339,9 @@ class MySubmissionOut(BaseModel):
     has_video: bool
     final_mark: Optional[float]
     max_mark: Optional[float]
+    # Empty when graded with "Final mark only" (no per-criterion marks) or not graded.
+    criterion_marks: list[CriterionMarkOut] = []
+    feedback: Optional[str] = None
     can_edit: bool  # assignment open and not yet graded
 
 
@@ -1262,12 +1271,27 @@ def _clean_starter_code(code: str, filename: str) -> tuple[Optional[str], Option
     return code, filename
 
 
+def _criterion_marks(grade: Grade | None) -> list[CriterionMarkOut]:
+    """The grade's per-criterion marks in the rubric's order; empty for a
+    "Final mark only" grade (it has no per-criterion marks)."""
+    if grade is None or not grade.criterion_scores or grade.rubric is None:
+        return []
+    return [
+        CriterionMarkOut(name=c["name"], score=grade.criterion_scores[c["name"]], max_points=c["max_points"])
+        for c in grade.rubric.criteria
+        if c["name"] in grade.criterion_scores
+    ]
+
+
 def _my_submission_out(submission: Submission, assignment_open: bool) -> MySubmissionOut:
+    grade = submission.latest_grade
     return MySubmissionOut(
         id=submission.id, submitted_at=_as_utc(submission.submitted_at), status=submission.status,
         has_code=bool(submission.code_path), has_report=bool(submission.report_path),
         has_video=bool(submission.video_path),
         final_mark=submission.final_mark, max_mark=submission.max_mark,
+        criterion_marks=_criterion_marks(grade),
+        feedback=grade.feedback if grade else None,
         can_edit=assignment_open and submission.status != "graded",
     )
 

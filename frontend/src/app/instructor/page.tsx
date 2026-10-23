@@ -1130,7 +1130,7 @@ export default function InstructorPage() {
                       </p>
                     )}
                     <p className="mt-1 text-xs text-gray-600">
-                      No per-criterion marks are saved. Students see only this final mark.
+                      No per-criterion marks are saved. Students see this final mark and your feedback.
                     </p>
                   </div>
                 )}
@@ -1196,7 +1196,7 @@ export default function InstructorPage() {
                       <span className="ml-2 text-xs font-normal text-red-700">Marks shown in red are not counted.</span>
                     )}
                     <span className="ml-2 text-xs font-normal text-gray-500">
-                      Students see only this final mark, not the per-criterion scores or comments.
+                      Students see this mark, the per-criterion marks and your feedback, never the internal comments.
                     </span>
                   </p>
                 </>

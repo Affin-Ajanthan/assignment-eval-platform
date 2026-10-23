@@ -60,9 +60,10 @@ def _iso(delta: timedelta) -> str:
     return (datetime.now(timezone.utc) + delta).isoformat()
 
 
-def _grade(tok, submission_id, rubric_id, scores, comments="internal note: off-by-one in loop"):
+def _grade(tok, submission_id, rubric_id, scores, comments="internal note: off-by-one in loop", feedback=None):
     r = client.post(f"/submissions/{submission_id}/grade",
-                    json={"rubric_id": rubric_id, "criterion_scores": scores, "comments": comments}, headers=H(tok))
+                    json={"rubric_id": rubric_id, "criterion_scores": scores, "comments": comments,
+                          "feedback": feedback}, headers=H(tok))
     assert r.status_code == 200, r.text
     return r.json()
 
@@ -384,7 +385,7 @@ def test_no_edits_or_deletes_after_the_deadline_or_after_grading():
 # --------------------------------------------------------------------------
 
 
-def test_student_sees_only_the_final_mark_after_grading():
+def test_student_sees_marks_and_feedback_but_never_internal_details_after_grading():
     subject, itok, stok = setup_subject_with_users(client)
     rubric = _rubric(itok, subject["id"])
     a = create_assignment(client, itok, subject["id"], "Assignment 1", rubric_id=rubric["id"])
@@ -392,21 +393,28 @@ def test_student_sees_only_the_final_mark_after_grading():
 
     before = client.get("/assignments", headers=H(stok)).json()[0]["my_submission"]
     assert before["status"] == "submitted" and before["final_mark"] is None
+    assert before["criterion_marks"] == [] and before["feedback"] is None
 
     _grade(itok, sub["id"], rubric["id"], {"Code Quality": 8, "Documentation": 6, "Functionality": 20},
-           comments="INTERNAL-ONLY remark")
+           comments="INTERNAL-ONLY remark", feedback="Clear code; explain the loops.")
     after = client.get("/assignments", headers=H(stok)).json()[0]["my_submission"]
     assert after["status"] == "graded" and (after["final_mark"], after["max_mark"]) == (34, 40)
+    # Their own per-criterion marks, in the rubric's order, and the feedback written for them.
+    assert after["criterion_marks"] == [
+        {"name": "Code Quality", "score": 8, "max_points": 10},
+        {"name": "Documentation", "score": 6, "max_points": 10},
+        {"name": "Functionality", "score": 20, "max_points": 20},
+    ]
+    assert after["feedback"] == "Clear code; explain the loops."
 
-    # Nothing criterion-level or internal reaches the student anywhere.
+    # Nothing internal reaches the student anywhere.
     student_views = json.dumps([
         client.get("/assignments", headers=H(stok)).json(),
         client.get(f"/assignments/{a['id']}", headers=H(stok)).json(),
         client.get("/submissions", headers=H(stok)).json(),
         client.get(f"/submissions/{sub['id']}", headers=H(stok)).json(),
     ])
-    for secret in ("Code Quality", "Documentation", "Functionality", "INTERNAL-ONLY", "criterion_scores",
-                   "comments", "Assignment 1 Rubric", "graded_by"):
+    for secret in ("INTERNAL-ONLY", "criterion_scores", "comments", "Assignment 1 Rubric", "graded_by"):
         assert secret not in student_views, secret
     assert client.get(f"/submissions/{sub['id']}/grade", headers=H(stok)).status_code == 403
     assert client.get(f"/submissions/{sub['id']}/auto-evaluate", headers=H(stok)).status_code == 403
@@ -511,3 +519,24 @@ def test_student_sees_only_enrolled_subjects_with_open_and_past_assignments():
 
     # A subject the student is not enrolled in is refused outright.
     assert client.get(f"/assignments?subject_id={chemistry['id']}", headers=H(stok)).status_code == 403
+
+
+def test_final_mark_only_grade_shows_no_criterion_marks_and_feedback_stays_with_its_student():
+    subject, itok, stok = setup_subject_with_users(client)
+    rubric = _rubric(itok, subject["id"])
+    a = create_assignment(client, itok, subject["id"], "Final mark only", rubric_id=rubric["id"])
+    mine = _submit(stok, a).json()
+    other_tok = new_student(client, subject["id"])
+    _submit(other_tok, a)
+
+    r = client.post(f"/submissions/{mine['id']}/grade", headers=H(itok), json={
+        "rubric_id": rubric["id"], "total_score": 30, "feedback": "PRIVATE-FEEDBACK for student one"})
+    assert r.status_code == 200, r.text
+
+    my_view = client.get("/assignments", headers=H(stok)).json()[0]["my_submission"]
+    assert my_view["final_mark"] == 30 and my_view["criterion_marks"] == []
+    assert my_view["feedback"] == "PRIVATE-FEEDBACK for student one"
+    # The other student's views never contain someone else's feedback.
+    other_views = json.dumps([client.get("/assignments", headers=H(other_tok)).json(),
+                              client.get("/submissions", headers=H(other_tok)).json()])
+    assert "PRIVATE-FEEDBACK" not in other_views

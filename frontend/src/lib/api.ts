@@ -98,6 +98,10 @@ export interface MySubmission {
   has_video: boolean;
   final_mark: number | null;
   max_mark: number | null;
+  /** Per-criterion marks; empty when graded with "Final mark only" or not graded. */
+  criterion_marks: { name: string; score: number; max_points: number }[];
+  /** The instructor's feedback for the student (never the internal comments). */
+  feedback: string | null;
   can_edit: boolean;
 }
 

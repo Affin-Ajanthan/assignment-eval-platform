@@ -250,6 +250,35 @@ function AssignmentCard({
         )}
       </dl>
 
+      {sub && sub.final_mark !== null && (sub.criterion_marks.length > 0 || sub.feedback) && (
+        <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3" data-testid="my-feedback">
+          {sub.criterion_marks.length > 0 && (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-gray-500">
+                  <th className="pb-1 font-semibold">Criterion</th>
+                  <th className="pb-1 text-right font-semibold">Marks</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sub.criterion_marks.map((c) => (
+                  <tr key={c.name} className="border-t border-gray-200">
+                    <td className="py-1 pr-3">{c.name}</td>
+                    <td className="whitespace-nowrap py-1 text-right">{formatMark(c.score, c.max_points)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {sub.feedback && (
+            <div className={sub.criterion_marks.length > 0 ? "mt-3" : ""}>
+              <p className="text-sm font-semibold">Feedback from your instructor</p>
+              <p className="whitespace-pre-wrap text-sm text-gray-700">{sub.feedback}</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {a.status === "open" && !formMode && (
         <div className="mt-4 flex flex-wrap gap-2">
           {!sub && (
