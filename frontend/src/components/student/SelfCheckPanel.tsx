@@ -44,17 +44,34 @@ function Band({ band, ai = false }: { band: SelfCheckBand; ai?: boolean }) {
   );
 }
 
+// What each band means for the student. Similarity is symmetric -- an original
+// author matches whoever copied them -- so "high" never reads as an accusation.
+const MEANING: Record<SelfCheckBand, { code: string; report: string }> = {
+  high: {
+    code: "Your code closely matches at least one other submission. If this is your own work, you don't need to do anything: your instructor reviews every match.",
+    report: "Your report closely matches at least one other report. If this is your own work, you don't need to do anything: your instructor reviews every match.",
+  },
+  moderate: {
+    code: "Parts of your code are more similar to another submission than is usual for this assignment. Check that the highlighted parts are your own work.",
+    report: "Parts of your report are more similar to another report than is usual for this assignment. Check that the highlighted passages are your own words or properly cited.",
+  },
+  low: {
+    code: "Your code doesn't stand out: it only shares the kind of patterns most solutions to this assignment have.",
+    report: "Your report doesn't stand out: it only shares the kind of wording most reports for this assignment have.",
+  },
+};
+
 function SimilarityResult({ check }: { check: SelfCheck }) {
   const r = check.result!;
   const band = r.band ?? "low";
+  const part = check.kind === "code_similarity" ? "code" : "report";
   return (
     <div className="mt-2 text-sm">
       <p>
         <Band band={band} />{" "}
-        {r.note
-          ? r.note
-          : `Compared with ${r.compared} other submission(s); ${r.similar_submissions} look similar to yours.`}
+        {r.note ? r.note : `Compared with ${r.compared} other submission(s); ${r.similar_submissions} stand out as similar.`}
       </p>
+      {!r.note && <p className="mt-1 text-gray-700">{MEANING[band][part]}</p>}
       {check.kind === "code_similarity" && (r.highlights?.length ?? 0) > 0 && (
         <div className="mt-2">
           <p className="text-xs font-semibold text-gray-700">Parts of your code with potential matches</p>
