@@ -165,6 +165,10 @@ class Assignment(Base):
     # either off at any time. Enforced by the API, not just the UI.
     student_similarity_check = Column(Boolean, nullable=False, default=True, server_default="1")
     student_ai_check = Column(Boolean, nullable=False, default=True, server_default="1")
+    # Optional (naive UTC): students see no marks or feedback for this
+    # assignment before this time, so a whole class can be published at once.
+    # NULL shows each mark as soon as it is saved. Enforced by the API.
+    marks_release_at = Column(DateTime, nullable=True)
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
@@ -177,6 +181,10 @@ class Assignment(Base):
         if not self.submission_types:
             return list(SUBMISSION_TYPES)
         return [t for t in SUBMISSION_TYPES if t in self.submission_types]
+
+    def marks_released_at(self, now: datetime) -> bool:
+        """Whether students may see marks and feedback at a naive-UTC ``now``."""
+        return self.marks_release_at is None or now >= self.marks_release_at
 
     def status_at(self, now: datetime) -> str:
         """'upcoming' | 'open' | 'closed' for a naive-UTC ``now``."""

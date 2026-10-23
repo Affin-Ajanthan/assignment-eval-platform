@@ -297,7 +297,8 @@ def test_student_sees_open_and_past_assignments_but_not_upcoming_ones():
     # No rubric or grading internals in the student view.
     assert set(open_one) == {"id", "subject_id", "subject_name", "name", "description", "available_from",
                              "deadline", "status", "submission_types", "code_languages",
-                                 "student_similarity_check", "student_ai_check", "my_submission"}
+                                 "student_similarity_check", "student_ai_check", "marks_release_at",
+                                 "my_submission"}
 
 
 def test_backend_enforces_the_submission_window():
@@ -540,3 +541,57 @@ def test_final_mark_only_grade_shows_no_criterion_marks_and_feedback_stays_with_
     other_views = json.dumps([client.get("/assignments", headers=H(other_tok)).json(),
                               client.get("/submissions", headers=H(other_tok)).json()])
     assert "PRIVATE-FEEDBACK" not in other_views
+
+
+def test_marks_and_feedback_are_hidden_from_students_until_the_release_date():
+    subject, itok, stok = setup_subject_with_users(client)
+    rubric = _rubric(itok, subject["id"])
+    a = create_assignment(client, itok, subject["id"], "Released later", rubric_id=rubric["id"])
+    sub = _submit(stok, a).json()
+    r = client.put(f"/assignments/{a['id']}", headers=H(itok), json={"marks_release_at": _iso(timedelta(days=3))})
+    assert r.status_code == 200 and r.json()["marks_released"] is False and r.json()["marks_release_at"]
+    _grade(itok, sub["id"], rubric["id"], {"Code Quality": 8, "Documentation": 6, "Functionality": 20},
+           feedback="HELD-BACK feedback")
+
+    # Before the date: no mark, no criterion marks, no feedback -- and not even "graded".
+    mine = client.get("/assignments", headers=H(stok)).json()[0]
+    assert mine["marks_release_at"] is not None
+    assert mine["my_submission"]["status"] == "submitted"
+    assert (mine["my_submission"]["final_mark"], mine["my_submission"]["criterion_marks"]) == (None, [])
+    listed = client.get("/submissions", headers=H(stok)).json()
+    detail = client.get(f"/submissions/{sub['id']}", headers=H(stok)).json()
+    assert [(s["status"], s["final_mark"]) for s in listed] == [("submitted", None)]
+    assert (detail["status"], detail["final_mark"]) == ("submitted", None)
+    assert client.get("/submissions?status=graded", headers=H(stok)).json() == []
+    assert len(client.get("/submissions?status=submitted", headers=H(stok)).json()) == 1
+    hidden_views = json.dumps([client.get("/assignments", headers=H(stok)).json(), listed, detail,
+                               client.get(f"/assignments/{a['id']}", headers=H(stok)).json()])
+    assert "HELD-BACK" not in hidden_views and "34" not in hidden_views
+
+    # The instructor still sees everything.
+    assert client.get(f"/submissions/{sub['id']}/grade", headers=H(itok)).json()["total_score"] == 34
+    assert client.get(f"/submissions/{sub['id']}", headers=H(itok)).json()["final_mark"] == 34
+
+    # Releasing (an explicit null, or a date in the past) shows everything at once.
+    assert client.put(f"/assignments/{a['id']}", headers=H(itok),
+                      json={"marks_release_at": None}).json()["marks_released"] is True
+    released = client.get("/assignments", headers=H(stok)).json()[0]
+    assert released["marks_release_at"] is None
+    assert released["my_submission"]["status"] == "graded" and released["my_submission"]["final_mark"] == 34
+    assert released["my_submission"]["feedback"] == "HELD-BACK feedback"
+    assert client.get(f"/submissions/{sub['id']}", headers=H(stok)).json()["final_mark"] == 34
+
+
+def test_a_release_date_in_the_past_shows_marks_and_other_edits_keep_the_date():
+    subject, itok, stok = setup_subject_with_users(client)
+    rubric = _rubric(itok, subject["id"])
+    a = create_assignment(client, itok, subject["id"], "Released already", rubric_id=rubric["id"])
+    sub = _submit(stok, a).json()
+    client.put(f"/assignments/{a['id']}", headers=H(itok), json={"marks_release_at": _iso(timedelta(days=2))})
+    # Editing something else must not clear the release date.
+    edited = client.put(f"/assignments/{a['id']}", headers=H(itok), json={"description": "Updated"}).json()
+    assert edited["marks_released"] is False and edited["marks_release_at"]
+
+    client.put(f"/assignments/{a['id']}", headers=H(itok), json={"marks_release_at": _iso(timedelta(minutes=-1))})
+    _grade(itok, sub["id"], rubric["id"], {"Code Quality": 5, "Documentation": 5, "Functionality": 10})
+    assert client.get("/assignments", headers=H(stok)).json()[0]["my_submission"]["final_mark"] == 20

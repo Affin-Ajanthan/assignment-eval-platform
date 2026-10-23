@@ -124,6 +124,7 @@ add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON", "ai_
 # their free-text assignment_name); nothing else about them changes.
 add_missing_columns("submissions", {"assignment_id": "INTEGER REFERENCES assignments(id)"})
 add_missing_columns("grades", {"feedback": "TEXT"})
+add_missing_columns("assignments", {"marks_release_at": "DATETIME"})
 add_missing_columns("assignments", {"submission_types": "JSON"})
 add_missing_columns("assignments", {"starter_code": "TEXT", "starter_code_filename": "VARCHAR"})
 add_missing_columns("assignments", {"report_template_text": "TEXT", "report_template_filename": "VARCHAR"})
@@ -274,6 +275,9 @@ class AssignmentIn(BaseModel):
     # Student self-checks before the deadline; both on by default.
     student_similarity_check: bool = True
     student_ai_check: bool = True
+    # Optional: students see no marks or feedback before this time. None shows
+    # each mark as soon as it is saved.
+    marks_release_at: Optional[datetime] = None
 
 
 class AssignmentUpdate(BaseModel):
@@ -288,6 +292,7 @@ class AssignmentUpdate(BaseModel):
     code_languages: Optional[list[CodeLanguage]] = None  # [] removes the restriction
     student_similarity_check: Optional[bool] = None  # can be changed at any time
     student_ai_check: Optional[bool] = None
+    marks_release_at: Optional[datetime] = None  # send null explicitly to release marks now
 
 
 class AssignmentOut(BaseModel):
@@ -318,6 +323,8 @@ class AssignmentOut(BaseModel):
     code_languages: list[str] = []
     student_similarity_check: bool = True
     student_ai_check: bool = True
+    marks_release_at: Optional[UTCDateTime] = None
+    marks_released: bool = True  # whether students can see marks and feedback now
 
 
 class CriterionMarkOut(BaseModel):
@@ -359,6 +366,8 @@ class StudentAssignmentOut(BaseModel):
     # Which self-checks the instructor allows for this assignment.
     student_similarity_check: bool = True
     student_ai_check: bool = True
+    # Set only while marks are still held back: when they will be released.
+    marks_release_at: Optional[UTCDateTime] = None
     my_submission: Optional[MySubmissionOut]
 
 
@@ -1253,6 +1262,8 @@ def _assignment_out(db: Session, a: Assignment) -> AssignmentOut:
         code_languages=a.code_languages or [],
         student_similarity_check=_on(a.student_similarity_check),
         student_ai_check=_on(a.student_ai_check),
+        marks_release_at=_as_utc(a.marks_release_at),
+        marks_released=a.marks_released_at(_utcnow_naive()),
     )
 
 
@@ -1283,17 +1294,37 @@ def _criterion_marks(grade: Grade | None) -> list[CriterionMarkOut]:
     ]
 
 
-def _my_submission_out(submission: Submission, assignment_open: bool) -> MySubmissionOut:
+def _marks_released(submission: Submission, now: datetime) -> bool:
+    """Whether the student may see this submission's marks and feedback yet.
+    Before the assignment's release date the student is told only that the
+    work was submitted -- not even that it has been graded."""
+    return submission.assignment is None or submission.assignment.marks_released_at(now)
+
+
+def _my_submission_out(submission: Submission, assignment_open: bool, now: datetime) -> MySubmissionOut:
+    can_edit = assignment_open and submission.status != "graded"
+    common = dict(
+        id=submission.id, submitted_at=_as_utc(submission.submitted_at),
+        has_code=bool(submission.code_path), has_report=bool(submission.report_path),
+        has_video=bool(submission.video_path), can_edit=can_edit,
+    )
+    if not _marks_released(submission, now):
+        return MySubmissionOut(**common, status="submitted", final_mark=None, max_mark=None)
     grade = submission.latest_grade
     return MySubmissionOut(
-        id=submission.id, submitted_at=_as_utc(submission.submitted_at), status=submission.status,
-        has_code=bool(submission.code_path), has_report=bool(submission.report_path),
-        has_video=bool(submission.video_path),
+        **common, status=submission.status,
         final_mark=submission.final_mark, max_mark=submission.max_mark,
         criterion_marks=_criterion_marks(grade),
         feedback=grade.feedback if grade else None,
-        can_edit=assignment_open and submission.status != "graded",
     )
+
+
+def _student_submission_out(submission: Submission, now: datetime) -> SubmissionOut:
+    """A submission as its student sees it: no mark before the release date."""
+    out = SubmissionOut.model_validate(submission)
+    if not _marks_released(submission, now):
+        out = out.model_copy(update={"status": "submitted", "final_mark": None, "max_mark": None})
+    return out
 
 
 def _student_assignment_out(db: Session, student: User, a: Assignment, now: datetime) -> StudentAssignmentOut:
@@ -1312,7 +1343,8 @@ def _student_assignment_out(db: Session, student: User, a: Assignment, now: date
         code_languages=a.code_languages or [],
         student_similarity_check=_on(a.student_similarity_check),
         student_ai_check=_on(a.student_ai_check),
-        my_submission=_my_submission_out(mine, status == "open") if mine else None,
+        marks_release_at=None if a.marks_released_at(now) else _as_utc(a.marks_release_at),
+        my_submission=_my_submission_out(mine, status == "open", now) if mine else None,
     )
 
 
@@ -1334,6 +1366,7 @@ def create_assignment(payload: AssignmentIn, instructor: User = Depends(require_
         code_languages=_langs.normalise_languages(payload.code_languages),
         student_similarity_check=payload.student_similarity_check,
         student_ai_check=payload.student_ai_check,
+        marks_release_at=_to_naive_utc(payload.marks_release_at) if payload.marks_release_at else None,
         created_by_id=instructor.id,
     )
     db.add(assignment)
@@ -1422,6 +1455,11 @@ def update_assignment(
         assignment.student_similarity_check = payload.student_similarity_check
     if payload.student_ai_check is not None:
         assignment.student_ai_check = payload.student_ai_check
+    # Like the self-check switches, the release date can change at any time;
+    # an explicit null releases the marks straight away.
+    if "marks_release_at" in payload.model_fields_set:
+        release = payload.marks_release_at
+        assignment.marks_release_at = _to_naive_utc(release) if release else None
     if payload.code_languages is not None:
         languages = _langs.normalise_languages(payload.code_languages)
         if languages != (assignment.code_languages or None):
@@ -1898,6 +1936,12 @@ def list_submissions(
 
     if subject_id is not None:
         query = query.filter(Submission.subject_id == subject_id)
+    if user.role == "student":
+        # Filter by the status the student is shown, after held-back grades
+        # are hidden, so the filter cannot reveal them either.
+        now = _utcnow_naive()
+        shown = [_student_submission_out(s, now) for s in query.order_by(Submission.submitted_at.desc()).all()]
+        return [s for s in shown if not status or s.status == status]
     if status:
         query = query.filter(Submission.status == status)
     return query.order_by(Submission.submitted_at.desc()).all()
@@ -1910,6 +1954,8 @@ def get_submission(submission_id: int, user: User = Depends(get_current_user), d
         raise HTTPException(404, "Submission not found")
     if not _can_view_submission(user, submission, db):
         raise HTTPException(403, "You cannot view this submission")
+    if user.role == "student":
+        return _student_submission_out(submission, _utcnow_naive())
     return submission
 
 
