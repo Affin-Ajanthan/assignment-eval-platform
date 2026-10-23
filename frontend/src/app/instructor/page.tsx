@@ -814,6 +814,12 @@ export default function InstructorPage() {
                   <dd>
                     {shownSubmissions.length} ({shownSubmissions.filter((sub) => sub.status === "graded").length} graded)
                   </dd>
+                  <dt className="font-semibold">Marks for students</dt>
+                  <dd>
+                    {selectedOption.assignment.marks_released
+                      ? "Visible"
+                      : `Hidden until ${formatDateTime(selectedOption.assignment.marks_release_at!)}`}
+                  </dd>
                 </dl>
               </div>
             )}

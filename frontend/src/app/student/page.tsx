@@ -245,7 +245,11 @@ function AssignmentCard({
         {sub && (
           <>
             <dt className="font-semibold">Marks</dt>
-            <dd data-testid="marks">{formatMark(sub.final_mark, sub.max_mark)}</dd>
+            <dd data-testid="marks">
+              {a.marks_release_at
+                ? `Marks will be released on ${formatDateTime(a.marks_release_at)}`
+                : formatMark(sub.final_mark, sub.max_mark)}
+            </dd>
           </>
         )}
       </dl>
