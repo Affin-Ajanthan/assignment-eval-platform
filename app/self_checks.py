@@ -16,6 +16,13 @@ The band lines are review indicators, not proof of copying, and can be tuned
 with environment variables (defaults below). "high" always follows the
 instructor's own flag rule, so a student never sees "low" for a pair the
 instructor's check would flag.
+
+"moderate" is relative to the class: solutions to the same assignment in the
+same language always share a lot (menus, input loops, file handling), and a
+large program "contains" most of the common patterns of a small one. So a pair
+is moderate only when it stands out above the class's typical overlap (its
+median across every pair in the assignment) by a margin, and above a fixed
+floor -- or when the semantic check marked it for review.
 """
 
 from __future__ import annotations
@@ -48,11 +55,14 @@ LIMIT_PER_HOUR = _env_int("SELF_CHECK_LIMIT_PER_HOUR", 5)
 # A "running" check older than this is treated as failed (e.g. the server restarted).
 STALE_AFTER_MINUTES = 15
 
-# Moderate band lines (below the instructor's flag lines, which define "high").
-CODE_MODERATE_JACCARD = _env_float("SELF_CHECK_CODE_MODERATE_JACCARD", 0.35)
-CODE_MODERATE_CONTAINMENT = _env_float("SELF_CHECK_CODE_MODERATE_CONTAINMENT", 0.50)
+# Moderate band: a pair must be at least MARGIN above the class median AND at
+# least the floor. ("high" is the instructor's own flag rule.)
+CODE_MODERATE_JACCARD = _env_float("SELF_CHECK_CODE_MODERATE_JACCARD", 0.45)
+CODE_MODERATE_CONTAINMENT = _env_float("SELF_CHECK_CODE_MODERATE_CONTAINMENT", 0.70)
+CODE_MODERATE_MARGIN = _env_float("SELF_CHECK_CODE_MODERATE_MARGIN", 0.15)
 REPORT_MODERATE_COVERAGE = _env_float("SELF_CHECK_REPORT_MODERATE_COVERAGE", 0.10)
 REPORT_MODERATE_JACCARD = _env_float("SELF_CHECK_REPORT_MODERATE_JACCARD", 0.15)
+REPORT_MODERATE_MARGIN = _env_float("SELF_CHECK_REPORT_MODERATE_MARGIN", 0.10)
 
 # How much of the student's own work is shown back.
 MAX_HIGHLIGHTS = 15
@@ -66,22 +76,48 @@ def worst(bands: list[str]) -> str:
     return max(bands, key=_ORDER.__getitem__) if bands else "low"
 
 
-def code_pair_band(pair) -> str:
+def _median(values: list[float]) -> float:
+    ordered = sorted(values)
+    if not ordered:
+        return 0.0
+    mid = len(ordered) // 2
+    return ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) / 2
+
+
+def code_moderate_lines(all_pairs: list) -> dict:
+    """The class's typical code overlap and the moderate lines derived from
+    it, from EVERY pair in the assignment (not just the student's)."""
+    med_j = _median([p.jaccard for p in all_pairs])
+    med_c = _median([p.containment for p in all_pairs])
+    return {"median_jaccard": round(med_j, 4), "median_containment": round(med_c, 4),
+            "jaccard_line": round(max(CODE_MODERATE_JACCARD, med_j + CODE_MODERATE_MARGIN), 4),
+            "containment_line": round(max(CODE_MODERATE_CONTAINMENT, med_c + CODE_MODERATE_MARGIN), 4)}
+
+
+def code_pair_band(pair, lines: dict) -> str:
     """Band for one code pair (app.similarity.core.PairResult)."""
     if pair.token_flagged or pair.flag_level == "high":
         return "high"
-    if (pair.flag_level == "review" or pair.jaccard >= CODE_MODERATE_JACCARD
-            or pair.containment >= CODE_MODERATE_CONTAINMENT):
+    if (pair.flag_level == "review" or pair.jaccard >= lines["jaccard_line"]
+            or pair.containment >= lines["containment_line"]):
         return "moderate"
     return "low"
 
 
-def report_pair_band(pair, own_coverage: float) -> str:
+def report_moderate_lines(all_pairs: list) -> dict:
+    med_cov = _median([max(p.coverage_a, p.coverage_b) for p in all_pairs])
+    med_j = _median([p.jaccard for p in all_pairs])
+    return {"median_coverage": round(med_cov, 4), "median_jaccard": round(med_j, 4),
+            "coverage_line": round(max(REPORT_MODERATE_COVERAGE, med_cov + REPORT_MODERATE_MARGIN), 4),
+            "jaccard_line": round(max(REPORT_MODERATE_JACCARD, med_j + REPORT_MODERATE_MARGIN), 4)}
+
+
+def report_pair_band(pair, own_coverage: float, lines: dict) -> str:
     """Band for one report pair (app.similarity.report_similarity.ReportPair)."""
     if pair.flag_level == "high":
         return "high"
-    if (pair.flag_level == "review" or own_coverage >= REPORT_MODERATE_COVERAGE
-            or pair.jaccard >= REPORT_MODERATE_JACCARD):
+    if (pair.flag_level == "review" or own_coverage >= lines["coverage_line"]
+            or pair.jaccard >= lines["jaccard_line"]):
         return "moderate"
     return "low"
 
@@ -116,11 +152,12 @@ def code_result(student_sid: str, pairs: list, own_files: list[OwnFile],
                 other_hashes: dict[str, set[int]], semantic_status: str) -> dict:
     """Full (instructor-side) result of a code self-check."""
     mine = [p for p in pairs if student_sid in (p.submission_a, p.submission_b)]
+    lines = code_moderate_lines(pairs)
     rows = []
     shared: set[int] = set()
     for p in mine:
         other = p.submission_b if p.submission_a == student_sid else p.submission_a
-        band = code_pair_band(p)
+        band = code_pair_band(p, lines)
         rows.append({"other_submission_id": int(other), "band": band, "jaccard": p.jaccard,
                      "containment": p.containment, "semantic_similarity": p.semantic_similarity})
         if band != "low":
@@ -132,6 +169,7 @@ def code_result(student_sid: str, pairs: list, own_files: list[OwnFile],
         "similar_submissions": sum(r["band"] != "low" for r in rows),
         "highlights": code_highlights(own_files, shared & own_hashes),
         "semantic_status": semantic_status,
+        "class_baseline": lines,
         "pairs": sorted(rows, key=lambda r: -_ORDER[r["band"]]),
     }
 
@@ -142,12 +180,13 @@ def report_result(student_sid: str, pairs: list, semantic_status: str, skipped_r
         return {"band": "low", "compared": 0, "similar_submissions": 0, "passages": [],
                 "note": skipped_reason, "semantic_status": semantic_status, "pairs": []}
     rows, passages = [], []
+    lines = report_moderate_lines(pairs)
     for p in pairs:
         if student_sid not in (p.submission_a, p.submission_b):
             continue
         mine_is_a = p.submission_a == student_sid
         own_coverage = p.coverage_a if mine_is_a else p.coverage_b
-        band = report_pair_band(p, own_coverage)
+        band = report_pair_band(p, own_coverage, lines)
         rows.append({"other_submission_id": int(p.submission_b if mine_is_a else p.submission_a),
                      "band": band, "jaccard": p.jaccard, "containment": p.containment,
                      "own_coverage": own_coverage, "semantic_similarity": p.semantic_similarity})
@@ -162,6 +201,7 @@ def report_result(student_sid: str, pairs: list, semantic_status: str, skipped_r
         "similar_submissions": sum(r["band"] != "low" for r in rows),
         "passages": passages[:MAX_PASSAGES],
         "semantic_status": semantic_status,
+        "class_baseline": lines,
         "pairs": sorted(rows, key=lambda r: -_ORDER[r["band"]]),
     }
 

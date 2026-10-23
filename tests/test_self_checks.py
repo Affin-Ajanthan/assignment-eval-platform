@@ -366,3 +366,27 @@ def test_each_assignment_has_its_own_hourly_limit(tmp_path):
     other = client.get(f"/submissions/{sids[1]}/self-checks", headers=auth_headers(tok)).json()
     assert other["remaining"]["code_similarity"] == self_checks.LIMIT_PER_HOUR
     assert _run(tok, sids[1], "code_similarity").status_code == 202
+
+
+def _pair(j, c, flag_level=None):
+    from app.similarity.core import PairResult
+    return PairResult(submission_a="1", submission_b="2", jaccard=j, containment=c, shared_fingerprints=1,
+                      flag_level=flag_level)
+
+
+def test_moderate_is_relative_to_the_class_typical_overlap():
+    # Assignment 8: honest solutions share ~65% containment with each other.
+    honest = [_pair(0.35, 0.65) for _ in range(20)]
+    lines = self_checks.code_moderate_lines(honest + [_pair(1.0, 1.0)])
+    assert lines["median_containment"] == 0.65 and lines["containment_line"] == 0.80
+    assert self_checks.code_pair_band(_pair(0.37, 0.66), lines) == "low"        # typical for the class
+    assert lines["jaccard_line"] == 0.50
+    assert self_checks.code_pair_band(_pair(0.55, 0.70), lines) == "moderate"   # stands out, below "high"
+    assert self_checks.code_pair_band(_pair(0.96, 0.99), lines) == "high"       # instructor's flag rule
+    assert self_checks.code_pair_band(_pair(0.30, 0.50, "review"), lines) == "moderate"  # semantic review
+
+
+def test_floor_applies_when_the_class_shares_little():
+    lines = self_checks.code_moderate_lines([_pair(0.05, 0.10) for _ in range(10)])
+    assert lines["containment_line"] == self_checks.CODE_MODERATE_CONTAINMENT
+    assert self_checks.code_pair_band(_pair(0.20, 0.55), lines) == "low"
