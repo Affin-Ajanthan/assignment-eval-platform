@@ -90,6 +90,23 @@ export interface Assignment {
   marks_release_at: string | null;
   /** Whether students can see marks and feedback now. */
   marks_released: boolean;
+  /** Test cases for submitted code (instructor view: hidden ones included). */
+  test_cases: TestCase[];
+}
+
+/** exact: the whole output (ignoring trailing spaces); contains: the expected text appears in it. */
+export type TestMatch = "exact" | "contains";
+
+/** One test for submitted code: `input` goes to standard input, the output is compared with `expected_output`. */
+export interface TestCase {
+  id: number;
+  name: string;
+  input: string;
+  expected_output: string;
+  match: TestMatch;
+  /** Shown to students; hidden tests are only used for marking. */
+  visible: boolean;
+  points: number;
 }
 
 /** A student's own submission: status, marks and feedback (once released). */

@@ -123,6 +123,7 @@ add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON", "ai_
 add_missing_columns("submissions", {"assignment_id": "INTEGER REFERENCES assignments(id)"})
 add_missing_columns("grades", {"feedback": "TEXT"})
 add_missing_columns("assignments", {"marks_release_at": "DATETIME"})
+add_missing_columns("assignments", {"test_cases": "JSON"})
 add_missing_columns("assignments", {"submission_types": "JSON"})
 add_missing_columns("assignments", {"starter_code": "TEXT", "starter_code_filename": "VARCHAR"})
 add_missing_columns("assignments", {"report_template_text": "TEXT", "report_template_filename": "VARCHAR"})
@@ -245,6 +246,26 @@ class RubricOut(BaseModel):
 
 SubmissionType = Literal["code", "report", "video"]
 _STARTER_CODE_MAX = 200_000
+_TEST_CASES_MAX = 50
+_TEST_TEXT_MAX = 10_000
+
+
+class TestCaseIn(BaseModel):
+    """One test for submitted code: ``input`` goes to the program's standard
+    input and its output is compared with ``expected_output``."""
+
+    name: str = Field(default="", max_length=200)  # blank: "Test 1", "Test 2", ...
+    input: str = Field(default="", max_length=_TEST_TEXT_MAX)
+    expected_output: str = Field(max_length=_TEST_TEXT_MAX)
+    # exact: the whole output (ignoring trailing spaces and line-ending style);
+    # contains: the expected text appears somewhere in the output (menu programs).
+    match: Literal["exact", "contains"] = "exact"
+    visible: bool = False  # visible tests are shown to students; hidden ones never are
+    points: float = Field(default=1, gt=0, le=1000)
+
+
+class TestCaseOut(TestCaseIn):
+    id: int
 
 
 class AssignmentIn(BaseModel):
@@ -271,6 +292,8 @@ class AssignmentIn(BaseModel):
     # Optional: students see no marks or feedback before this time. None shows
     # each mark as soon as it is saved.
     marks_release_at: Optional[datetime] = None
+    # Optional test cases for submitted code; needs "code" in submission_types.
+    test_cases: list[TestCaseIn] = Field(default_factory=list, max_length=_TEST_CASES_MAX)
 
 
 class AssignmentUpdate(BaseModel):
@@ -286,6 +309,8 @@ class AssignmentUpdate(BaseModel):
     student_similarity_check: Optional[bool] = None  # can be changed at any time
     student_ai_check: Optional[bool] = None
     marks_release_at: Optional[datetime] = None  # send null explicitly to release marks now
+    # Replaces the whole list ([] removes every test); leave out to keep them.
+    test_cases: Optional[list[TestCaseIn]] = Field(default=None, max_length=_TEST_CASES_MAX)
 
 
 class AssignmentOut(BaseModel):
@@ -318,6 +343,8 @@ class AssignmentOut(BaseModel):
     student_ai_check: bool = True
     marks_release_at: Optional[UTCDateTime] = None
     marks_released: bool = True  # whether students can see marks and feedback now
+    # Every test case, hidden ones included: this is the instructor view only.
+    test_cases: list[TestCaseOut] = []
 
 
 class CriterionMarkOut(BaseModel):
@@ -1233,7 +1260,22 @@ def _assignment_out(db: Session, a: Assignment) -> AssignmentOut:
         student_ai_check=_on(a.student_ai_check),
         marks_release_at=_as_utc(a.marks_release_at),
         marks_released=a.marks_released_at(_utcnow_naive()),
+        test_cases=[TestCaseOut(**t) for t in a.test_cases or []],
     )
+
+
+def _clean_test_cases(tests: list[TestCaseIn], accepted_types: list[str]) -> Optional[list[dict]]:
+    """Number the tests 1, 2, ... and name blank ones "Test N". Tests run on
+    submitted code, so they need an assignment that accepts code. None when
+    there are no tests."""
+    if not tests:
+        return None
+    if "code" not in accepted_types:
+        raise HTTPException(400, "Test cases need an assignment that accepts code submissions.")
+    return [
+        {**t.model_dump(), "id": n, "name": t.name.strip() or f"Test {n}"}
+        for n, t in enumerate(tests, start=1)
+    ]
 
 
 def _clean_starter_code(code: str, filename: str) -> tuple[Optional[str], Optional[str]]:
@@ -1336,6 +1378,7 @@ def create_assignment(payload: AssignmentIn, instructor: User = Depends(require_
         student_similarity_check=payload.student_similarity_check,
         student_ai_check=payload.student_ai_check,
         marks_release_at=_to_naive_utc(payload.marks_release_at) if payload.marks_release_at else None,
+        test_cases=_clean_test_cases(payload.test_cases, types),
         created_by_id=instructor.id,
     )
     db.add(assignment)
@@ -1429,6 +1472,12 @@ def update_assignment(
     if "marks_release_at" in payload.model_fields_set:
         release = payload.marks_release_at
         assignment.marks_release_at = _to_naive_utc(release) if release else None
+    # Tests can be changed at any time (e.g. to fix an expected output); the
+    # list is replaced as a whole. Checked against the types as saved above.
+    if payload.test_cases is not None:
+        assignment.test_cases = _clean_test_cases(payload.test_cases, assignment.accepted_types())
+    elif assignment.test_cases and "code" not in assignment.accepted_types():
+        raise HTTPException(400, "Remove the test cases before turning off code submissions.")
     if payload.code_languages is not None:
         languages = _langs.normalise_languages(payload.code_languages)
         if languages != (assignment.code_languages or None):

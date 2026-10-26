@@ -595,3 +595,62 @@ def test_a_release_date_in_the_past_shows_marks_and_other_edits_keep_the_date():
     client.put(f"/assignments/{a['id']}", headers=H(itok), json={"marks_release_at": _iso(timedelta(minutes=-1))})
     _grade(itok, sub["id"], rubric["id"], {"Code Quality": 5, "Documentation": 5, "Functionality": 10})
     assert client.get("/assignments", headers=H(stok)).json()[0]["my_submission"]["final_mark"] == 20
+
+
+# --------------------------------------------------------------------------
+# Test cases for submitted code
+# --------------------------------------------------------------------------
+
+SORT_TESTS = [
+    {"name": "Sorts three numbers", "input": "3\n2 3 1\n", "expected_output": "1 2 3", "visible": True, "points": 2},
+    {"input": "0\n\n", "expected_output": "SECRET-EMPTY-LIST", "match": "contains", "points": 3},
+]
+
+
+def test_test_cases_are_saved_numbered_and_named_for_the_instructor():
+    subject, itok, _ = setup_subject_with_users(client)
+    r = client.post("/assignments", headers=H(itok), json={
+        "subject_id": subject["id"], "name": "Sorting", "available_from": _iso(timedelta(hours=-1)),
+        "deadline": _iso(timedelta(days=7)), "test_cases": SORT_TESTS})
+    assert r.status_code == 200, r.text
+    tests = r.json()["test_cases"]
+    assert [(t["id"], t["name"], t["match"], t["visible"], t["points"]) for t in tests] == [
+        (1, "Sorts three numbers", "exact", True, 2), (2, "Test 2", "contains", False, 3)]
+    assert tests[0]["input"] == "3\n2 3 1\n" and tests[1]["expected_output"] == "SECRET-EMPTY-LIST"
+
+    a_id = r.json()["id"]
+    # Editing something else keeps the tests; sending a list replaces them; [] removes them.
+    assert len(client.put(f"/assignments/{a_id}", headers=H(itok), json={"description": "x"}).json()["test_cases"]) == 2
+    replaced = client.put(f"/assignments/{a_id}", headers=H(itok), json={"test_cases": SORT_TESTS[:1]}).json()
+    assert [t["id"] for t in replaced["test_cases"]] == [1]
+    assert client.put(f"/assignments/{a_id}", headers=H(itok), json={"test_cases": []}).json()["test_cases"] == []
+
+
+def test_test_cases_are_validated():
+    subject, itok, _ = setup_subject_with_users(client)
+    base = {"subject_id": subject["id"], "available_from": _iso(timedelta(hours=-1)), "deadline": _iso(timedelta(days=7))}
+
+    def create(name, **extra):
+        return client.post("/assignments", headers=H(itok), json={**base, "name": name, **extra})
+
+    no_code = create("Report only", submission_types=["report"], test_cases=SORT_TESTS)
+    assert no_code.status_code == 400 and "accepts code" in no_code.json()["detail"]
+    assert create("Bad match", test_cases=[{"expected_output": "x", "match": "regex"}]).status_code == 422
+    assert create("Zero points", test_cases=[{"expected_output": "x", "points": 0}]).status_code == 422
+    assert create("No expected", test_cases=[{"input": "1"}]).status_code == 422
+    assert create("Too many", test_cases=[{"expected_output": "x"}] * 51).status_code == 422
+
+    # Code can't be turned off while the assignment still has tests.
+    a = create("With tests", test_cases=SORT_TESTS).json()
+    r = client.put(f"/assignments/{a['id']}", headers=H(itok), json={"submission_types": ["report"]})
+    assert r.status_code == 400 and "Remove the test cases" in r.json()["detail"]
+
+
+def test_students_never_receive_test_cases():
+    subject, itok, stok = setup_subject_with_users(client)
+    a = client.post("/assignments", headers=H(itok), json={
+        "subject_id": subject["id"], "name": "Hidden tests", "available_from": _iso(timedelta(hours=-1)),
+        "deadline": _iso(timedelta(days=7)), "test_cases": SORT_TESTS}).json()
+    student_views = json.dumps([client.get("/assignments", headers=H(stok)).json(),
+                                client.get(f"/assignments/{a['id']}", headers=H(stok)).json()])
+    assert "SECRET-EMPTY-LIST" not in student_views and "test_cases" not in student_views

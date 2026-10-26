@@ -169,6 +169,11 @@ class Assignment(Base):
     # assignment before this time, so a whole class can be published at once.
     # NULL shows each mark as soon as it is saved. Enforced by the API.
     marks_release_at = Column(DateTime, nullable=True)
+    # Optional test cases for submitted code (HackerRank style):
+    # [{"id", "name", "input", "expected_output", "match": "exact" | "contains",
+    #   "visible": bool, "points": float}, ...]. "input" is fed to the program's
+    # standard input; hidden tests (visible=False) are never shown to students.
+    test_cases = Column(JSON, nullable=True)
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)

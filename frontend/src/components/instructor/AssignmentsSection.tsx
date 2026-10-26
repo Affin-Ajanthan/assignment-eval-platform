@@ -8,6 +8,7 @@ import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import ReportTemplateControl from "@/components/instructor/ReportTemplateControl";
 import Badge from "@/components/Badge";
 import { CODE_LANGUAGES, CodeLanguageId, languageNames } from "@/lib/codeLanguages";
+import TestCasesEditor, { TestCaseRow, testRowsPayload, toTestRows } from "@/components/instructor/TestCasesEditor";
 
 const STATUS_STYLE: Record<AssignmentStatus, { text: string; cls: string }> = {
   upcoming: { text: "Not yet open", cls: "bg-gray-100 text-gray-700" },
@@ -31,6 +32,7 @@ type FormState = {
   selfAi: boolean; // students may run AI-content self-checks before the deadline
   releaseDate: string; // "" (with releaseTime "") = show each mark as soon as it is saved
   releaseTime: string;
+  testCases: TestCaseRow[]; // only used when the assignment accepts code
 };
 
 const TYPE_OPTIONS: { value: SubmissionType; label: string; hint: string }[] = [
@@ -61,6 +63,7 @@ const EMPTY: FormState = {
   selfAi: true,
   releaseDate: "",
   releaseTime: "",
+  testCases: [],
 };
 
 // Starter code is one source file (not a notebook): the backend's CODE_EXTENSIONS (app/common.py).
@@ -112,6 +115,7 @@ export default function AssignmentsSection({
       selfAi: a.student_ai_check ?? true,
       releaseDate: release.date,
       releaseTime: release.time,
+      testCases: toTestRows(a.test_cases ?? []),
     });
   }
 
@@ -149,6 +153,9 @@ export default function AssignmentsSection({
     if (releaseSet && !release) {
       return setMsg({ text: "Enter both a date and a time to release the marks, or leave both empty.", kind: "error" });
     }
+    // Tests run on submitted code: without code submissions, none are kept.
+    const testPayload = testRowsPayload(form.types.includes("code") ? form.testCases : []);
+    if (testPayload.error !== null) return setMsg({ text: testPayload.error, kind: "error" });
     const body = {
       name: form.name.trim(),
       description: form.description,
@@ -164,6 +171,7 @@ export default function AssignmentsSection({
       student_ai_check: form.selfAi,
       // null also clears an earlier date, releasing the marks straight away.
       marks_release_at: release ? release.toISOString() : null,
+      test_cases: testPayload.tests,
     };
     setSaving(true);
     try {
@@ -304,6 +312,10 @@ export default function AssignmentsSection({
                   : "None ticked: students can submit code in any supported language."}
             </p>
           </fieldset>
+        )}
+
+        {form.types.includes("code") && (
+          <TestCasesEditor rows={form.testCases} onChange={(rows) => set("testCases", rows)} />
         )}
 
         <fieldset className="mt-3">
@@ -495,6 +507,12 @@ export default function AssignmentsSection({
                     Student self-checks: similarity {a.student_similarity_check ? "on" : "off"} · AI{" "}
                     {a.student_ai_check ? "on" : "off"}
                   </p>
+                  {a.test_cases?.length > 0 && (
+                    <p className="text-xs text-gray-600" data-testid="test-cases-summary">
+                      Test cases: {a.test_cases.length} ({a.test_cases.filter((t) => t.visible).length} visible) ·{" "}
+                      {a.test_cases.reduce((sum, t) => sum + t.points, 0)} points
+                    </p>
+                  )}
                   <p className="text-xs text-gray-600" data-testid="marks-release">
                     Marks for students:{" "}
                     {a.marks_released ? (
