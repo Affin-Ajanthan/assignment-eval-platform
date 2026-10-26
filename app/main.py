@@ -2436,6 +2436,85 @@ def get_auto_evaluation(submission_id: int, user: User = Depends(get_current_use
 AUTO_EVAL_WORKERS = max(1, int(os.environ.get("AUTO_EVAL_WORKERS", "1")))
 
 
+class BatchJobOut(BaseModel):
+    """A batch auto-evaluation run and its progress so far."""
+
+    id: int
+    subject_id: int
+    assignment_name: str
+    rubric_id: int
+    status: str  # queued | running | done | failed
+    total: int
+    done: int  # finished so far, whatever the outcome
+    evaluated: int
+    skipped: int
+    failed: int
+    # One entry per submission in submission order; null while still waiting or running.
+    results: list[Optional[BatchEvaluationItemOut]] = []
+    error: Optional[str] = None
+    created_at: UTCDateTime
+    started_at: Optional[UTCDateTime] = None
+    finished_at: Optional[UTCDateTime] = None
+
+
+def _batch_job_status_out(job: BatchJob) -> BatchJobOut:
+    return BatchJobOut(
+        id=job.id, subject_id=job.subject_id, assignment_name=job.assignment_name, rubric_id=job.rubric_id,
+        status=job.status, total=job.total, done=job.done, evaluated=job.evaluated, skipped=job.skipped,
+        failed=job.failed, error=job.error,
+        results=[BatchEvaluationItemOut.model_validate(r) if r is not None else None for r in job.results or []],
+        created_at=_as_utc(job.created_at), started_at=_as_utc(job.started_at),
+        finished_at=_as_utc(job.finished_at),
+    )
+
+
+def _create_batch_job(
+    db: Session, instructor: User, subject_id: int, assignment_name: str, payload: BatchAutoEvaluateIn,
+) -> BatchJob:
+    """Check access and inputs, then save a queued job for the run."""
+    if subject_id not in instructor_subject_ids(db, instructor):
+        raise HTTPException(403, "You are not assigned to this subject")
+    rubric = db.get(Rubric, payload.rubric_id)
+    if not rubric:
+        raise HTTPException(404, "Rubric not found")
+    if rubric.subject_id != subject_id:
+        raise HTTPException(400, "That rubric belongs to a different subject than this assignment")
+    total = (
+        db.query(Submission)
+        .filter(Submission.subject_id == subject_id, Submission.assignment_name == assignment_name)
+        .count()
+    )
+    if not total:
+        raise HTTPException(404, "No submissions found for this assignment")
+
+    job = BatchJob(
+        subject_id=subject_id, assignment_name=assignment_name, rubric_id=rubric.id,
+        options=payload.model_dump(include={"skip_already_evaluated", "use_rubric_model", "use_ai_detection"}),
+        status="queued", total=total, created_by_id=instructor.id,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+@app.post(
+    "/subjects/{subject_id}/assignments/{assignment_name}/auto-evaluate/jobs",
+    response_model=BatchJobOut, status_code=202,
+)
+def start_auto_evaluate_job(
+    subject_id: int, assignment_name: str, payload: BatchAutoEvaluateIn, background_tasks: BackgroundTasks,
+    instructor: User = Depends(require_instructor), db: Session = Depends(get_db),
+):
+    """Start the same run as POST .../auto-evaluate, but in the background:
+    answers at once with the queued job, while the submissions are evaluated
+    (AUTO_EVAL_WORKERS at a time) and the job's progress is updated as each
+    one finishes."""
+    job = _create_batch_job(db, instructor, subject_id, assignment_name, payload)
+    background_tasks.add_task(_run_batch_job, job.id)
+    return _batch_job_status_out(job)
+
+
 @app.post(
     "/subjects/{subject_id}/assignments/{assignment_name}/auto-evaluate",
     response_model=BatchAutoEvaluateOut,
@@ -2452,31 +2531,11 @@ def auto_evaluate_assignment(
     call can simply be repeated with ``skip_already_evaluated`` set. Results
     keep the submissions' order whatever order they finish in.
     Running the similarity check first lets its flags feed the grading.
+
+    Waits until every submission is done; POST .../auto-evaluate/jobs starts
+    the same run in the background instead.
     """
-    if subject_id not in instructor_subject_ids(db, instructor):
-        raise HTTPException(403, "You are not assigned to this subject")
-    rubric = db.get(Rubric, payload.rubric_id)
-    if not rubric:
-        raise HTTPException(404, "Rubric not found")
-    if rubric.subject_id != subject_id:
-        raise HTTPException(400, "That rubric belongs to a different subject than this assignment")
-
-    submissions = (
-        db.query(Submission)
-        .filter(Submission.subject_id == subject_id, Submission.assignment_name == assignment_name)
-        .order_by(Submission.id)
-        .all()
-    )
-    if not submissions:
-        raise HTTPException(404, "No submissions found for this assignment")
-
-    job = BatchJob(
-        subject_id=subject_id, assignment_name=assignment_name, rubric_id=rubric.id,
-        options=payload.model_dump(include={"skip_already_evaluated", "use_rubric_model", "use_ai_detection"}),
-        status="queued", total=len(submissions), created_by_id=instructor.id,
-    )
-    db.add(job)
-    db.commit()
+    job = _create_batch_job(db, instructor, subject_id, assignment_name, payload)
     _run_batch_job(job.id)
     db.refresh(job)
     if job.status == "failed":

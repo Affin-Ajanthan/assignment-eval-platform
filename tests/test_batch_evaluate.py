@@ -342,3 +342,37 @@ def test_a_batch_job_that_breaks_is_marked_failed_with_the_reason(monkeypatch):
         assert "disk full" in job.error and job.finished_at is not None
     finally:
         db.close()
+
+
+def _start_job(subject, assignment, tok, rubric_id, **extra):
+    return client.post(
+        f"/subjects/{subject['id']}/assignments/{assignment}/auto-evaluate/jobs",
+        json={"rubric_id": rubric_id, **extra},
+        headers=auth_headers(tok),
+    )
+
+
+def test_starting_a_job_answers_at_once_and_evaluates_in_the_background():
+    subject, tok, rubric, assignment, subs = _setup(3)
+    r = _start_job(subject, assignment, tok, rubric["id"])
+
+    # The answer is sent before any grading: the job is still queued.
+    assert r.status_code == 202, r.text
+    started = r.json()
+    assert (started["status"], started["total"], started["done"], started["results"]) == ("queued", 3, 0, [])
+    assert started["assignment_name"] == assignment and started["rubric_id"] == rubric["id"]
+
+    # The test client then runs the background task; the job finishes on its own.
+    job = _job(started["id"])
+    assert (job.status, job.total, job.evaluated, job.failed) == ("done", 3, 3, 0)
+    for s in subs:  # every evaluation was saved
+        assert client.get(f"/submissions/{s['id']}/auto-evaluate", headers=auth_headers(tok)).json() is not None
+
+
+def test_starting_a_job_checks_access_and_inputs_like_the_waiting_endpoint():
+    subject, tok, rubric, assignment, subs = _setup(1)
+    other_subject, other_tok, _ = setup_subject_with_users(client)
+
+    assert _start_job(subject, assignment, other_tok, rubric["id"]).status_code == 403   # not their subject
+    assert _start_job(subject, assignment, tok, 999999).status_code == 404               # unknown rubric
+    assert _start_job(subject, "No Such Assignment", tok, rubric["id"]).status_code == 404  # no submissions
