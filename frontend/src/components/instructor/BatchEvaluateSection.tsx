@@ -149,7 +149,12 @@ export default function BatchEvaluateSection({
       });
     } else if (job?.status === "failed") {
       setMsg({
-        text: `Batch evaluation stopped${when}: ${job.error ?? "unknown error"}. Results already produced are saved -- tick "skip already evaluated" and run again to continue.`,
+        text: `Batch evaluation stopped${when}: ${job.error ?? "unknown error"}. Results already produced are saved -- use Resume to grade the rest.`,
+        kind: "error",
+      });
+    } else if (job?.status === "interrupted") {
+      setMsg({
+        text: `This run was interrupted${when}: ${job.error ?? "the server stopped"} Results already produced are saved -- use Resume to grade the rest.`,
         kind: "error",
       });
     }
@@ -183,6 +188,20 @@ export default function BatchEvaluateSection({
       } catch {
         // keep the error above
       }
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  /** Grade the rest of an interrupted or failed run, with its original settings. */
+  async function resume() {
+    if (!job) return;
+    setMsg(null);
+    setStarting(true);
+    try {
+      setJob(await apiFetch<BatchJob>(`/auto-evaluate/jobs/${job.id}/resume`, { method: "POST" }));
+    } catch (err) {
+      setMsg({ text: `Could not resume: ${err instanceof Error ? err.message : err}`, kind: "error" });
     } finally {
       setStarting(false);
     }
@@ -281,6 +300,17 @@ export default function BatchEvaluateSection({
         </div>
       )}
       <Message state={msg} />
+      {job && (job.status === "interrupted" || job.status === "failed") && (
+        <button
+          type="button"
+          onClick={resume}
+          disabled={starting}
+          className="mt-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {/* Failed submissions have no evaluation, so they are graded again too. */}
+          {starting ? "Resuming…" : `Resume (${job.total - job.evaluated - job.skipped} to grade)`}
+        </button>
+      )}
       {result && (
         <div className="mt-3">
           <DownloadExcelButton

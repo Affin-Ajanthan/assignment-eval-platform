@@ -650,6 +650,7 @@ async def _lifespan(_app: FastAPI):
         bootstrap_admin(db)
         if demo_data_enabled():
             seed_demo_data(db)
+        _mark_interrupted_batch_jobs(db)
     finally:
         db.close()
     # Load UniXcoder once, in the background, so startup isn't blocked
@@ -2443,7 +2444,7 @@ class BatchJobOut(BaseModel):
     subject_id: int
     assignment_name: str
     rubric_id: int
-    status: str  # queued | running | done | failed
+    status: str  # queued | running | done | failed | interrupted
     total: int
     done: int  # finished so far, whatever the outcome
     evaluated: int
@@ -2548,6 +2549,45 @@ def get_latest_auto_evaluate_job(
         .first()
     )
     return _batch_job_status_out(job) if job else None
+
+
+def _mark_interrupted_batch_jobs(db: Session) -> int:
+    """Run at server start: a job still queued or running cannot be -- its
+    background thread died with the previous server process. Mark it
+    "interrupted" (so it no longer blocks its assignment) and let the
+    instructor resume it. Returns how many were marked."""
+    stale = db.query(BatchJob).filter(BatchJob.status.in_(("queued", "running"))).all()
+    for job in stale:
+        job.status, job.finished_at = "interrupted", _utcnow_naive()
+        job.error = f"The server stopped after {job.done} of {job.total} submissions."
+    db.commit()
+    return len(stale)
+
+
+@app.post("/auto-evaluate/jobs/{job_id}/resume", response_model=BatchJobOut, status_code=202)
+def resume_auto_evaluate_job(
+    job_id: int, background_tasks: BackgroundTasks,
+    instructor: User = Depends(require_instructor), db: Session = Depends(get_db),
+):
+    """Finish an interrupted (or failed) run: start a new job for the same
+    assignment and rubric with the same options, skipping submissions that
+    already have an evaluation, so only the rest are graded."""
+    job = db.get(BatchJob, job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job.subject_id not in instructor_subject_ids(db, instructor):
+        raise HTTPException(403, "You are not assigned to this subject")
+    if job.status not in ("interrupted", "failed"):
+        raise HTTPException(409, f"Only an interrupted or failed run can be resumed; this one is {job.status}.")
+    payload = BatchAutoEvaluateIn(
+        rubric_id=job.rubric_id,
+        use_rubric_model=job.options.get("use_rubric_model", True),
+        use_ai_detection=job.options.get("use_ai_detection", True),
+        skip_already_evaluated=True,
+    )
+    resumed = _create_batch_job(db, instructor, job.subject_id, job.assignment_name, payload)
+    background_tasks.add_task(_run_batch_job, resumed.id)
+    return _batch_job_status_out(resumed)
 
 
 @app.get("/auto-evaluate/jobs/{job_id}", response_model=BatchJobOut)

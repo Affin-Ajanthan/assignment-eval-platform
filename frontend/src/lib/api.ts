@@ -274,7 +274,8 @@ export interface BatchJob {
   subject_id: number;
   assignment_name: string;
   rubric_id: number;
-  status: "queued" | "running" | "done" | "failed";
+  /** "interrupted": the server stopped mid-run; it can be resumed. */
+  status: "queued" | "running" | "done" | "failed" | "interrupted";
   total: number;
   /** Finished so far, whatever the outcome. */
   done: number;

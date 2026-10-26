@@ -391,7 +391,8 @@ class BatchJob(Base):
     rubric_id = Column(Integer, ForeignKey("rubrics.id"), nullable=False)
     # {"skip_already_evaluated", "use_rubric_model", "use_ai_detection"}
     options = Column(JSON, nullable=False)
-    status = Column(String, nullable=False, default="queued")  # "queued" | "running" | "done" | "failed"
+    # "interrupted": the server stopped mid-run (marked at the next start); resume to finish it.
+    status = Column(String, nullable=False, default="queued")  # "queued" | "running" | "done" | "failed" | "interrupted"
     total = Column(Integer, nullable=False, default=0)
     evaluated = Column(Integer, nullable=False, default=0)
     skipped = Column(Integer, nullable=False, default=0)
