@@ -51,6 +51,7 @@ function gradingSnapshot(
   scores: Record<string, string>,
   finalMark: string,
   comments: string,
+  feedback: string,
 ): string {
   const marks =
     mode === "final"
@@ -60,7 +61,8 @@ function gradingSnapshot(
           .filter(([, value]) => value !== "")
           .sort(([a], [b]) => a.localeCompare(b));
   const hasMarks = marks.length > 0;
-  return JSON.stringify(hasMarks ? [mode, marks, comments.trim()] : [null, null, comments.trim()]);
+  const notes = [comments.trim(), feedback.trim()];
+  return JSON.stringify(hasMarks ? [mode, marks, notes] : [null, null, notes]);
 }
 
 const STATUS_FILTERS: { label: string; status: Submission["status"] | null }[] = [
@@ -173,7 +175,8 @@ export default function InstructorPage() {
   const [loadingSavedGrade, setLoadingSavedGrade] = useState(false);
   const [savedGradeNote, setSavedGradeNote] = useState<string | null>(null);
   const gradeLoadFor = useRef<number | null>(null);
-  const [gradingComments, setGradingComments] = useState("");
+  const [gradingComments, setGradingComments] = useState(""); // internal, instructors only
+  const [gradingFeedback, setGradingFeedback] = useState(""); // for the student
   const [gradingMsg, setGradingMsg] = useState<MessageState>(null);
   // Same as the auto-evaluation panel: scroll the grading panel into view when it is opened.
   const gradingPanelRef = useRef<HTMLElement>(null);
@@ -353,6 +356,7 @@ export default function InstructorPage() {
     setGradingSubmissionId(submissionId);
     setGradingMsg(null);
     setGradingComments("");
+    setGradingFeedback("");
     const submission = submissions.find((s) => s.id === submissionId);
     // The assignment's own rubric always wins: grading with another one is refused.
     setGradingRubricId(assignmentRubricFor(submissionId) ?? rubricId ?? rubrics[0]?.id ?? null);
@@ -360,7 +364,7 @@ export default function InstructorPage() {
     setGradingMode("criteria");
     setFinalMark("");
     // Auto-evaluation scores (prefill) are not saved yet, so they count as unsaved marks.
-    setGradingBaseline(gradingSnapshot("criteria", {}, "", ""));
+    setGradingBaseline(gradingSnapshot("criteria", {}, "", "", ""));
     setShowEmptyMarks(false);
     setSavedGradeNote(null);
     setLoadingSavedGrade(false);
@@ -380,12 +384,14 @@ export default function InstructorPage() {
       const grade = await apiFetch<Grade | null>(`/submissions/${submissionId}/grade`);
       if (gradeLoadFor.current !== submissionId || !grade) return; // another panel was opened meanwhile
       const comments = grade.comments ?? "";
+      const feedback = grade.feedback ?? "";
       setGradingComments(comments);
+      setGradingFeedback(feedback);
       const lockedRubric = assignmentRubricFor(submissionId);
       if (lockedRubric !== null && grade.rubric_id !== lockedRubric) {
         // Graded before the assignment's rubric changed: those marks belong to
         // other criteria, so the marks start blank.
-        setGradingBaseline(gradingSnapshot("criteria", {}, "", comments));
+        setGradingBaseline(gradingSnapshot("criteria", {}, "", comments, feedback));
         setSavedGradeNote(
           `The saved grade (${grade.total_score}) used a different rubric than this assignment now uses. ` +
             "Enter the marks again with the rubric below.",
@@ -397,13 +403,13 @@ export default function InstructorPage() {
       if (Object.keys(grade.criterion_scores).length === 0) {
         setGradingMode("final");
         setFinalMark(String(grade.total_score));
-        setGradingBaseline(gradingSnapshot("final", {}, String(grade.total_score), comments));
+        setGradingBaseline(gradingSnapshot("final", {}, String(grade.total_score), comments, feedback));
       } else {
         const scores = Object.fromEntries(
           Object.entries(grade.criterion_scores).map(([name, score]) => [name, String(score)]),
         );
         setCriterionScores(scores);
-        setGradingBaseline(gradingSnapshot("criteria", scores, "", comments));
+        setGradingBaseline(gradingSnapshot("criteria", scores, "", comments, feedback));
       }
       setSavedGradeNote(
         `Showing the saved grade (${grade.total_score})` +
@@ -445,7 +451,7 @@ export default function InstructorPage() {
 
   const gradingDirty =
     gradingSubmissionId !== null &&
-    gradingSnapshot(gradingMode, criterionScores, finalMark, gradingComments) !== gradingBaseline;
+    gradingSnapshot(gradingMode, criterionScores, finalMark, gradingComments, gradingFeedback) !== gradingBaseline;
 
   function closeGradingPanel() {
     setGradingSubmissionId(null);
@@ -458,7 +464,7 @@ export default function InstructorPage() {
     if (!gradingDirty) return action();
     setGradingConfirm({
       title: "Discard unsaved marks?",
-      message: `The marks or comments you entered for ${studentLabel(gradingSubmissionId)} have not been saved.`,
+      message: `The marks, feedback or comments you entered for ${studentLabel(gradingSubmissionId)} have not been saved.`,
       confirmLabel: "Discard",
       onConfirm: () => {
         setGradingConfirm(null);
@@ -525,10 +531,10 @@ export default function InstructorPage() {
     try {
       await apiFetch(`/submissions/${gradingSubmissionId}/grade`, {
         method: "POST",
-        json: { rubric_id: gradingRubricId, ...marks, comments: gradingComments },
+        json: { rubric_id: gradingRubricId, ...marks, comments: gradingComments, feedback: gradingFeedback },
       });
       setGradingMsg({ text: "Grade saved.", kind: "success" });
-      setGradingBaseline(gradingSnapshot(gradingMode, criterionScores, finalMark, gradingComments));
+      setGradingBaseline(gradingSnapshot(gradingMode, criterionScores, finalMark, gradingComments, gradingFeedback));
       setSavedGradeNote(null); // it described the grade this one replaces
       if (subjectId !== null) await loadSubmissions(subjectId);
       return true;
@@ -807,6 +813,12 @@ export default function InstructorPage() {
                   <dt className="font-semibold">Submissions</dt>
                   <dd>
                     {shownSubmissions.length} ({shownSubmissions.filter((sub) => sub.status === "graded").length} graded)
+                  </dd>
+                  <dt className="font-semibold">Marks for students</dt>
+                  <dd>
+                    {selectedOption.assignment.marks_released
+                      ? "Visible"
+                      : `Hidden until ${formatDateTime(selectedOption.assignment.marks_release_at!)}`}
                   </dd>
                 </dl>
               </div>
@@ -1124,7 +1136,7 @@ export default function InstructorPage() {
                       </p>
                     )}
                     <p className="mt-1 text-xs text-gray-600">
-                      No per-criterion marks are saved. Students see only this final mark.
+                      No per-criterion marks are saved. Students see this final mark and your feedback.
                     </p>
                   </div>
                 )}
@@ -1190,11 +1202,24 @@ export default function InstructorPage() {
                       <span className="ml-2 text-xs font-normal text-red-700">Marks shown in red are not counted.</span>
                     )}
                     <span className="ml-2 text-xs font-normal text-gray-500">
-                      Students see only this final mark, not the per-criterion scores or comments.
+                      Students see this mark, the per-criterion marks and your feedback, never the internal comments.
                     </span>
                   </p>
                 </>
               )}
+
+              <label className="mt-3 block text-sm font-semibold" htmlFor="grading-feedback">
+                Feedback for the student
+              </label>
+              <textarea
+                id="grading-feedback"
+                value={gradingFeedback}
+                onChange={(e) => setGradingFeedback(e.target.value)}
+                maxLength={5000}
+                placeholder="What was done well and what to improve (written for the student)"
+                className="mt-1 mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                rows={3}
+              />
 
               <label className="mt-3 block text-sm font-semibold" htmlFor="grading-comments">
                 Comments (internal)
