@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { apiFetch, StudentAssignment, Submission } from "@/lib/api";
+import { apiFetch, StudentAssignment } from "@/lib/api";
 import { useRequireRole } from "@/lib/useRequireRole";
 import { formatDateTime } from "@/lib/datetime";
 import AccountBar from "@/components/AccountBar";
@@ -15,19 +15,16 @@ export default function StudentPage() {
   const { user, ready } = useRequireRole("student");
 
   const [assignments, setAssignments] = useState<StudentAssignment[]>([]);
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  // Bumped after every submit / edit / delete, so an open history refreshes.
+  const [historyVersion, setHistoryVersion] = useState(0);
   const [openForm, setOpenForm] = useState<OpenForm>(null);
   const [notice, setNotice] = useState<{ assignmentId: number; state: MessageState } | null>(null);
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
 
+  // The submission history loads itself when opened (SubmissionHistory).
   const load = useCallback(async () => {
-    const [a, s] = await Promise.all([
-      apiFetch<StudentAssignment[]>("/assignments"),
-      apiFetch<Submission[]>("/submissions"),
-    ]);
-    setAssignments(a);
-    setSubmissions(s);
+    setAssignments(await apiFetch<StudentAssignment[]>("/assignments"));
   }, []);
 
   useEffect(() => {
@@ -37,6 +34,7 @@ export default function StudentPage() {
 
   async function changed(assignmentId: number, text: string) {
     setNotice({ assignmentId, state: { text, kind: "success" } });
+    setHistoryVersion((v) => v + 1);
     await load();
   }
 
@@ -105,7 +103,7 @@ export default function StudentPage() {
         </section>
       )}
 
-      <SubmissionHistory submissions={submissions} />
+      <SubmissionHistory version={historyVersion} />
 
       <ConfirmDialog request={confirm} busy={confirmBusy} onCancel={() => !confirmBusy && setConfirm(null)} />
     </div>
