@@ -1,217 +1,50 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import {
-  apiFetch,
-  MySubmission,
-  SelfCheck,
-  SelfCheckBand,
-  SelfCheckKind,
-  SelfCheckStatus,
-  StudentAssignment,
-} from "@/lib/api";
+import { useState } from "react";
+import { MySubmission, SelfCheckKind, StudentAssignment } from "@/lib/api";
 import { formatDateTime } from "@/lib/datetime";
-import Message, { MessageState } from "@/components/Message";
+import Message from "@/components/Message";
+import { AiResult, SimilarityResult } from "@/components/student/SelfCheckResults";
+import { CHECKS } from "@/lib/selfCheckBands";
+import { useHiddenResults } from "@/lib/useHiddenResults";
+import { useSelfCheckStatus } from "@/lib/useSelfCheckStatus";
 
-const BAND_STYLE: Record<SelfCheckBand, { cls: string; similarity: string; ai: string }> = {
-  low: { cls: "bg-green-100 text-green-800 border-green-300", similarity: "Low similarity", ai: "Low likelihood" },
-  moderate: {
-    cls: "bg-yellow-100 text-yellow-800 border-yellow-300",
-    similarity: "Moderate similarity",
-    ai: "Moderate likelihood",
-  },
-  high: { cls: "bg-red-100 text-red-800 border-red-300", similarity: "High similarity", ai: "High likelihood" },
-};
-
-const HIGHLIGHT_BORDER: Record<SelfCheckBand, string> = {
-  low: "border-green-400",
-  moderate: "border-yellow-400",
-  high: "border-red-400",
-};
-
-const CHECKS: { kind: SelfCheckKind; label: string; button: string }[] = [
-  { kind: "code_similarity", label: "Code similarity", button: "Check my code" },
-  { kind: "report_similarity", label: "Report similarity", button: "Check my report" },
-  { kind: "ai_content", label: "AI-content detection", button: "Check for AI content" },
-];
-
-function Band({ band, ai = false }: { band: SelfCheckBand; ai?: boolean }) {
-  const style = BAND_STYLE[band];
-  return (
-    <span className={`rounded border px-2 py-0.5 text-xs font-semibold ${style.cls}`}>
-      {ai ? style.ai : style.similarity}
-    </span>
+/** The checks this assignment allows for the parts the student uploaded. */
+function availableChecks(assignment: StudentAssignment, submission: MySubmission): SelfCheckKind[] {
+  return CHECKS.map((c) => c.kind).filter((kind) =>
+    kind === "ai_content"
+      ? assignment.student_ai_check && (submission.has_code || submission.has_report)
+      : assignment.student_similarity_check && (kind === "code_similarity" ? submission.has_code : submission.has_report),
   );
 }
 
-// What each band means for the student. Similarity is symmetric -- an original
-// author matches whoever copied them -- so "high" never reads as an accusation.
-const MEANING: Record<SelfCheckBand, { code: string; report: string }> = {
-  high: {
-    code: "Your code closely matches at least one other submission. If this is your own work, you don't need to do anything: your instructor reviews every match.",
-    report: "Your report closely matches at least one other report. If this is your own work, you don't need to do anything: your instructor reviews every match.",
-  },
-  moderate: {
-    code: "Parts of your code are more similar to another submission than is usual for this assignment. Check that the highlighted parts are your own work.",
-    report: "Parts of your report are more similar to another report than is usual for this assignment. Check that the highlighted passages are your own words or properly cited.",
-  },
-  low: {
-    code: "Your code doesn't stand out: it only shares the kind of patterns most solutions to this assignment have.",
-    report: "Your report doesn't stand out: it only shares the kind of wording most reports for this assignment have.",
-  },
-};
+/** The open panel: loads this submission's checks (and polls while one runs). */
+function SelfCheckBody({
+  assignment,
+  submission,
+  kinds,
+}: {
+  assignment: StudentAssignment;
+  submission: MySubmission;
+  kinds: SelfCheckKind[];
+}) {
+  const { status, msg, starting, start } = useSelfCheckStatus(submission.id, submission.submitted_at);
+  const [hidden, toggleHidden] = useHiddenResults();
 
-function SimilarityResult({ check }: { check: SelfCheck }) {
-  const r = check.result!;
-  const band = r.band ?? "low";
-  const part = check.kind === "code_similarity" ? "code" : "report";
-  return (
-    <div className="mt-2 text-sm">
-      <p>
-        <Band band={band} />{" "}
-        {r.note ? r.note : `Compared with ${r.compared} other submission(s); ${r.similar_submissions} stand out as similar.`}
-      </p>
-      {!r.note && <p className="mt-1 text-gray-700">{MEANING[band][part]}</p>}
-      {check.kind === "code_similarity" && (r.highlights?.length ?? 0) > 0 && (
-        <div className="mt-2">
-          <p className="text-xs font-semibold text-gray-700">Parts of your code with potential matches</p>
-          {r.highlights!.map((h, i) => (
-            <div key={i} className="mt-1">
-              <p className="text-xs text-gray-500">
-                {h.file}, lines {h.start_line}–{h.end_line}
-                {h.truncated ? " (first lines shown)" : ""}
-              </p>
-              <pre
-                className={`overflow-x-auto rounded border-l-4 bg-gray-50 px-3 py-2 text-xs ${HIGHLIGHT_BORDER[band]}`}
-              >
-                {h.text}
-              </pre>
-            </div>
-          ))}
-        </div>
-      )}
-      {check.kind === "report_similarity" && (r.passages?.length ?? 0) > 0 && (
-        <div className="mt-2">
-          <p className="text-xs font-semibold text-gray-700">Passages of your report with potential matches</p>
-          {r.passages!.map((text, i) => (
-            <blockquote
-              key={i}
-              className={`mt-1 border-l-4 bg-gray-50 px-3 py-2 text-xs text-gray-700 ${HIGHLIGHT_BORDER[band]}`}
-            >
-              {text}
-            </blockquote>
-          ))}
-        </div>
-      )}
-      <p className="mt-2 text-xs text-gray-500">
-        An indicator, not proof of plagiarism: common code patterns and shared course material can match too. Your
-        instructor reviews every result and it never changes your mark by itself.
-      </p>
-    </div>
+  if (!status) return <p className="mt-2 text-xs text-gray-500">Loading your checks...</p>;
+  if (!status.can_run) return <p className="mt-2 text-xs text-gray-600">Self-checks are closed for this submission.</p>;
+
+  // The server has the final say on which checks are switched on.
+  const available = CHECKS.filter(
+    (c) =>
+      kinds.includes(c.kind) && (c.kind === "ai_content" ? status.ai_enabled : status.similarity_enabled),
   );
-}
-
-function AiResult({ check }: { check: SelfCheck }) {
-  const r = check.result!;
-  return (
-    <div className="mt-2 text-sm">
-      <ul className="space-y-1">
-        <li>
-          Report: {r.report ? <Band band={r.report} ai /> : <span className="text-gray-500">not assessed</span>}
-        </li>
-        <li>
-          Code: {r.code ? <Band band={r.code} ai /> : <span className="text-gray-500">not assessed</span>}
-        </li>
-      </ul>
-      <p className="mt-2 text-xs text-gray-500">
-        Statistical estimates of machine-generated text. They can be wrong, especially for formal or non-native
-        English writing and for tidy code, and they never change your mark.
-      </p>
-    </div>
-  );
-}
-
-// A hidden result is remembered per check (by its id), so it stays hidden after a
-// reload but a NEW check of that kind shows again.
-const HIDDEN_KEY = "selfcheck.hidden";
-
-function readHidden(): number[] {
-  try {
-    const raw = window.localStorage.getItem(HIDDEN_KEY);
-    return raw ? (JSON.parse(raw) as number[]) : [];
-  } catch {
-    return [];
+  if (available.length === 0) {
+    return <p className="mt-2 text-xs text-gray-600">Your instructor has turned self-checks off for this assignment.</p>;
   }
-}
-
-function writeHidden(ids: number[]) {
-  try {
-    window.localStorage.setItem(HIDDEN_KEY, JSON.stringify(ids.slice(-200)));
-  } catch {
-    // storage unavailable: hiding still works until the page is reloaded
-  }
-}
-
-/** "Check my submission": similarity and AI-content self-checks while the assignment is open. */
-export default function SelfCheckPanel({ assignment, submission }: { assignment: StudentAssignment; submission: MySubmission }) {
-  const [status, setStatus] = useState<SelfCheckStatus | null>(null);
-  const [msg, setMsg] = useState<MessageState>(null);
-  const [starting, setStarting] = useState<SelfCheckKind | null>(null);
-  const [hidden, setHidden] = useState<number[]>([]);
-
-  useEffect(() => setHidden(readHidden()), []);
-
-  function toggleHidden(checkId: number) {
-    const next = hidden.includes(checkId) ? hidden.filter((id) => id !== checkId) : [...hidden, checkId];
-    setHidden(next);
-    writeHidden(next);
-  }
-
-  const load = useCallback(async () => {
-    try {
-      setStatus(await apiFetch<SelfCheckStatus>(`/submissions/${submission.id}/self-checks`));
-    } catch (err) {
-      setMsg({ text: `Could not load your checks: ${err instanceof Error ? err.message : err}`, kind: "error" });
-    }
-  }, [submission.id]);
-
-  useEffect(() => {
-    load();
-  }, [load, submission.submitted_at]);
-
-  // Poll while any check is still running.
-  const running = status ? CHECKS.some((c) => status.latest[c.kind]?.status === "running") : false;
-  useEffect(() => {
-    if (!running) return;
-    const timer = window.setInterval(load, 3000);
-    return () => window.clearInterval(timer);
-  }, [running, load]);
-
-  async function start(kind: SelfCheckKind) {
-    setMsg(null);
-    setStarting(kind);
-    try {
-      await apiFetch(`/submissions/${submission.id}/self-checks`, { method: "POST", json: { kind } });
-      await load();
-    } catch (err) {
-      setMsg({ text: err instanceof Error ? err.message : String(err), kind: "error" });
-    } finally {
-      setStarting(null);
-    }
-  }
-
-  if (!status || !status.can_run || !(status.similarity_enabled || status.ai_enabled)) return null;
-
-  const available = CHECKS.filter((c) =>
-    c.kind === "ai_content"
-      ? status.ai_enabled && (submission.has_code || submission.has_report)
-      : status.similarity_enabled && (c.kind === "code_similarity" ? submission.has_code : submission.has_report),
-  );
-  if (available.length === 0) return null;
 
   return (
-    <div className="mt-4 rounded-md border border-blue-100 bg-blue-50/40 p-4" data-testid="self-check-panel">
-      <h4 className="font-bold">Check my submission</h4>
+    <>
       <p className="mt-1 text-xs text-gray-600">
         Available until the deadline ({formatDateTime(assignment.deadline)}). You can run each check{" "}
         {status.limit_per_hour} times per hour. Results show only your own work.
@@ -271,6 +104,41 @@ export default function SelfCheckPanel({ assignment, submission }: { assignment:
         })}
       </div>
       <Message state={msg} />
+    </>
+  );
+}
+
+/**
+ * "Check my submission": similarity and AI-content self-checks while the
+ * assignment is open. Collapsed by default -- nothing is requested until the
+ * student opens it, so a page with many assignments stays light.
+ */
+export default function SelfCheckPanel({ assignment, submission }: { assignment: StudentAssignment; submission: MySubmission }) {
+  const [open, setOpen] = useState(false);
+  const kinds = availableChecks(assignment, submission);
+  if (kinds.length === 0) return null;
+
+  return (
+    <div className="mt-4 rounded-md border border-blue-100 bg-blue-50/40 p-4" data-testid="self-check-panel">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 text-left"
+      >
+        <span className="font-bold">Check my submission</span>
+        <span className="text-xs font-semibold text-blue-700">{open ? "Close ▴" : "Open ▾"}</span>
+      </button>
+      {!open && (
+        <p className="mt-1 text-xs text-gray-600">
+          Check your work for{" "}
+          {[kinds.some((k) => k !== "ai_content") && "similarity", kinds.includes("ai_content") && "AI content"]
+            .filter(Boolean)
+            .join(" and ")}{" "}
+          before the deadline.
+        </p>
+      )}
+      {open && <SelfCheckBody assignment={assignment} submission={submission} kinds={kinds} />}
     </div>
   );
 }

@@ -279,3 +279,293 @@ def test_batch_runs_submissions_concurrently_and_keeps_their_order(monkeypatch):
     assert [item["submission_id"] for item in body["results"]] == [s["id"] for s in subs]
     for s in subs:  # each worker saved its result with its own database session
         assert client.get(f"/submissions/{s['id']}/auto-evaluate", headers=auth_headers(tok)).json() is not None
+
+
+def _job(job_id):
+    from app.db import SessionLocal
+    from app.models import BatchJob
+
+    db = SessionLocal()
+    try:
+        job = db.get(BatchJob, job_id)
+        db.expunge(job)
+        return job
+    finally:
+        db.close()
+
+
+def test_each_batch_run_is_recorded_as_a_job_with_its_progress(monkeypatch):
+    subject, tok, rubric, assignment, subs = _setup(3)
+    real = main._run_auto_evaluation
+    bad_id = subs[1]["id"]
+
+    def flaky(db, submission, rubric_, **kwargs):
+        if submission.id == bad_id:
+            raise RuntimeError("Ollama exploded")
+        return real(db, submission, rubric_, **kwargs)
+
+    monkeypatch.setattr(main, "_run_auto_evaluation", flaky)
+    body = _batch(subject, assignment, tok, rubric["id"]).json()
+    assert body["job_id"]
+
+    job = _job(body["job_id"])
+    assert (job.status, job.assignment_name, job.rubric_id) == ("done", assignment, rubric["id"])
+    assert (job.total, job.evaluated, job.skipped, job.failed, job.done) == (3, 2, 0, 1, 3)
+    assert [r["status"] for r in job.results] == ["evaluated", "failed", "evaluated"]  # submission order
+    assert job.started_at and job.finished_at and job.error is None
+    assert job.options == {"skip_already_evaluated": False, "use_rubric_model": True, "use_ai_detection": True}
+
+    # A resumed run records what it skipped.
+    again = _batch(subject, assignment, tok, rubric["id"], skip_already_evaluated=True).json()
+    resumed = _job(again["job_id"])
+    assert again["job_id"] != body["job_id"]
+    assert (resumed.total, resumed.skipped, resumed.evaluated, resumed.failed) == (3, 2, 0, 1)
+
+
+def test_a_batch_job_that_breaks_is_marked_failed_with_the_reason(monkeypatch):
+    subject, tok, rubric, assignment, subs = _setup(1)
+
+    def broken(*args, **kwargs):  # breaks the job itself, not one submission
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(main, "flag_modified", broken)
+    r = _batch(subject, assignment, tok, rubric["id"])
+    assert r.status_code == 500 and "disk full" in r.json()["detail"]
+
+    from app.db import SessionLocal
+    from app.models import BatchJob
+
+    db = SessionLocal()
+    try:
+        job = db.query(BatchJob).order_by(BatchJob.id.desc()).first()
+        assert (job.status, job.assignment_name) == ("failed", assignment)
+        assert "disk full" in job.error and job.finished_at is not None
+    finally:
+        db.close()
+
+
+def _start_job(subject, assignment, tok, rubric_id, **extra):
+    return client.post(
+        f"/subjects/{subject['id']}/assignments/{assignment}/auto-evaluate/jobs",
+        json={"rubric_id": rubric_id, **extra},
+        headers=auth_headers(tok),
+    )
+
+
+def test_starting_a_job_answers_at_once_and_evaluates_in_the_background():
+    subject, tok, rubric, assignment, subs = _setup(3)
+    r = _start_job(subject, assignment, tok, rubric["id"])
+
+    # The answer is sent before any grading: the job is still queued.
+    assert r.status_code == 202, r.text
+    started = r.json()
+    assert (started["status"], started["total"], started["done"], started["results"]) == ("queued", 3, 0, [])
+    assert started["assignment_name"] == assignment and started["rubric_id"] == rubric["id"]
+
+    # The test client then runs the background task; the job finishes on its own.
+    job = _job(started["id"])
+    assert (job.status, job.total, job.evaluated, job.failed) == ("done", 3, 3, 0)
+    for s in subs:  # every evaluation was saved
+        assert client.get(f"/submissions/{s['id']}/auto-evaluate", headers=auth_headers(tok)).json() is not None
+
+
+def test_starting_a_job_checks_access_and_inputs_like_the_waiting_endpoint():
+    subject, tok, rubric, assignment, subs = _setup(1)
+    other_subject, other_tok, _ = setup_subject_with_users(client)
+
+    assert _start_job(subject, assignment, other_tok, rubric["id"]).status_code == 403   # not their subject
+    assert _start_job(subject, assignment, tok, 999999).status_code == 404               # unknown rubric
+    assert _start_job(subject, "No Such Assignment", tok, rubric["id"]).status_code == 404  # no submissions
+
+
+def _progress(job_id, tok):
+    return client.get(f"/auto-evaluate/jobs/{job_id}", headers=auth_headers(tok))
+
+
+def test_progress_of_a_finished_job():
+    subject, tok, rubric, assignment, subs = _setup(3)
+    job_id = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+
+    r = _progress(job_id, tok)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert (body["status"], body["total"], body["done"], body["evaluated"], body["failed"]) == ("done", 3, 3, 3, 0)
+    assert [item["submission_id"] for item in body["results"]] == [s["id"] for s in subs]
+    assert body["started_at"] and body["finished_at"]
+
+
+def test_progress_part_way_through_a_run(monkeypatch):
+    from app.db import SessionLocal
+    from app.models import BatchJob
+
+    subject, tok, rubric, assignment, subs = _setup(3)
+    monkeypatch.setattr(main, "_run_batch_job", lambda job_id: None)  # keep the job from running
+    job_id = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+    assert _progress(job_id, tok).json()["status"] == "queued"
+
+    # What a real run looks like after the first of three submissions finished.
+    db = SessionLocal()
+    try:
+        job = db.get(BatchJob, job_id)
+        job.status, job.evaluated = "running", 1
+        job.results = [{"submission_id": subs[0]["id"], "student_name": "A", "status": "evaluated",
+                        "recommended_score": 7, "recommended_max": 10}, None, None]
+        db.commit()
+    finally:
+        db.close()
+
+    body = _progress(job_id, tok).json()
+    assert (body["status"], body["total"], body["done"]) == ("running", 3, 1)
+    assert body["results"][0]["recommended_score"] == 7 and body["results"][1:] == [None, None]
+    assert body["finished_at"] is None
+
+
+def test_progress_is_only_for_the_subjects_instructors():
+    from tests.auth_helpers import new_student
+
+    subject, tok, rubric, assignment, subs = _setup(1)
+    job_id = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+    _, other_tok, _ = setup_subject_with_users(client)
+
+    assert _progress(job_id, other_tok).status_code == 403                             # another subject's instructor
+    assert _progress(job_id, new_student(client, subject["id"])).status_code == 403    # a student
+    assert _progress(999999, tok).status_code == 404                                   # no such job
+
+
+def _latest(subject, assignment, tok):
+    return client.get(f"/subjects/{subject['id']}/assignments/{assignment}/auto-evaluate/jobs/latest",
+                      headers=auth_headers(tok))
+
+
+def test_latest_job_lets_the_page_show_a_run_again(monkeypatch):
+    subject, tok, rubric, assignment, subs = _setup(2)
+    assert _latest(subject, assignment, tok).json() is None  # never run
+
+    first = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+    second = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+    latest = _latest(subject, assignment, tok).json()
+    assert latest["id"] == second != first and latest["status"] == "done"
+    assert len([r for r in latest["results"] if r]) == 2
+
+    # A job still running (the instructor left the page) is what comes back.
+    monkeypatch.setattr(main, "_run_batch_job", lambda job_id: None)
+    running = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+    latest = _latest(subject, assignment, tok).json()
+    assert (latest["id"], latest["status"]) == (running, "queued")
+
+
+def test_latest_job_is_per_assignment_and_only_for_the_subjects_instructors():
+    subject, tok, rubric, assignment, subs = _setup(1)
+    _start_job(subject, assignment, tok, rubric["id"])
+    _, other_tok, _ = setup_subject_with_users(client)
+
+    assert _latest(subject, "Some Other Assignment", tok).json() is None
+    assert _latest(subject, assignment, other_tok).status_code == 403
+
+
+def test_a_second_run_of_the_same_assignment_is_refused_while_one_is_running(monkeypatch):
+    from app.db import SessionLocal
+    from app.models import BatchJob
+
+    subject, tok, rubric, assignment, subs = _setup(2)
+    monkeypatch.setattr(main, "_run_batch_job", lambda job_id: None)  # the first run stays queued
+    first = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+
+    second = _start_job(subject, assignment, tok, rubric["id"])
+    assert second.status_code == 409
+    assert "already being evaluated (0 of 2 done)" in second.json()["detail"]
+    # The waiting endpoint is blocked the same way.
+    assert _batch(subject, assignment, tok, rubric["id"]).status_code == 409
+
+    # Once that run has finished, a new run is allowed again.
+    db = SessionLocal()
+    try:
+        db.get(BatchJob, first).status = "done"
+        db.commit()
+    finally:
+        db.close()
+    assert _start_job(subject, assignment, tok, rubric["id"]).status_code == 202
+
+
+def _server_restarted():
+    from app.db import SessionLocal
+
+    db = SessionLocal()
+    try:
+        return main._mark_interrupted_batch_jobs(db)
+    finally:
+        db.close()
+
+
+def test_a_server_restart_marks_running_jobs_interrupted_and_frees_the_assignment(monkeypatch):
+    subject, tok, rubric, assignment, subs = _setup(2)
+    monkeypatch.setattr(main, "_run_batch_job", lambda job_id: None)  # "running" when the server stops
+    job_id = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+    assert _start_job(subject, assignment, tok, rubric["id"]).status_code == 409  # blocked while running
+
+    assert _server_restarted() >= 1
+    body = _progress(job_id, tok).json()
+    assert body["status"] == "interrupted" and body["finished_at"]
+    assert "after 0 of 2 submissions" in body["error"]
+    assert _start_job(subject, assignment, tok, rubric["id"]).status_code == 202  # no longer blocked
+
+
+def test_resuming_grades_only_the_rest_with_the_same_settings(monkeypatch):
+    subject, tok, rubric, assignment, subs = _setup(3)
+    # One submission was evaluated before the server stopped.
+    client.post(f"/submissions/{subs[0]['id']}/auto-evaluate", json={"rubric_id": rubric["id"]},
+                headers=auth_headers(tok))
+    real_run = main._run_batch_job
+    monkeypatch.setattr(main, "_run_batch_job", lambda job_id: None)
+    interrupted = _start_job(subject, assignment, tok, rubric["id"], use_ai_detection=False).json()["id"]
+    _server_restarted()
+
+    monkeypatch.setattr(main, "_run_batch_job", real_run)
+    r = client.post(f"/auto-evaluate/jobs/{interrupted}/resume", headers=auth_headers(tok))
+    assert r.status_code == 202, r.text
+    resumed = r.json()
+    assert resumed["id"] != interrupted and resumed["status"] == "queued"
+
+    job = _job(resumed["id"])
+    assert job.options == {"skip_already_evaluated": True, "use_rubric_model": True, "use_ai_detection": False}
+    assert (job.status, job.total, job.skipped, job.evaluated, job.failed) == ("done", 3, 1, 2, 0)
+
+
+def test_only_an_interrupted_or_failed_run_can_be_resumed_by_its_subjects_instructors(monkeypatch):
+    subject, tok, rubric, assignment, subs = _setup(1)
+    done_id = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+    resume = lambda job_id, token=tok: client.post(f"/auto-evaluate/jobs/{job_id}/resume",  # noqa: E731
+                                                    headers=auth_headers(token))
+
+    r = resume(done_id)
+    assert r.status_code == 409 and "this one is done" in r.json()["detail"]
+    assert resume(999999).status_code == 404
+
+    monkeypatch.setattr(main, "_run_batch_job", lambda job_id: None)
+    stuck = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+    _server_restarted()
+    _, other_tok, _ = setup_subject_with_users(client)
+    assert resume(stuck, other_tok).status_code == 403
+    assert resume(stuck).status_code == 202
+    assert resume(stuck).status_code == 409  # the resumed run is still going: no second one
+
+
+def test_a_failing_submission_in_a_background_job_shows_in_its_progress(monkeypatch):
+    subject, tok, rubric, assignment, subs = _setup(3)
+    real = main._run_auto_evaluation
+    bad_id = subs[1]["id"]
+
+    def flaky(db, submission, rubric_, **kwargs):
+        if submission.id == bad_id:
+            raise RuntimeError("Ollama exploded")
+        return real(db, submission, rubric_, **kwargs)
+
+    monkeypatch.setattr(main, "_run_auto_evaluation", flaky)
+    job_id = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+
+    body = _progress(job_id, tok).json()
+    # One submission failing does not fail the job: the others are still evaluated.
+    assert (body["status"], body["done"], body["evaluated"], body["failed"]) == ("done", 3, 2, 1)
+    failed = body["results"][1]
+    assert (failed["submission_id"], failed["status"]) == (bad_id, "failed")
+    assert "Ollama exploded" in failed["error"] and body["error"] is None

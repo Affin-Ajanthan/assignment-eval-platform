@@ -268,6 +268,29 @@ export interface BatchEvaluationResult {
   results: BatchEvaluationItem[];
 }
 
+/** A batch auto-evaluation running on the server (POST .../auto-evaluate/jobs). */
+export interface BatchJob {
+  id: number;
+  subject_id: number;
+  assignment_name: string;
+  rubric_id: number;
+  /** "interrupted": the server stopped mid-run; it can be resumed. */
+  status: "queued" | "running" | "done" | "failed" | "interrupted";
+  total: number;
+  /** Finished so far, whatever the outcome. */
+  done: number;
+  evaluated: number;
+  skipped: number;
+  failed: number;
+  /** One per submission in submission order; null while still waiting or running. */
+  results: (BatchEvaluationItem | null)[];
+  /** Why the whole job failed (one submission failing does not fail the job). */
+  error: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
 export interface SimilarityCheckResult {
   subject_id: number;
   assignment_name: string;

@@ -2,7 +2,7 @@
 SQLAlchemy models for the whole app: accounts + subject-wise access
 control (User, Subject, InstructorAssignment, Enrollment, AuthSession)
 and the assignment/grading data (Rubric, Submission, Grade,
-SimilarityFlag, AutoEvaluation).
+SimilarityFlag, AutoEvaluation, BatchJob).
 
 Access control shape:
 - Every account -- admin, instructor, student -- is created by an
@@ -372,3 +372,39 @@ class SelfCheck(Base):
     error = Column(String, nullable=True)
     created_at = Column(DateTime, default=_utcnow, index=True)
     finished_at = Column(DateTime, nullable=True)
+
+
+class BatchJob(Base):
+    """One "Evaluate a whole assignment" run: which assignment and rubric,
+    its options, and progress so far. Updated as each submission finishes,
+    so the instructor can follow it (and see it again after leaving the page).
+
+    ``results`` holds one entry per submission in submission order (the
+    BatchEvaluationItemOut shape), ``null`` while that submission is still
+    waiting or running."""
+
+    __tablename__ = "batch_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=False, index=True)
+    assignment_name = Column(String, nullable=False)
+    rubric_id = Column(Integer, ForeignKey("rubrics.id"), nullable=False)
+    # {"skip_already_evaluated", "use_rubric_model", "use_ai_detection"}
+    options = Column(JSON, nullable=False)
+    # "interrupted": the server stopped mid-run (marked at the next start); resume to finish it.
+    status = Column(String, nullable=False, default="queued")  # "queued" | "running" | "done" | "failed" | "interrupted"
+    total = Column(Integer, nullable=False, default=0)
+    evaluated = Column(Integer, nullable=False, default=0)
+    skipped = Column(Integer, nullable=False, default=0)
+    failed = Column(Integer, nullable=False, default=0)
+    results = Column(JSON, nullable=True)
+    error = Column(String, nullable=True)  # why the whole job failed (one submission failing is not that)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=_utcnow, index=True)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+
+    @property
+    def done(self) -> int:
+        """Submissions finished so far, whatever their outcome."""
+        return (self.evaluated or 0) + (self.skipped or 0) + (self.failed or 0)
