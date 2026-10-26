@@ -2486,6 +2486,19 @@ def _create_batch_job(
     )
     if not total:
         raise HTTPException(404, "No submissions found for this assignment")
+    # One run per assignment at a time: a second one would grade the same
+    # submissions again, in parallel, for nothing.
+    active = (
+        db.query(BatchJob)
+        .filter(BatchJob.subject_id == subject_id, BatchJob.assignment_name == assignment_name,
+                BatchJob.status.in_(("queued", "running")))
+        .first()
+    )
+    if active:
+        raise HTTPException(
+            409, f"This assignment is already being evaluated ({active.done} of {active.total} done). "
+                 "Wait for that run to finish.",
+        )
 
     job = BatchJob(
         subject_id=subject_id, assignment_name=assignment_name, rubric_id=rubric.id,

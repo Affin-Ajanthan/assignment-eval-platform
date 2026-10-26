@@ -174,6 +174,15 @@ export default function BatchEvaluateSection({
       );
     } catch (err) {
       setMsg({ text: `Could not start the evaluation: ${err instanceof Error ? err.message : err}`, kind: "error" });
+      // Refused because a run is already going (e.g. started in another tab)? Follow that one.
+      try {
+        const latest = await apiFetch<BatchJob | null>(
+          `/subjects/${subjectId}/assignments/${encodeURIComponent(assignment)}/auto-evaluate/jobs/latest`
+        );
+        if (isActive(latest)) setJob(latest);
+      } catch {
+        // keep the error above
+      }
     } finally {
       setStarting(false);
     }

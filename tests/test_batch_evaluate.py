@@ -461,3 +461,27 @@ def test_latest_job_is_per_assignment_and_only_for_the_subjects_instructors():
 
     assert _latest(subject, "Some Other Assignment", tok).json() is None
     assert _latest(subject, assignment, other_tok).status_code == 403
+
+
+def test_a_second_run_of_the_same_assignment_is_refused_while_one_is_running(monkeypatch):
+    from app.db import SessionLocal
+    from app.models import BatchJob
+
+    subject, tok, rubric, assignment, subs = _setup(2)
+    monkeypatch.setattr(main, "_run_batch_job", lambda job_id: None)  # the first run stays queued
+    first = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+
+    second = _start_job(subject, assignment, tok, rubric["id"])
+    assert second.status_code == 409
+    assert "already being evaluated (0 of 2 done)" in second.json()["detail"]
+    # The waiting endpoint is blocked the same way.
+    assert _batch(subject, assignment, tok, rubric["id"]).status_code == 409
+
+    # Once that run has finished, a new run is allowed again.
+    db = SessionLocal()
+    try:
+        db.get(BatchJob, first).status = "done"
+        db.commit()
+    finally:
+        db.close()
+    assert _start_job(subject, assignment, tok, rubric["id"]).status_code == 202
