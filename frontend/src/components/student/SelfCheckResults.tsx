@@ -1,0 +1,80 @@
+import { SelfCheck, SelfCheckBand } from "@/lib/api";
+import Badge from "@/components/Badge";
+import { BAND_STYLE, HIGHLIGHT_BORDER, MEANING } from "@/lib/selfCheckBands";
+
+export function Band({ band, ai = false }: { band: SelfCheckBand; ai?: boolean }) {
+  const style = BAND_STYLE[band];
+  return <Badge tone={`border ${style.cls}`}>{ai ? style.ai : style.similarity}</Badge>;
+}
+
+/** A code or report similarity result: band, what it means, and the student's own matching parts. */
+export function SimilarityResult({ check }: { check: SelfCheck }) {
+  const r = check.result!;
+  const band = r.band ?? "low";
+  const part = check.kind === "code_similarity" ? "code" : "report";
+  return (
+    <div className="mt-2 text-sm">
+      <p>
+        <Band band={band} />{" "}
+        {r.note ? r.note : `Compared with ${r.compared} other submission(s); ${r.similar_submissions} stand out as similar.`}
+      </p>
+      {!r.note && <p className="mt-1 text-gray-700">{MEANING[band][part]}</p>}
+      {check.kind === "code_similarity" && (r.highlights?.length ?? 0) > 0 && (
+        <div className="mt-2">
+          <p className="text-xs font-semibold text-gray-700">Parts of your code with potential matches</p>
+          {r.highlights!.map((h, i) => (
+            <div key={i} className="mt-1">
+              <p className="text-xs text-gray-500">
+                {h.file}, lines {h.start_line}–{h.end_line}
+                {h.truncated ? " (first lines shown)" : ""}
+              </p>
+              <pre
+                className={`overflow-x-auto rounded border-l-4 bg-gray-50 px-3 py-2 text-xs ${HIGHLIGHT_BORDER[band]}`}
+              >
+                {h.text}
+              </pre>
+            </div>
+          ))}
+        </div>
+      )}
+      {check.kind === "report_similarity" && (r.passages?.length ?? 0) > 0 && (
+        <div className="mt-2">
+          <p className="text-xs font-semibold text-gray-700">Passages of your report with potential matches</p>
+          {r.passages!.map((text, i) => (
+            <blockquote
+              key={i}
+              className={`mt-1 border-l-4 bg-gray-50 px-3 py-2 text-xs text-gray-700 ${HIGHLIGHT_BORDER[band]}`}
+            >
+              {text}
+            </blockquote>
+          ))}
+        </div>
+      )}
+      <p className="mt-2 text-xs text-gray-500">
+        An indicator, not proof of plagiarism: common code patterns and shared course material can match too. Your
+        instructor reviews every result and it never changes your mark by itself.
+      </p>
+    </div>
+  );
+}
+
+/** An AI-content result: one band for the report, one for the code. */
+export function AiResult({ check }: { check: SelfCheck }) {
+  const r = check.result!;
+  return (
+    <div className="mt-2 text-sm">
+      <ul className="space-y-1">
+        <li>
+          Report: {r.report ? <Band band={r.report} ai /> : <span className="text-gray-500">not assessed</span>}
+        </li>
+        <li>
+          Code: {r.code ? <Band band={r.code} ai /> : <span className="text-gray-500">not assessed</span>}
+        </li>
+      </ul>
+      <p className="mt-2 text-xs text-gray-500">
+        Statistical estimates of machine-generated text. They can be wrong, especially for formal or non-native
+        English writing and for tidy code, and they never change your mark.
+      </p>
+    </div>
+  );
+}

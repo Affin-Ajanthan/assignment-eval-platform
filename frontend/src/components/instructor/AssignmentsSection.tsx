@@ -6,6 +6,7 @@ import { combineLocal, formatDateTime, splitLocal } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import ReportTemplateControl from "@/components/instructor/ReportTemplateControl";
+import Badge from "@/components/Badge";
 import { CODE_LANGUAGES, CodeLanguageId, languageNames } from "@/lib/codeLanguages";
 
 const STATUS_STYLE: Record<AssignmentStatus, { text: string; cls: string }> = {
@@ -62,8 +63,8 @@ const EMPTY: FormState = {
   releaseTime: "",
 };
 
-// Must match the backend's _CODE_EXTENSIONS (app/main.py).
-const CODE_EXTENSIONS = [".py", ".java", ".js", ".c", ".cpp", ".cc", ".cxx", ".hh", ".hxx", ".h", ".hpp", ".cs", ".go", ".rb", ".php"];
+// Starter code is one source file (not a notebook): the backend's CODE_EXTENSIONS (app/common.py).
+const CODE_EXTENSIONS = [...new Set(CODE_LANGUAGES.flatMap((l) => l.extensions))].filter((e) => e !== ".ipynb");
 
 const input = "mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm";
 
@@ -485,9 +486,7 @@ export default function AssignmentsSection({
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <h4 className="font-bold">{a.name}</h4>
-                  <span className={`rounded px-2 py-0.5 text-xs font-semibold ${STATUS_STYLE[a.status].cls}`}>
-                    {STATUS_STYLE[a.status].text}
-                  </span>
+                  <Badge tone={STATUS_STYLE[a.status].cls}>{STATUS_STYLE[a.status].text}</Badge>
                   <p className="mt-1 text-xs text-gray-600">Accepts: {a.submission_types.map(typeLabel).join(", ")}</p>
                   {a.submission_types.includes("code") && a.code_languages?.length > 0 && (
                     <p className="text-xs text-gray-600">Language: {languageNames(a.code_languages)}</p>

@@ -13,8 +13,8 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import app.main as main
 from app import self_checks
+from app.routers import self_checks as self_check_api
 from app.db import SessionLocal
 from app.main import app as fastapi_app
 from app.models import SelfCheck, SimilarityFlag, Submission
@@ -252,7 +252,7 @@ def test_rejected_requests_do_not_count_but_failed_jobs_do(tmp_path, monkeypatch
     def boom(submission):
         raise RuntimeError("model crashed")
 
-    monkeypatch.setattr(main, "_self_check_ai", boom)
+    monkeypatch.setattr(self_check_api, "_self_check_ai", boom)
     assert _run(tok_a, sid_a, "ai_content").status_code == 202
     check = _latest(tok_a, sid_a, "ai_content")
     assert check["status"] == "failed"
@@ -390,3 +390,27 @@ def test_floor_applies_when_the_class_shares_little():
     lines = self_checks.code_moderate_lines([_pair(0.05, 0.10) for _ in range(10)])
     assert lines["containment_line"] == self_checks.CODE_MODERATE_CONTAINMENT
     assert self_checks.code_pair_band(_pair(0.20, 0.55), lines) == "low"
+
+
+def test_docx_report_without_a_saved_extraction_is_still_read(tmp_path, monkeypatch):
+    """The DOCX path falls back to extracting the report now. (extract_report_text
+    was used but never imported in main.py, so this raised NameError.)"""
+    from app import similarity_runs
+
+    monkeypatch.setattr(similarity_runs, "load_extraction", lambda path: None)
+    monkeypatch.setattr(self_check_api, "load_extraction", lambda path: None)
+    subject, instructor_tok, _ = setup_subject_with_users(client)
+    name = "Docx No Sidecar"
+    create_assignment(client, instructor_tok, subject["id"], name)
+    tok = new_student(client, subject["id"])
+    docx = make_docx(tmp_path / "mine.docx", [REPORT])
+    mine = submit(client, subject["id"], name, {"report": (
+        "mine.docx", io.BytesIO(docx.read_bytes()),
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}, tok)
+    assert submit(client, subject["id"], name, {"report": _pdf(tmp_path, "theirs", REPORT)}).status_code == 200
+    sid = mine.json()["id"]
+    assert _run(tok, sid, "report_similarity").status_code == 202
+    assert _latest(tok, sid, "report_similarity")["result"]["band"] == "high"
+    assert _run(tok, sid, "ai_content").status_code == 202
+    ai = _latest(tok, sid, "ai_content")
+    assert ai["status"] == "done" and ai["result"]["report"] in ("low", "moderate", "high")
