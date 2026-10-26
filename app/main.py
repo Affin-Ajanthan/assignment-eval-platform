@@ -2515,6 +2515,20 @@ def start_auto_evaluate_job(
     return _batch_job_status_out(job)
 
 
+@app.get("/auto-evaluate/jobs/{job_id}", response_model=BatchJobOut)
+def get_auto_evaluate_job(
+    job_id: int, instructor: User = Depends(require_instructor), db: Session = Depends(get_db),
+):
+    """A batch auto-evaluation job's progress so far: poll it while it runs.
+    Finished submissions already have their result; the others are null."""
+    job = db.get(BatchJob, job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job.subject_id not in instructor_subject_ids(db, instructor):
+        raise HTTPException(403, "You are not assigned to this subject")
+    return _batch_job_status_out(job)
+
+
 @app.post(
     "/subjects/{subject_id}/assignments/{assignment_name}/auto-evaluate",
     response_model=BatchAutoEvaluateOut,

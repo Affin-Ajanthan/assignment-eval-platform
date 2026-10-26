@@ -376,3 +376,57 @@ def test_starting_a_job_checks_access_and_inputs_like_the_waiting_endpoint():
     assert _start_job(subject, assignment, other_tok, rubric["id"]).status_code == 403   # not their subject
     assert _start_job(subject, assignment, tok, 999999).status_code == 404               # unknown rubric
     assert _start_job(subject, "No Such Assignment", tok, rubric["id"]).status_code == 404  # no submissions
+
+
+def _progress(job_id, tok):
+    return client.get(f"/auto-evaluate/jobs/{job_id}", headers=auth_headers(tok))
+
+
+def test_progress_of_a_finished_job():
+    subject, tok, rubric, assignment, subs = _setup(3)
+    job_id = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+
+    r = _progress(job_id, tok)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert (body["status"], body["total"], body["done"], body["evaluated"], body["failed"]) == ("done", 3, 3, 3, 0)
+    assert [item["submission_id"] for item in body["results"]] == [s["id"] for s in subs]
+    assert body["started_at"] and body["finished_at"]
+
+
+def test_progress_part_way_through_a_run(monkeypatch):
+    from app.db import SessionLocal
+    from app.models import BatchJob
+
+    subject, tok, rubric, assignment, subs = _setup(3)
+    monkeypatch.setattr(main, "_run_batch_job", lambda job_id: None)  # keep the job from running
+    job_id = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+    assert _progress(job_id, tok).json()["status"] == "queued"
+
+    # What a real run looks like after the first of three submissions finished.
+    db = SessionLocal()
+    try:
+        job = db.get(BatchJob, job_id)
+        job.status, job.evaluated = "running", 1
+        job.results = [{"submission_id": subs[0]["id"], "student_name": "A", "status": "evaluated",
+                        "recommended_score": 7, "recommended_max": 10}, None, None]
+        db.commit()
+    finally:
+        db.close()
+
+    body = _progress(job_id, tok).json()
+    assert (body["status"], body["total"], body["done"]) == ("running", 3, 1)
+    assert body["results"][0]["recommended_score"] == 7 and body["results"][1:] == [None, None]
+    assert body["finished_at"] is None
+
+
+def test_progress_is_only_for_the_subjects_instructors():
+    from tests.auth_helpers import new_student
+
+    subject, tok, rubric, assignment, subs = _setup(1)
+    job_id = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+    _, other_tok, _ = setup_subject_with_users(client)
+
+    assert _progress(job_id, other_tok).status_code == 403                             # another subject's instructor
+    assert _progress(job_id, new_student(client, subject["id"])).status_code == 403    # a student
+    assert _progress(999999, tok).status_code == 404                                   # no such job
