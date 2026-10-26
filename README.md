@@ -39,7 +39,7 @@ frontend/               Next.js 16 / React 19 / TypeScript / Tailwind app
   src/app/instructor/     rubrics, similarity check, auto-evaluate, manual grading
   src/lib/api.ts          shared API client (bearer token, session handling)
   (see frontend/README.md for frontend-specific run instructions)
-tests/                  831 tests; 23 marked `slow` use real models and skip gracefully offline
+tests/                  871 tests; 23 marked `slow` use real models and skip gracefully offline
 sample_submissions/     demo data for the standalone similarity CLI
 ```
 
@@ -181,15 +181,39 @@ logged in.
    as a review flag; it never changes the marks (the same rule for every
    grader). The result (recommended score, review flags, per-criterion
    breakdown) is stored and shown on the dashboard.
-   **Whole assignment at once**: `POST
-   /subjects/{id}/assignments/{name}/auto-evaluate` with `{"rubric_id": ...}`
+   **Whole assignment at once** ("Evaluate a whole assignment"):
    evaluates every submission of that assignment (run the similarity
-   check first so its flags feed the grading). It returns a
-   per-submission status (`evaluated` / `skipped` / `failed`) and scores,
-   in submission order; each result is saved as it is produced and one
-   failing submission never stops the rest. Send
-   `"skip_already_evaluated": true` to resume an interrupted run. It runs
-   synchronously, so a large class with a local LLM can take minutes.
+   check first so its flags feed the grading) as a **background job**,
+   so a large class with a local LLM doesn't keep the instructor waiting
+   on the page:
+   - `POST /subjects/{id}/assignments/{name}/auto-evaluate/jobs` with
+     `{"rubric_id": ...}` starts the job and answers at once (202, status
+     `queued`).
+   - `GET /auto-evaluate/jobs/{job_id}` reports its progress: status
+     (`queued` / `running` / `done` / `failed` / `interrupted`), `done` of
+     `total`, the evaluated / skipped / failed counts, and each finished
+     submission's result in submission order (`null` while still waiting).
+     The page polls it every 3 s to show a progress bar and fill in the
+     results table.
+   - `GET /subjects/{id}/assignments/{name}/auto-evaluate/jobs/latest`
+     returns the assignment's latest run, so the page shows it again after
+     the instructor leaves and comes back.
+   - Only one run per assignment at a time: starting another while one is
+     queued or running is refused (409).
+   - Each result is saved as it is produced and one failing submission
+     never stops the rest. If the server stops mid-run, the job is marked
+     `interrupted` at the next start (so it no longer blocks the
+     assignment), and `POST /auto-evaluate/jobs/{job_id}/resume` grades the
+     rest with the same settings, skipping submissions already evaluated.
+     Note that `uvicorn --reload` restarts the server whenever a code file
+     is saved, which interrupts a running job.
+   - Every run is recorded in the `batch_jobs` table.
+
+   `POST /subjects/{id}/assignments/{name}/auto-evaluate` runs the same
+   job but waits until every submission is done and returns all results
+   at once (kept for scripts; the page uses the job endpoints). Send
+   `"skip_already_evaluated": true` with either to skip submissions that
+   already have an evaluation with this rubric.
    Submissions are evaluated `AUTO_EVAL_WORKERS` at a time (default 1:
    one after another); see "Concurrent auto-evaluation" below to grade
    several students of the assignment at once.
@@ -460,7 +484,7 @@ Backend:
 python -m pytest tests/ -v
 ```
 
-There are 831 tests. The 808 not marked `slow` pass offline
+There are 871 tests. The 848 not marked `slow` pass offline
 (`python -m pytest tests/ -m "not slow"`; accounts/roles/subject-scoping, report/code
 analysis, similarity fingerprinting, rubric grading -- both the
 heuristic grader and the Ollama grader against a fake HTTP post, so no

@@ -548,3 +548,24 @@ def test_only_an_interrupted_or_failed_run_can_be_resumed_by_its_subjects_instru
     assert resume(stuck, other_tok).status_code == 403
     assert resume(stuck).status_code == 202
     assert resume(stuck).status_code == 409  # the resumed run is still going: no second one
+
+
+def test_a_failing_submission_in_a_background_job_shows_in_its_progress(monkeypatch):
+    subject, tok, rubric, assignment, subs = _setup(3)
+    real = main._run_auto_evaluation
+    bad_id = subs[1]["id"]
+
+    def flaky(db, submission, rubric_, **kwargs):
+        if submission.id == bad_id:
+            raise RuntimeError("Ollama exploded")
+        return real(db, submission, rubric_, **kwargs)
+
+    monkeypatch.setattr(main, "_run_auto_evaluation", flaky)
+    job_id = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+
+    body = _progress(job_id, tok).json()
+    # One submission failing does not fail the job: the others are still evaluated.
+    assert (body["status"], body["done"], body["evaluated"], body["failed"]) == ("done", 3, 2, 1)
+    failed = body["results"][1]
+    assert (failed["submission_id"], failed["status"]) == (bad_id, "failed")
+    assert "Ollama exploded" in failed["error"] and body["error"] is None
