@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AISignal, apiFetch, Assignment, BatchEvaluationResult, Rubric } from "@/lib/api";
+import Badge from "@/components/Badge";
 import { methodLabel } from "@/components/AISignalsPanel";
 import { formatMark } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
@@ -216,9 +217,7 @@ export default function BatchEvaluateSection({
                     {r.student_name} (#{r.submission_id})
                   </td>
                   <td className="border border-gray-200 px-3 py-1.5">
-                    <span className={`rounded px-2 py-0.5 text-xs font-semibold ${STATUS_STYLE[r.status] ?? ""}`}>
-                      {r.status}
-                    </span>
+                    <Badge tone={STATUS_STYLE[r.status] ?? ""}>{r.status}</Badge>
                   </td>
                   <td className="border border-gray-200 px-3 py-1.5">
                     {r.recommended_score === null ? "—" : formatMark(r.recommended_score, r.recommended_max)}

@@ -6,6 +6,7 @@ import { combineLocal, formatDateTime, splitLocal } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import ReportTemplateControl from "@/components/instructor/ReportTemplateControl";
+import Badge from "@/components/Badge";
 import { CODE_LANGUAGES, CodeLanguageId, languageNames } from "@/lib/codeLanguages";
 
 const STATUS_STYLE: Record<AssignmentStatus, { text: string; cls: string }> = {
@@ -28,6 +29,8 @@ type FormState = {
   languages: CodeLanguageId[]; // [] = any supported language
   selfSimilarity: boolean; // students may run similarity self-checks before the deadline
   selfAi: boolean; // students may run AI-content self-checks before the deadline
+  releaseDate: string; // "" (with releaseTime "") = show each mark as soon as it is saved
+  releaseTime: string;
 };
 
 const TYPE_OPTIONS: { value: SubmissionType; label: string; hint: string }[] = [
@@ -56,10 +59,12 @@ const EMPTY: FormState = {
   languages: [],
   selfSimilarity: true,
   selfAi: true,
+  releaseDate: "",
+  releaseTime: "",
 };
 
-// Must match the backend's _CODE_EXTENSIONS (app/main.py).
-const CODE_EXTENSIONS = [".py", ".java", ".js", ".c", ".cpp", ".cc", ".cxx", ".hh", ".hxx", ".h", ".hpp", ".cs", ".go", ".rb", ".php"];
+// Starter code is one source file (not a notebook): the backend's CODE_EXTENSIONS (app/common.py).
+const CODE_EXTENSIONS = [...new Set(CODE_LANGUAGES.flatMap((l) => l.extensions))].filter((e) => e !== ".ipynb");
 
 const input = "mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm";
 
@@ -88,6 +93,7 @@ export default function AssignmentsSection({
   function startEdit(a: Assignment) {
     const from = splitLocal(a.available_from);
     const due = splitLocal(a.deadline);
+    const release = a.marks_release_at ? splitLocal(a.marks_release_at) : { date: "", time: "" };
     setEditingId(a.id);
     setMsg(null);
     setForm({
@@ -104,6 +110,8 @@ export default function AssignmentsSection({
       languages: a.code_languages ?? [],
       selfSimilarity: a.student_similarity_check ?? true,
       selfAi: a.student_ai_check ?? true,
+      releaseDate: release.date,
+      releaseTime: release.time,
     });
   }
 
@@ -135,6 +143,12 @@ export default function AssignmentsSection({
     }
 
     if (form.types.length === 0) return setMsg({ text: "Choose at least one submission type.", kind: "error" });
+    // Both empty = no release date (marks show as soon as they are saved).
+    const releaseSet = form.releaseDate !== "" || form.releaseTime !== "";
+    const release = releaseSet ? combineLocal(form.releaseDate, form.releaseTime) : null;
+    if (releaseSet && !release) {
+      return setMsg({ text: "Enter both a date and a time to release the marks, or leave both empty.", kind: "error" });
+    }
     const body = {
       name: form.name.trim(),
       description: form.description,
@@ -148,6 +162,8 @@ export default function AssignmentsSection({
       code_languages: form.types.includes("code") ? form.languages : [],
       student_similarity_check: form.selfSimilarity,
       student_ai_check: form.selfAi,
+      // null also clears an earlier date, releasing the marks straight away.
+      marks_release_at: release ? release.toISOString() : null,
     };
     setSaving(true);
     try {
@@ -354,6 +370,42 @@ export default function AssignmentsSection({
         </div>
         <p className="mt-1 text-xs text-gray-500">Times are in your local time zone.</p>
 
+        <fieldset className="mt-3">
+          <legend className="text-sm font-semibold">
+            Release marks to students <span className="font-normal text-gray-500">(optional)</span>
+          </legend>
+          <div className="flex flex-wrap items-center gap-2 sm:max-w-md">
+            <input
+              type="date"
+              aria-label="Marks release date"
+              value={form.releaseDate}
+              onChange={(e) => set("releaseDate", e.target.value)}
+              className={`${input} flex-1`}
+            />
+            <input
+              type="time"
+              aria-label="Marks release time"
+              value={form.releaseTime}
+              onChange={(e) => set("releaseTime", e.target.value)}
+              className={`${input} flex-1`}
+            />
+            {(form.releaseDate || form.releaseTime) && (
+              <button
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, releaseDate: "", releaseTime: "" }))}
+                className="mt-1 rounded-md bg-gray-600 px-3 py-2 text-xs font-semibold text-white hover:bg-gray-700"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <p className="mt-1 text-xs text-gray-500">
+            {form.releaseDate || form.releaseTime
+              ? "Students see no marks or feedback until then, so the whole class gets them at the same time."
+              : "Empty: students see each mark and their feedback as soon as you save the grade."}
+          </p>
+        </fieldset>
+
         <label className="mt-3 block text-sm font-semibold" htmlFor="assignment-rubric">
           Rubric
         </label>
@@ -434,9 +486,7 @@ export default function AssignmentsSection({
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <h4 className="font-bold">{a.name}</h4>
-                  <span className={`rounded px-2 py-0.5 text-xs font-semibold ${STATUS_STYLE[a.status].cls}`}>
-                    {STATUS_STYLE[a.status].text}
-                  </span>
+                  <Badge tone={STATUS_STYLE[a.status].cls}>{STATUS_STYLE[a.status].text}</Badge>
                   <p className="mt-1 text-xs text-gray-600">Accepts: {a.submission_types.map(typeLabel).join(", ")}</p>
                   {a.submission_types.includes("code") && a.code_languages?.length > 0 && (
                     <p className="text-xs text-gray-600">Language: {languageNames(a.code_languages)}</p>
@@ -444,6 +494,16 @@ export default function AssignmentsSection({
                   <p className="text-xs text-gray-600">
                     Student self-checks: similarity {a.student_similarity_check ? "on" : "off"} · AI{" "}
                     {a.student_ai_check ? "on" : "off"}
+                  </p>
+                  <p className="text-xs text-gray-600" data-testid="marks-release">
+                    Marks for students:{" "}
+                    {a.marks_released ? (
+                      "visible"
+                    ) : (
+                      <span className="font-semibold text-yellow-800">
+                        hidden until {formatDateTime(a.marks_release_at!)}
+                      </span>
+                    )}
                   </p>
                 </div>
                 <div className="flex gap-2">

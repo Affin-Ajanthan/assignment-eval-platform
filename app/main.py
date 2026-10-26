@@ -30,7 +30,6 @@ http://localhost:8000) and sign in.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
 import re
 import tempfile
 import shutil
@@ -38,14 +37,14 @@ import uuid
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated, Literal, Optional
+from typing import Literal, Optional
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -87,35 +86,30 @@ from .models import (
     Grade,
     InstructorAssignment,
     Rubric,
-    SelfCheck,
     SimilarityFlag,
     Subject,
     Submission,
     User,
 )
 from .similarity.ai_heuristics import score_source as _score_ai_code
-from .similarity.core import Fingerprint, compare_all, fingerprint_source, subtract_starter
-from .similarity.python_cleanup import names_in
-from .notebook import NOTEBOOK_SUFFIX, read_code
+from .notebook import read_code
 from . import code_languages as _langs
-from . import self_checks as _self_checks
 from .code_languages import CodeLanguage
 from .similarity import report_similarity as _report_sim
 from . import exports as _exports
-from .similarity.semantic import (
-    MODEL_NAME as _SEMANTIC_MODEL,
-    apply_semantic_signal,
-    get_semantic_service,
-    normalize_code,
-    submissions_needing_semantic,
+from .common import (
+    ANALYZED_EXTENSIONS as _ANALYZED_EXTENSIONS,
+    CODE_EXTENSIONS as _CODE_EXTENSIONS,
+    UTCDateTime,
+    as_utc as _as_utc,
+    instructor_assignment as _instructor_assignment,
+    norm_name as _norm_name,
+    on_flag as _on,
+    utcnow_naive as _utcnow_naive,
 )
+from .similarity_runs import code_similarity_run, report_similarity_text
+from .similarity.semantic import MODEL_NAME as _SEMANTIC_MODEL, get_semantic_service
 
-# Source files the similarity check and code analysis read. Includes C# and
-# C/C++ headers, which unixcoder-base-nine was trained on.
-_CODE_EXTENSIONS = {".py", ".java", ".js", ".c", ".cpp",".cc",".cxx",".hh",".hxx", ".h", ".hpp", ".cs", ".go", ".rb",".php"}
-# Files the code checks read: source files plus Jupyter notebooks, whose code
-# cells are read as Python (app/notebook.py).
-_ANALYZED_EXTENSIONS = _CODE_EXTENSIONS | {NOTEBOOK_SUFFIX}
 
 Base.metadata.create_all(bind=engine)
 add_missing_columns("similarity_flags", {
@@ -125,6 +119,8 @@ add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON", "ai_
 # Submissions made before assignments existed keep assignment_id NULL (and
 # their free-text assignment_name); nothing else about them changes.
 add_missing_columns("submissions", {"assignment_id": "INTEGER REFERENCES assignments(id)"})
+add_missing_columns("grades", {"feedback": "TEXT"})
+add_missing_columns("assignments", {"marks_release_at": "DATETIME"})
 add_missing_columns("assignments", {"submission_types": "JSON"})
 add_missing_columns("assignments", {"starter_code": "TEXT", "starter_code_filename": "VARCHAR"})
 add_missing_columns("assignments", {"report_template_text": "TEXT", "report_template_filename": "VARCHAR"})
@@ -137,14 +133,9 @@ add_missing_columns("assignments", {"student_similarity_check": "BOOLEAN NOT NUL
 # Pydantic schemas
 # --------------------------------------------------------------------------
 
-def _assume_utc(value: datetime) -> datetime:
-    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
 
 
-# Timestamps are stored as naive UTC (SQLite drops the offset). Responses
-# mark them as UTC so browsers convert them to local time instead of
-# mistaking them for local time.
-UTCDateTime = Annotated[datetime, AfterValidator(_assume_utc)]
+
 
 
 class LoginIn(BaseModel):
@@ -275,6 +266,9 @@ class AssignmentIn(BaseModel):
     # Student self-checks before the deadline; both on by default.
     student_similarity_check: bool = True
     student_ai_check: bool = True
+    # Optional: students see no marks or feedback before this time. None shows
+    # each mark as soon as it is saved.
+    marks_release_at: Optional[datetime] = None
 
 
 class AssignmentUpdate(BaseModel):
@@ -289,6 +283,7 @@ class AssignmentUpdate(BaseModel):
     code_languages: Optional[list[CodeLanguage]] = None  # [] removes the restriction
     student_similarity_check: Optional[bool] = None  # can be changed at any time
     student_ai_check: Optional[bool] = None
+    marks_release_at: Optional[datetime] = None  # send null explicitly to release marks now
 
 
 class AssignmentOut(BaseModel):
@@ -319,12 +314,20 @@ class AssignmentOut(BaseModel):
     code_languages: list[str] = []
     student_similarity_check: bool = True
     student_ai_check: bool = True
+    marks_release_at: Optional[UTCDateTime] = None
+    marks_released: bool = True  # whether students can see marks and feedback now
+
+
+class CriterionMarkOut(BaseModel):
+    name: str
+    score: float
+    max_points: float
 
 
 class MySubmissionOut(BaseModel):
-    """What a student sees about their own submission: status and the
-    final total only -- no criterion-level marks, comments or evaluator
-    output."""
+    """What a student sees about their own submission: status, the final
+    total, the per-criterion marks and the instructor's feedback for them
+    -- never the internal comments or the evaluator output."""
 
     id: int
     submitted_at: UTCDateTime
@@ -334,6 +337,9 @@ class MySubmissionOut(BaseModel):
     has_video: bool
     final_mark: Optional[float]
     max_mark: Optional[float]
+    # Empty when graded with "Final mark only" (no per-criterion marks) or not graded.
+    criterion_marks: list[CriterionMarkOut] = []
+    feedback: Optional[str] = None
     can_edit: bool  # assignment open and not yet graded
 
 
@@ -351,6 +357,8 @@ class StudentAssignmentOut(BaseModel):
     # Which self-checks the instructor allows for this assignment.
     student_similarity_check: bool = True
     student_ai_check: bool = True
+    # Set only while marks are still held back: when they will be released.
+    marks_release_at: Optional[UTCDateTime] = None
     my_submission: Optional[MySubmissionOut]
 
 
@@ -383,7 +391,8 @@ class GradeIn(BaseModel):
     criterion_scores: dict[str, float] = Field(default_factory=dict)
     # Final mark only, without per-criterion marks. Send this OR criterion_scores.
     total_score: Optional[float] = None
-    comments: Optional[str] = None
+    comments: Optional[str] = None  # internal notes, instructors only
+    feedback: Optional[str] = Field(default=None, max_length=5000)  # for the student
 
 
 class GradeOut(BaseModel):
@@ -393,6 +402,7 @@ class GradeOut(BaseModel):
     criterion_scores: dict[str, float]
     total_score: float
     comments: Optional[str]
+    feedback: Optional[str] = None
     graded_by: Optional[str]
     graded_at: UTCDateTime
 
@@ -964,10 +974,6 @@ def set_student_subjects(
 # a rubric has been used for grading its structure is locked: only
 # descriptions can still be edited.
 
-def _norm_name(name: str) -> str:
-    return " ".join(name.split()).casefold()
-
-
 def _clean_name(name: Optional[str], what: str) -> str:
     cleaned = " ".join((name or "").split())
     if not cleaned:
@@ -1180,30 +1186,13 @@ def delete_criterion(
 #   available_from <= now <= deadline -> submissions allowed
 #   now > deadline -> submissions, edits and deletions rejected
 
-def _utcnow_naive() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
-
-
 def _to_naive_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc).replace(tzinfo=None) if value.tzinfo else value
-
-
-def _as_utc(value: Optional[datetime]) -> Optional[datetime]:
-    return value.replace(tzinfo=timezone.utc) if value and value.tzinfo is None else value
 
 
 def _validate_window(available_from: datetime, deadline: datetime) -> None:
     if deadline <= available_from:
         raise HTTPException(400, "The submission deadline must be later than the available-from date and time.")
-
-
-def _instructor_assignment(db: Session, instructor: User, assignment_id: int) -> Assignment:
-    assignment = db.get(Assignment, assignment_id)
-    if not assignment:
-        raise HTTPException(404, "Assignment not found")
-    if assignment.subject_id not in instructor_subject_ids(db, instructor):
-        raise HTTPException(403, "You are not assigned to this subject")
-    return assignment
 
 
 def _check_assignment_rubric(db: Session, subject_id: int, rubric_id: Optional[int]) -> None:
@@ -1218,11 +1207,6 @@ def _require_unique_assignment_name(db: Session, subject_id: int, name: str, exc
     for other in db.query(Assignment).filter(Assignment.subject_id == subject_id).all():
         if other.id != exclude_id and _norm_name(other.name) == _norm_name(name):
             raise HTTPException(409, f"An assignment named '{other.name}' already exists in this subject")
-
-
-def _on(flag: Optional[bool]) -> bool:
-    """Self-check switches: NULL (rows made before the column existed) means on."""
-    return flag is None or bool(flag)
 
 
 def _assignment_out(db: Session, a: Assignment) -> AssignmentOut:
@@ -1243,6 +1227,8 @@ def _assignment_out(db: Session, a: Assignment) -> AssignmentOut:
         code_languages=a.code_languages or [],
         student_similarity_check=_on(a.student_similarity_check),
         student_ai_check=_on(a.student_ai_check),
+        marks_release_at=_as_utc(a.marks_release_at),
+        marks_released=a.marks_released_at(_utcnow_naive()),
     )
 
 
@@ -1261,14 +1247,49 @@ def _clean_starter_code(code: str, filename: str) -> tuple[Optional[str], Option
     return code, filename
 
 
-def _my_submission_out(submission: Submission, assignment_open: bool) -> MySubmissionOut:
-    return MySubmissionOut(
-        id=submission.id, submitted_at=_as_utc(submission.submitted_at), status=submission.status,
+def _criterion_marks(grade: Grade | None) -> list[CriterionMarkOut]:
+    """The grade's per-criterion marks in the rubric's order; empty for a
+    "Final mark only" grade (it has no per-criterion marks)."""
+    if grade is None or not grade.criterion_scores or grade.rubric is None:
+        return []
+    return [
+        CriterionMarkOut(name=c["name"], score=grade.criterion_scores[c["name"]], max_points=c["max_points"])
+        for c in grade.rubric.criteria
+        if c["name"] in grade.criterion_scores
+    ]
+
+
+def _marks_released(submission: Submission, now: datetime) -> bool:
+    """Whether the student may see this submission's marks and feedback yet.
+    Before the assignment's release date the student is told only that the
+    work was submitted -- not even that it has been graded."""
+    return submission.assignment is None or submission.assignment.marks_released_at(now)
+
+
+def _my_submission_out(submission: Submission, assignment_open: bool, now: datetime) -> MySubmissionOut:
+    can_edit = assignment_open and submission.status != "graded"
+    common = dict(
+        id=submission.id, submitted_at=_as_utc(submission.submitted_at),
         has_code=bool(submission.code_path), has_report=bool(submission.report_path),
-        has_video=bool(submission.video_path),
-        final_mark=submission.final_mark, max_mark=submission.max_mark,
-        can_edit=assignment_open and submission.status != "graded",
+        has_video=bool(submission.video_path), can_edit=can_edit,
     )
+    if not _marks_released(submission, now):
+        return MySubmissionOut(**common, status="submitted", final_mark=None, max_mark=None)
+    grade = submission.latest_grade
+    return MySubmissionOut(
+        **common, status=submission.status,
+        final_mark=submission.final_mark, max_mark=submission.max_mark,
+        criterion_marks=_criterion_marks(grade),
+        feedback=grade.feedback if grade else None,
+    )
+
+
+def _student_submission_out(submission: Submission, now: datetime) -> SubmissionOut:
+    """A submission as its student sees it: no mark before the release date."""
+    out = SubmissionOut.model_validate(submission)
+    if not _marks_released(submission, now):
+        out = out.model_copy(update={"status": "submitted", "final_mark": None, "max_mark": None})
+    return out
 
 
 def _student_assignment_out(db: Session, student: User, a: Assignment, now: datetime) -> StudentAssignmentOut:
@@ -1287,7 +1308,8 @@ def _student_assignment_out(db: Session, student: User, a: Assignment, now: date
         code_languages=a.code_languages or [],
         student_similarity_check=_on(a.student_similarity_check),
         student_ai_check=_on(a.student_ai_check),
-        my_submission=_my_submission_out(mine, status == "open") if mine else None,
+        marks_release_at=None if a.marks_released_at(now) else _as_utc(a.marks_release_at),
+        my_submission=_my_submission_out(mine, status == "open", now) if mine else None,
     )
 
 
@@ -1309,6 +1331,7 @@ def create_assignment(payload: AssignmentIn, instructor: User = Depends(require_
         code_languages=_langs.normalise_languages(payload.code_languages),
         student_similarity_check=payload.student_similarity_check,
         student_ai_check=payload.student_ai_check,
+        marks_release_at=_to_naive_utc(payload.marks_release_at) if payload.marks_release_at else None,
         created_by_id=instructor.id,
     )
     db.add(assignment)
@@ -1397,6 +1420,11 @@ def update_assignment(
         assignment.student_similarity_check = payload.student_similarity_check
     if payload.student_ai_check is not None:
         assignment.student_ai_check = payload.student_ai_check
+    # Like the self-check switches, the release date can change at any time;
+    # an explicit null releases the marks straight away.
+    if "marks_release_at" in payload.model_fields_set:
+        release = payload.marks_release_at
+        assignment.marks_release_at = _to_naive_utc(release) if release else None
     if payload.code_languages is not None:
         languages = _langs.normalise_languages(payload.code_languages)
         if languages != (assignment.code_languages or None):
@@ -1873,6 +1901,12 @@ def list_submissions(
 
     if subject_id is not None:
         query = query.filter(Submission.subject_id == subject_id)
+    if user.role == "student":
+        # Filter by the status the student is shown, after held-back grades
+        # are hidden, so the filter cannot reveal them either.
+        now = _utcnow_naive()
+        shown = [_student_submission_out(s, now) for s in query.order_by(Submission.submitted_at.desc()).all()]
+        return [s for s in shown if not status or s.status == status]
     if status:
         query = query.filter(Submission.status == status)
     return query.order_by(Submission.submitted_at.desc()).all()
@@ -1885,6 +1919,8 @@ def get_submission(submission_id: int, user: User = Depends(get_current_user), d
         raise HTTPException(404, "Submission not found")
     if not _can_view_submission(user, submission, db):
         raise HTTPException(403, "You cannot view this submission")
+    if user.role == "student":
+        return _student_submission_out(submission, _utcnow_naive())
     return submission
 
 
@@ -2024,6 +2060,7 @@ def grade_submission(
         criterion_scores=payload.criterion_scores,
         total_score=total,
         comments=payload.comments,
+        feedback=(payload.feedback or "").strip() or None,
         graded_by_id=instructor.id,
         graded_by=instructor.full_name,
     )
@@ -2056,86 +2093,6 @@ def get_grade(submission_id: int, user: User = Depends(get_current_user), db: Se
 
 # ---- Similarity check across one subject's assignment submissions ---------
 
-@dataclass
-class _CodeSimilarityRun:
-    pairs: list
-    batch: object
-    stats: dict
-    starter_fp: object
-    fingerprints: dict
-    files_by_submission: dict  # submission id -> [self_checks.OwnFile]
-
-
-def _display_name(code_dir: Path, path: Path, name: str) -> str:
-    """The file's path inside the submission, keeping the tokenizer's name
-    (a notebook's code cells are read as "<name>.ipynb.py")."""
-    rel = path.relative_to(code_dir).as_posix()
-    return rel + name[len(path.name):] if name.startswith(path.name) else rel
-
-
-def _code_similarity_run(db: Session, subject_id: int, assignment_name: str,
-                         submissions: list) -> _CodeSimilarityRun:
-    """Token (Winnowing) + semantic (UniXcoder) comparison of every pair of
-    code submissions. Stores nothing: the instructor's check stores flags,
-    a student self-check never does."""
-    # Starter code every student was given is subtracted from each file's
-    # fingerprint (same extension only) so shared boilerplate can't flag a
-    # pair on its own. The semantic path below still sees the full files.
-    assignment = next(
-        (a for a in db.query(Assignment).filter(Assignment.subject_id == subject_id).all()
-         if _norm_name(a.name) == _norm_name(assignment_name)),
-        None,
-    )
-    starter_fp = None
-    if assignment and assignment.starter_code and assignment.starter_code_filename:
-        starter_fp = fingerprint_source("starter", assignment.starter_code_filename, assignment.starter_code)
-
-    # 1-4: read + normalize each submission once, fingerprint it, and
-    # compare every unordered pair (A-B only, never B-A) on tokens.
-    fingerprints: dict[str, "Fingerprint"] = {}
-    files_by_submission: dict[str, list] = {}
-    semantic_sources: dict[str, str] = {}
-    for submission in submissions:
-        code_dir = BASE_DIR / submission.code_path
-        merged = Fingerprint(submission_id=str(submission.id), filename="(all files)", token_count=0)
-        normalized_files: list[str] = []
-        files = []
-        if code_dir.is_dir():
-            # (name, source) per file; a notebook is its code cells as "<name>.ipynb.py".
-            files = [(path, *read_code(path)) for path in sorted(code_dir.rglob("*"))
-                     if path.is_file() and path.suffix.lower() in _ANALYZED_EXTENSIONS]
-        # Names each code file uses, so a top-level constant read by
-        # another file isn't removed as "unused" before the semantic check.
-        py_names = {path: names_in(source) for path, _, source in files}
-        own_files = []
-        for path, name, source in files:
-            fp = subtract_starter(fingerprint_source(str(submission.id), name, source), starter_fp)
-            merged.hashes |= fp.hashes
-            own_files.append(_self_checks.OwnFile(name=_display_name(code_dir, path, name),
-                                                  source=source, hashes=set(fp.hashes)))
-            merged.token_count += fp.token_count
-            external = set().union(*(names for other, names in py_names.items() if other != path))
-            normalized_files.append(normalize_code(source, name, external))
-        fingerprints[str(submission.id)] = merged
-        files_by_submission[str(submission.id)] = own_files
-        semantic_sources[str(submission.id)] = "\n".join(f for f in normalized_files if f)
-
-    pairs = compare_all(fingerprints)
-
-    # 5-7: UniXcoder as an extra signal. The expensive step -- model
-    # inference -- runs once per submission (cached by content), and
-    # only for submissions in at least one pair the token check didn't
-    # already flag; pair scores are then cosine similarities between
-    # the stored vectors. A failure here leaves the token results intact.
-    needed = submissions_needing_semantic(pairs)
-    batch = get_semantic_service().embed_submissions(
-        {sid: text for sid, text in semantic_sources.items() if sid in needed}
-    )
-    stats = apply_semantic_signal(pairs, batch.embeddings) if batch.status == "ok" else {}
-    return _CodeSimilarityRun(pairs=pairs, batch=batch, stats=stats, starter_fp=starter_fp,
-                              fingerprints=fingerprints, files_by_submission=files_by_submission)
-
-
 @app.post("/subjects/{subject_id}/assignments/{assignment_name}/check-similarity", response_model=SimilarityCheckOut)
 def check_similarity(
     subject_id: int, assignment_name: str, instructor: User = Depends(require_instructor), db: Session = Depends(get_db)
@@ -2155,7 +2112,7 @@ def check_similarity(
     if len(submissions) < 2:
         raise HTTPException(400, "Need at least 2 code submissions for this assignment to compare")
 
-    run = _code_similarity_run(db, subject_id, assignment_name, submissions)
+    run = code_similarity_run(db, subject_id, assignment_name, submissions)
     pairs, batch, stats, starter_fp = run.pairs, run.batch, run.stats, run.starter_fp
 
     db.query(SimilarityFlag).filter(
@@ -2259,34 +2216,6 @@ def export_batch_evaluation(
                           "evaluation", payload.assignment_name)
 
 
-def _report_similarity_text(submission: Submission) -> tuple[Optional[str], Optional[str]]:
-    """(text, None) for a report the similarity check can compare, else
-    (None, why not). PDFs are read page by page (so running headers and
-    footers are dropped); DOCX reports through the MarkItDown extraction."""
-    if not submission.report_path:
-        return None, "No report submitted"
-    path = BASE_DIR / submission.report_path
-    if not path.is_file():
-        return None, "Report file not found"
-    suffix = path.suffix.lower()
-    try:
-        if suffix == ".pdf":
-            text = _report_sim.clean_report_pages(_report_sim.extract_pdf_pages(path))
-        elif suffix == ".docx":
-            extraction = load_extraction(path) or extract_report_text(path)
-            if not extraction.ok:
-                return None, f"Could not read the DOCX ({extraction.status})"
-            text = _report_sim.clean_report_pages([extraction.text])
-        else:
-            return None, f"Report is not a PDF or DOCX ({suffix or 'no extension'})"
-    except Exception as exc:  # corrupt / encrypted document: compare the rest
-        return None, f"Could not read the {suffix.lstrip('.').upper()} ({exc.__class__.__name__})"
-    if len(text.split()) < _report_sim.MIN_REPORT_WORDS:
-        return None, (f"Too little text to compare (under {_report_sim.MIN_REPORT_WORDS} words; "
-                      "a scanned PDF has no extractable text)")
-    return text, None
-
-
 @app.post("/subjects/{subject_id}/assignments/{assignment_name}/check-report-similarity",
           response_model=ReportSimilarityOut)
 def check_report_similarity(
@@ -2312,7 +2241,7 @@ def check_report_similarity(
             skipped.append(ReportSkippedOut(submission_id=submission.id, student=submission.student_name,
                                             reason=reason))
 
-        text, reason = _report_similarity_text(submission)
+        text, reason = report_similarity_text(submission)
         if text is None:
             skip(reason)
             continue
@@ -2615,276 +2544,7 @@ def auto_evaluate_assignment(
     )
 
 
-# ---- Student self-checks ------------------------------------------------------
-#
-# While an assignment is open, a student can check their own submission for
-# code similarity, report similarity and AI content. The instructor switches
-# each on or off per assignment (on by default); every rule below is enforced
-# here, whatever the UI shows. Results go to SelfCheck only -- never to the
-# instructor's SimilarityFlag / AutoEvaluation records -- and a student only
-# ever sees bands and their own matching passages (app/self_checks.py).
+# Student self-checks live in app/routers/self_checks.py.
+from .routers.self_checks import router as _self_check_router  # noqa: E402  (after `app` exists)
 
-SelfCheckKind = Literal["code_similarity", "report_similarity", "ai_content"]
-
-
-class SelfCheckIn(BaseModel):
-    kind: SelfCheckKind
-
-
-class SelfCheckOut(BaseModel):
-    id: int
-    kind: str
-    status: str  # running | done | failed
-    created_at: UTCDateTime
-    finished_at: Optional[UTCDateTime] = None
-    error: Optional[str] = None
-    result: Optional[dict] = None  # student-safe: bands and their own passages only
-
-
-class SelfCheckStatusOut(BaseModel):
-    submission_id: int
-    can_run: bool  # assignment open and submission not graded
-    similarity_enabled: bool
-    ai_enabled: bool
-    limit_per_hour: int
-    remaining: dict[str, int]  # checks left this hour, per kind
-    latest: dict[str, Optional[SelfCheckOut]]  # most recent check per kind
-
-
-class SelfCheckHistoryRow(BaseModel):
-    submission_id: int
-    student_name: str
-    student_email: str
-    code_similarity_checks: int
-    report_similarity_checks: int
-    ai_checks: int
-    last_check_at: Optional[UTCDateTime] = None
-    latest_kind: Optional[str] = None
-    latest_status: Optional[str] = None
-
-
-_SELF_CHECK_FAILED = "The check could not be completed. Please try again later."
-
-
-def _self_check_out(check: SelfCheck) -> SelfCheckOut:
-    return SelfCheckOut(
-        id=check.id, kind=check.kind, status=check.status, created_at=_as_utc(check.created_at),
-        finished_at=_as_utc(check.finished_at) if check.finished_at else None,
-        error=_SELF_CHECK_FAILED if check.status == "failed" else None,
-        result=_self_checks.for_student(check.kind, check.result) if check.status == "done" else None,
-    )
-
-
-def _own_submission(db: Session, student: User, submission_id: int) -> Submission:
-    submission = db.get(Submission, submission_id)
-    if not submission or submission.student_id != student.id:
-        raise HTTPException(404, "Submission not found")  # never confirm other students' submissions exist
-    return submission
-
-
-def _self_check_allowed(submission: Submission) -> Optional[str]:
-    """Why the student can't run a self-check now, or None."""
-    a = submission.assignment
-    if a is None:
-        return "Self-checks are only available for assignment submissions."
-    status = a.status_at(_utcnow_naive())
-    if status == "upcoming":
-        return f"'{a.name}' is not open yet."
-    if status == "closed":
-        return f"The deadline for '{a.name}' has passed, so self-checks are closed."
-    if submission.status == "graded":
-        return "This submission has been graded, so self-checks are closed."
-    return None
-
-
-def _expire_stale_checks(db: Session, submission_id: int) -> None:
-    cutoff = _utcnow_naive() - timedelta(minutes=_self_checks.STALE_AFTER_MINUTES)
-    for check in db.query(SelfCheck).filter(SelfCheck.submission_id == submission_id,
-                                            SelfCheck.status == "running",
-                                            SelfCheck.created_at < cutoff).all():
-        check.status, check.error, check.finished_at = "failed", "timed out", _utcnow_naive()
-    db.commit()
-
-
-def _checks_this_hour(db: Session, submission: Submission, kind: str) -> list[SelfCheck]:
-    """This student's checks of one kind in the last hour, for ONE assignment:
-    each assignment has its own limit."""
-    since = _utcnow_naive() - timedelta(hours=1)
-    scope = (SelfCheck.assignment_id == submission.assignment_id if submission.assignment_id is not None
-             else SelfCheck.submission_id == submission.id)
-    return (db.query(SelfCheck)
-            .filter(SelfCheck.student_id == submission.student_id, scope, SelfCheck.kind == kind,
-                    SelfCheck.created_at >= since)
-            .order_by(SelfCheck.created_at).all())
-
-
-@app.post("/submissions/{submission_id}/self-checks", response_model=SelfCheckOut, status_code=202)
-def start_self_check(
-    submission_id: int, payload: SelfCheckIn, background_tasks: BackgroundTasks,
-    student: User = Depends(require_student), db: Session = Depends(get_db),
-):
-    """Start one self-check in the background; poll GET .../self-checks for the result."""
-    submission = _own_submission(db, student, submission_id)
-    blocked = _self_check_allowed(submission)
-    if blocked:
-        raise HTTPException(403, blocked)
-    a = submission.assignment
-    kind = payload.kind
-    if kind in ("code_similarity", "report_similarity") and not _on(a.student_similarity_check):
-        raise HTTPException(403, "Your instructor has turned off similarity self-checks for this assignment.")
-    if kind == "ai_content" and not _on(a.student_ai_check):
-        raise HTTPException(403, "Your instructor has turned off AI-content self-checks for this assignment.")
-    if kind == "code_similarity" and not submission.code_path:
-        raise HTTPException(400, "Upload your code first, then check it.")
-    if kind == "report_similarity" and not submission.report_path:
-        raise HTTPException(400, "Upload your report first, then check it.")
-    if kind == "ai_content" and not (submission.code_path or submission.report_path):
-        raise HTTPException(400, "Upload your code or report first, then check it.")
-
-    _expire_stale_checks(db, submission.id)
-    if db.query(SelfCheck.id).filter(SelfCheck.submission_id == submission.id, SelfCheck.kind == kind,
-                                     SelfCheck.status == "running").first():
-        raise HTTPException(409, f"Your {_self_checks.KIND_LABELS[kind].lower()} check is still running.")
-    recent = _checks_this_hour(db, submission, kind)
-    if len(recent) >= _self_checks.LIMIT_PER_HOUR:
-        free_at = _as_utc(recent[0].created_at) + timedelta(hours=1)
-        minutes = max(1, int((free_at - _as_utc(_utcnow_naive())).total_seconds() // 60) + 1)
-        raise HTTPException(
-            429, f"You've used all {_self_checks.LIMIT_PER_HOUR} {_self_checks.KIND_LABELS[kind].lower()} "
-                 f"checks for '{a.name}' this hour. You can check again in about {minutes} minute(s).")
-
-    check = SelfCheck(submission_id=submission.id, student_id=student.id, assignment_id=a.id, kind=kind,
-                      status="running", created_at=_utcnow_naive())
-    db.add(check)
-    db.commit()
-    db.refresh(check)
-    background_tasks.add_task(_run_self_check, check.id)
-    return _self_check_out(check)
-
-
-@app.get("/submissions/{submission_id}/self-checks", response_model=SelfCheckStatusOut)
-def self_check_status(submission_id: int, student: User = Depends(require_student), db: Session = Depends(get_db)):
-    submission = _own_submission(db, student, submission_id)
-    _expire_stale_checks(db, submission.id)
-    a = submission.assignment
-    latest: dict[str, Optional[SelfCheckOut]] = {}
-    remaining: dict[str, int] = {}
-    for kind in _self_checks.KINDS:
-        last = (db.query(SelfCheck).filter(SelfCheck.submission_id == submission.id, SelfCheck.kind == kind)
-                .order_by(SelfCheck.id.desc()).first())
-        latest[kind] = _self_check_out(last) if last else None
-        remaining[kind] = max(0, _self_checks.LIMIT_PER_HOUR - len(_checks_this_hour(db, submission, kind)))
-    return SelfCheckStatusOut(
-        submission_id=submission.id, can_run=_self_check_allowed(submission) is None,
-        similarity_enabled=bool(a) and _on(a.student_similarity_check),
-        ai_enabled=bool(a) and _on(a.student_ai_check),
-        limit_per_hour=_self_checks.LIMIT_PER_HOUR, remaining=remaining, latest=latest,
-    )
-
-
-@app.get("/assignments/{assignment_id}/self-checks", response_model=list[SelfCheckHistoryRow])
-def self_check_history(assignment_id: int, instructor: User = Depends(require_instructor),
-                       db: Session = Depends(get_db)):
-    """How often each student has run each self-check. For monitoring and
-    troubleshooting -- repeated checks usually just mean a student is
-    improving their work, not misconduct."""
-    assignment = _instructor_assignment(db, instructor, assignment_id)
-    rows = []
-    subs = (db.query(Submission).filter(Submission.assignment_id == assignment.id)
-            .order_by(Submission.id).all())
-    for sub in subs:
-        checks = db.query(SelfCheck).filter(SelfCheck.submission_id == sub.id).order_by(SelfCheck.id).all()
-        count = lambda kind: sum(c.kind == kind for c in checks)  # noqa: E731
-        last = checks[-1] if checks else None
-        rows.append(SelfCheckHistoryRow(
-            submission_id=sub.id, student_name=sub.student_name, student_email=sub.student_email,
-            code_similarity_checks=count("code_similarity"), report_similarity_checks=count("report_similarity"),
-            ai_checks=count("ai_content"),
-            last_check_at=_as_utc(last.created_at) if last else None,
-            latest_kind=last.kind if last else None, latest_status=last.status if last else None,
-        ))
-    rows.sort(key=lambda r: (r.last_check_at is None, -(r.last_check_at.timestamp() if r.last_check_at else 0)))
-    return rows
-
-
-def _run_self_check(check_id: int) -> None:
-    """Background job: compute one self-check and store it. Never raises."""
-    db = SessionLocal()
-    try:
-        check = db.get(SelfCheck, check_id)
-        if check is None:
-            return
-        try:
-            submission = db.get(Submission, check.submission_id)
-            if check.kind == "code_similarity":
-                check.result = _self_check_code(db, submission)
-            elif check.kind == "report_similarity":
-                check.result = _self_check_report(db, submission)
-            else:
-                check.result = _self_check_ai(submission)
-            check.status = "done"
-        except Exception as exc:  # stored for the instructor; the student sees a generic message
-            check.status, check.error = "failed", f"{exc.__class__.__name__}: {exc}"[:300]
-        check.finished_at = _utcnow_naive()
-        db.commit()
-    finally:
-        db.close()
-
-
-def _self_check_code(db: Session, submission: Submission) -> dict:
-    others = (db.query(Submission)
-              .filter(Submission.subject_id == submission.subject_id,
-                      Submission.assignment_name == submission.assignment_name,
-                      Submission.code_path.isnot(None)).all())
-    if len(others) < 2:
-        result = _self_checks.code_result(str(submission.id), [], [], {}, "disabled")
-        result["note"] = "No other code submissions to compare with yet."
-        return result
-    run = _code_similarity_run(db, submission.subject_id, submission.assignment_name, others)
-    return _self_checks.code_result(
-        str(submission.id), run.pairs, run.files_by_submission.get(str(submission.id), []),
-        {sid: fp.hashes for sid, fp in run.fingerprints.items()}, run.batch.status)
-
-
-def _self_check_report(db: Session, submission: Submission) -> dict:
-    own, reason = _report_similarity_text(submission)
-    if own is None:
-        return _self_checks.report_result(str(submission.id), [], "disabled", skipped_reason=reason)
-    texts = {str(submission.id): own}
-    for other in (db.query(Submission)
-                  .filter(Submission.subject_id == submission.subject_id,
-                          Submission.assignment_name == submission.assignment_name,
-                          Submission.id != submission.id).all()):
-        text, _ = _report_similarity_text(other)
-        if text is not None:
-            texts[str(other.id)] = text
-    if len(texts) < 2:
-        return _self_checks.report_result(str(submission.id), [], "disabled",
-                                          skipped_reason="No other reports to compare with yet.")
-    a = submission.assignment
-    comparison = _report_sim.compare_reports(texts, get_consistency_service(),
-                                             template_text=a.report_template_text if a else None)
-    return _self_checks.report_result(str(submission.id), comparison.pairs, comparison.semantic_status)
-
-
-def _self_check_ai(submission: Submission) -> dict:
-    from .evaluator.report_analysis import ai_text_signal
-
-    detail: dict = {}
-    report_band = code_band = None
-    if submission.report_path:
-        path = BASE_DIR / submission.report_path
-        extraction = (load_extraction(path) or extract_report_text(path)) if path.is_file() else None
-        if extraction and extraction.ok and extraction.text.strip():
-            signal = ai_text_signal(extraction.text)
-            report_band = _self_checks.ai_band(signal.signal)
-            detail["report"] = {"signal": signal.signal, "score": signal.score, "method": signal.method}
-    if submission.code_path:
-        code_dir = BASE_DIR / submission.code_path
-        source = "\n".join(read_code(p)[1] for p in sorted(code_dir.rglob("*"))
-                           if p.is_file() and p.suffix.lower() in _ANALYZED_EXTENSIONS) if code_dir.is_dir() else ""
-        if source.strip():
-            signal = _score_ai_code(str(submission.id), source)
-            code_band = _self_checks.ai_band(signal.signal)
-            detail["code"] = {"signal": signal.signal, "score": signal.score, "method": "style-heuristic"}
-    return {"report": report_band, "code": code_band, "detail": detail}
+app.include_router(_self_check_router)

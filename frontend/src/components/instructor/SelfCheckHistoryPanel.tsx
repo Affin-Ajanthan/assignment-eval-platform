@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFetch, Assignment, SelfCheckHistoryRow, SelfCheckKind } from "@/lib/api";
 import { formatDateTime } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
+import Badge from "@/components/Badge";
 
 const KIND_LABEL: Record<SelfCheckKind, string> = {
   code_similarity: "Code similarity",
@@ -132,9 +133,9 @@ export default function SelfCheckHistoryPanel({ assignments }: { assignments: As
                       </td>
                       <td className="border border-gray-200 px-3 py-1.5">
                         {r.latest_status ? (
-                          <span className={`rounded px-2 py-0.5 text-xs ${STATUS_STYLE[r.latest_status] ?? ""}`}>
+                          <Badge bold={false} tone={STATUS_STYLE[r.latest_status] ?? ""}>
                             {r.latest_status}
-                          </span>
+                          </Badge>
                         ) : (
                           <span className="text-gray-400">—</span>
                         )}
