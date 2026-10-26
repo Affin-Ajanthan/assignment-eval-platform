@@ -35,7 +35,7 @@ import tempfile
 import shutil
 import uuid
 import zipfile
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -47,6 +47,7 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from .demo_data import demo_data_enabled, seed_demo_data
 from .auth import (
@@ -82,6 +83,7 @@ from .models import (
     Assignment,
     AuthSession,
     AutoEvaluation,
+    BatchJob,
     Enrollment,
     Grade,
     InstructorAssignment,
@@ -629,6 +631,7 @@ class BatchAutoEvaluateOut(BaseModel):
     subject_id: int
     assignment_name: str
     rubric_id: int
+    job_id: Optional[int] = None  # the BatchJob that recorded this run
     total: int
     evaluated: int
     skipped: int
@@ -2467,81 +2470,139 @@ def auto_evaluate_assignment(
     if not submissions:
         raise HTTPException(404, "No submissions found for this assignment")
 
-    # Latest stored evaluation per submission. A skipped submission is not re-run,
-    # but its stored marks and flags still go into the table.
-    stored: dict[int, AutoEvaluation] = {}
-    if payload.skip_already_evaluated:
-        stored_rows = (
-            db.query(AutoEvaluation)
-            .filter(
-                AutoEvaluation.rubric_id == rubric.id,
-                AutoEvaluation.submission_id.in_([s.id for s in submissions]),
-            )
-            .order_by(AutoEvaluation.id)
+    job = BatchJob(
+        subject_id=subject_id, assignment_name=assignment_name, rubric_id=rubric.id,
+        options=payload.model_dump(include={"skip_already_evaluated", "use_rubric_model", "use_ai_detection"}),
+        status="queued", total=len(submissions), created_by_id=instructor.id,
+    )
+    db.add(job)
+    db.commit()
+    _run_batch_job(job.id)
+    db.refresh(job)
+    if job.status == "failed":
+        raise HTTPException(500, f"Batch evaluation failed: {job.error}")
+    return _batch_job_out(job)
+
+
+def _batch_job_out(job: BatchJob) -> BatchAutoEvaluateOut:
+    return BatchAutoEvaluateOut(
+        subject_id=job.subject_id, assignment_name=job.assignment_name, rubric_id=job.rubric_id,
+        job_id=job.id, total=job.total, evaluated=job.evaluated, skipped=job.skipped, failed=job.failed,
+        results=[BatchEvaluationItemOut.model_validate(r) for r in job.results or [] if r is not None],
+    )
+
+
+def _run_batch_job(job_id: int) -> None:
+    """Evaluate every submission of the job's assignment, recording progress
+    in the job as each one finishes. Uses its own database sessions, so it
+    can run outside the request that started it.
+
+    Submissions are processed AUTO_EVAL_WORKERS at a time; the worker threads
+    only write their own evaluations, and this thread alone updates the job."""
+    db = SessionLocal()
+    try:
+        job = db.get(BatchJob, job_id)
+        options = job.options
+        submissions = (
+            db.query(Submission)
+            .filter(Submission.subject_id == job.subject_id, Submission.assignment_name == job.assignment_name)
+            .order_by(Submission.id)
             .all()
         )
-        stored = {row.submission_id: row for row in stored_rows}  # later rows overwrite earlier ones
 
-    results: list[BatchEvaluationItemOut | None] = [None] * len(submissions)
-    to_run: list[tuple[int, int]] = []  # (position in results, submission id)
-    for position, submission in enumerate(submissions):
-        if submission.id in stored:
-            prev = stored[submission.id]
-            results[position] = BatchEvaluationItemOut(
-                submission_id=submission.id, student_name=submission.student_name, status="skipped",
-                recommended_score=prev.recommended_score, recommended_max=prev.recommended_max,
-                grader=prev.grader, model=prev.model, review_flags=list(prev.review_flags or []),
-                similarity_flagged=prev.similarity_flagged,
-                ai_flagged=_ai_flagged(prev.code_ai_flagged, prev.report_ai_signal),
-                ai_signals=prev.ai_signals)
-        else:
-            to_run.append((position, submission.id))
+        # Latest stored evaluation per submission. A skipped submission is not re-run,
+        # but its stored marks and flags still go into the table.
+        stored: dict[int, AutoEvaluation] = {}
+        if options.get("skip_already_evaluated"):
+            stored_rows = (
+                db.query(AutoEvaluation)
+                .filter(
+                    AutoEvaluation.rubric_id == job.rubric_id,
+                    AutoEvaluation.submission_id.in_([s.id for s in submissions]),
+                )
+                .order_by(AutoEvaluation.id)
+                .all()
+            )
+            stored = {row.submission_id: row for row in stored_rows}  # later rows overwrite earlier ones
 
-    rubric_id = rubric.id
+        results: list[dict | None] = [None] * len(submissions)
+        to_run: list[tuple[int, int]] = []  # (position in results, submission id)
+        for position, submission in enumerate(submissions):
+            if submission.id in stored:
+                prev = stored[submission.id]
+                results[position] = BatchEvaluationItemOut(
+                    submission_id=submission.id, student_name=submission.student_name, status="skipped",
+                    recommended_score=prev.recommended_score, recommended_max=prev.recommended_max,
+                    grader=prev.grader, model=prev.model, review_flags=list(prev.review_flags or []),
+                    similarity_flagged=prev.similarity_flagged,
+                    ai_flagged=_ai_flagged(prev.code_ai_flagged, prev.report_ai_signal),
+                    ai_signals=prev.ai_signals).model_dump(mode="json")
+            else:
+                to_run.append((position, submission.id))
 
-    def evaluate(submission_id: int) -> BatchEvaluationItemOut:
-        # Its own session: a SQLAlchemy session must not be shared between threads.
-        worker_db = SessionLocal()
-        try:
-            submission = worker_db.get(Submission, submission_id)
-            name = submission.student_name
+        job.status, job.started_at = "running", _utcnow_naive()
+        job.total, job.skipped, job.evaluated, job.failed = len(submissions), len(stored), 0, 0
+        job.results = list(results)
+        db.commit()
+
+        rubric_id = job.rubric_id
+
+        def evaluate(submission_id: int) -> BatchEvaluationItemOut:
+            # Its own session: a SQLAlchemy session must not be shared between threads.
+            worker_db = SessionLocal()
             try:
-                ev = _run_auto_evaluation(worker_db, submission, worker_db.get(Rubric, rubric_id),
-                                          use_rubric_model=payload.use_rubric_model,
-                                          use_ai_detection=payload.use_ai_detection)
-            except Exception as exc:  # one bad submission must not stop the batch
-                worker_db.rollback()
+                submission = worker_db.get(Submission, submission_id)
+                name = submission.student_name
+                try:
+                    ev = _run_auto_evaluation(worker_db, submission, worker_db.get(Rubric, rubric_id),
+                                              use_rubric_model=options.get("use_rubric_model", True),
+                                              use_ai_detection=options.get("use_ai_detection", True))
+                except Exception as exc:  # one bad submission must not stop the batch
+                    worker_db.rollback()
+                    return BatchEvaluationItemOut(
+                        submission_id=submission_id, student_name=name, status="failed",
+                        error=f"{exc.__class__.__name__}: {exc}"[:200])
                 return BatchEvaluationItemOut(
-                    submission_id=submission_id, student_name=name, status="failed",
-                    error=f"{exc.__class__.__name__}: {exc}"[:200])
-            return BatchEvaluationItemOut(
-                submission_id=submission_id, student_name=name, status="evaluated",
-                recommended_score=ev.recommended_score, recommended_max=ev.recommended_max,
-                grader=ev.grader, model=ev.model, review_flags=list(ev.review_flags or []),
-                similarity_flagged=ev.similarity_flagged,
-                ai_flagged=_ai_flagged(ev.code_ai_flagged, ev.report_ai_signal),
-                ai_signals=ev.ai_signals)
-        finally:
-            worker_db.close()
+                    submission_id=submission_id, student_name=name, status="evaluated",
+                    recommended_score=ev.recommended_score, recommended_max=ev.recommended_max,
+                    grader=ev.grader, model=ev.model, review_flags=list(ev.review_flags or []),
+                    similarity_flagged=ev.similarity_flagged,
+                    ai_flagged=_ai_flagged(ev.code_ai_flagged, ev.report_ai_signal),
+                    ai_signals=ev.ai_signals)
+            finally:
+                worker_db.close()
 
-    ids = [submission_id for _, submission_id in to_run]
-    workers = min(AUTO_EVAL_WORKERS, len(ids))
-    if workers <= 1:
-        items = [evaluate(submission_id) for submission_id in ids]
-    else:
-        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="auto-eval") as pool:
-            items = list(pool.map(evaluate, ids))  # map keeps the input order
-    for (position, _), item in zip(to_run, items):
-        results[position] = item
+        def record(position: int, item: BatchEvaluationItemOut) -> None:
+            results[position] = item.model_dump(mode="json")
+            job.results = list(results)
+            flag_modified(job, "results")  # a JSON column: tell SQLAlchemy it changed
+            if item.status == "failed":
+                job.failed += 1
+            else:
+                job.evaluated += 1
+            db.commit()
 
-    def _count(status: str) -> int:
-        return sum(1 for r in results if r.status == status)
+        workers = min(AUTO_EVAL_WORKERS, len(to_run))
+        if workers <= 1:
+            for position, submission_id in to_run:
+                record(position, evaluate(submission_id))
+        else:
+            with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="auto-eval") as pool:
+                futures = {pool.submit(evaluate, submission_id): position for position, submission_id in to_run}
+                for future in as_completed(futures):  # record each one as soon as it finishes
+                    record(futures[future], future.result())
 
-    return BatchAutoEvaluateOut(
-        subject_id=subject_id, assignment_name=assignment_name, rubric_id=rubric.id,
-        total=len(results), evaluated=_count("evaluated"), skipped=_count("skipped"),
-        failed=_count("failed"), results=results,
-    )
+        job.status, job.finished_at = "done", _utcnow_naive()
+        db.commit()
+    except Exception as exc:  # the job itself broke (not one submission): record why
+        db.rollback()
+        job = db.get(BatchJob, job_id)
+        if job is not None:
+            job.status, job.finished_at = "failed", _utcnow_naive()
+            job.error = f"{exc.__class__.__name__}: {exc}"[:500]
+            db.commit()
+    finally:
+        db.close()
 
 
 # Student self-checks live in app/routers/self_checks.py.

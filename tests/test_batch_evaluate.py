@@ -279,3 +279,66 @@ def test_batch_runs_submissions_concurrently_and_keeps_their_order(monkeypatch):
     assert [item["submission_id"] for item in body["results"]] == [s["id"] for s in subs]
     for s in subs:  # each worker saved its result with its own database session
         assert client.get(f"/submissions/{s['id']}/auto-evaluate", headers=auth_headers(tok)).json() is not None
+
+
+def _job(job_id):
+    from app.db import SessionLocal
+    from app.models import BatchJob
+
+    db = SessionLocal()
+    try:
+        job = db.get(BatchJob, job_id)
+        db.expunge(job)
+        return job
+    finally:
+        db.close()
+
+
+def test_each_batch_run_is_recorded_as_a_job_with_its_progress(monkeypatch):
+    subject, tok, rubric, assignment, subs = _setup(3)
+    real = main._run_auto_evaluation
+    bad_id = subs[1]["id"]
+
+    def flaky(db, submission, rubric_, **kwargs):
+        if submission.id == bad_id:
+            raise RuntimeError("Ollama exploded")
+        return real(db, submission, rubric_, **kwargs)
+
+    monkeypatch.setattr(main, "_run_auto_evaluation", flaky)
+    body = _batch(subject, assignment, tok, rubric["id"]).json()
+    assert body["job_id"]
+
+    job = _job(body["job_id"])
+    assert (job.status, job.assignment_name, job.rubric_id) == ("done", assignment, rubric["id"])
+    assert (job.total, job.evaluated, job.skipped, job.failed, job.done) == (3, 2, 0, 1, 3)
+    assert [r["status"] for r in job.results] == ["evaluated", "failed", "evaluated"]  # submission order
+    assert job.started_at and job.finished_at and job.error is None
+    assert job.options == {"skip_already_evaluated": False, "use_rubric_model": True, "use_ai_detection": True}
+
+    # A resumed run records what it skipped.
+    again = _batch(subject, assignment, tok, rubric["id"], skip_already_evaluated=True).json()
+    resumed = _job(again["job_id"])
+    assert again["job_id"] != body["job_id"]
+    assert (resumed.total, resumed.skipped, resumed.evaluated, resumed.failed) == (3, 2, 0, 1)
+
+
+def test_a_batch_job_that_breaks_is_marked_failed_with_the_reason(monkeypatch):
+    subject, tok, rubric, assignment, subs = _setup(1)
+
+    def broken(*args, **kwargs):  # breaks the job itself, not one submission
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(main, "flag_modified", broken)
+    r = _batch(subject, assignment, tok, rubric["id"])
+    assert r.status_code == 500 and "disk full" in r.json()["detail"]
+
+    from app.db import SessionLocal
+    from app.models import BatchJob
+
+    db = SessionLocal()
+    try:
+        job = db.query(BatchJob).order_by(BatchJob.id.desc()).first()
+        assert (job.status, job.assignment_name) == ("failed", assignment)
+        assert "disk full" in job.error and job.finished_at is not None
+    finally:
+        db.close()
