@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AISignal, apiFetch, Assignment, BatchEvaluationResult, Rubric } from "@/lib/api";
+import { AISignal, apiFetch, Assignment, BatchEvaluationItem, BatchEvaluationResult, BatchJob, Rubric } from "@/lib/api";
 import Badge from "@/components/Badge";
 import { methodLabel } from "@/components/AISignalsPanel";
 import { formatMark } from "@/lib/datetime";
@@ -45,11 +45,31 @@ function AISignalLine({ label, signal, report }: { label: string; signal: AISign
   );
 }
 
+/** How often a running job's progress is fetched. */
+const POLL_MS = 3000;
+
+const isActive = (job: BatchJob | null) => job !== null && (job.status === "queued" || job.status === "running");
+
+/** The finished part of a job in the shape the Excel export expects. */
+function jobResult(job: BatchJob): BatchEvaluationResult {
+  return {
+    subject_id: job.subject_id,
+    assignment_name: job.assignment_name,
+    rubric_id: job.rubric_id,
+    total: job.total,
+    evaluated: job.evaluated,
+    skipped: job.skipped,
+    failed: job.failed,
+    results: job.results.filter((r): r is BatchEvaluationItem => r !== null),
+  };
+}
+
 /**
  * "Evaluate a whole assignment": runs the automated evaluation for every
- * submission of one assignment against one rubric. The backend call is
- * synchronous (submissions run one after another), so it can take minutes
- * with a local LLM -- the card says so and locks its controls meanwhile.
+ * submission of one assignment against one rubric. The server runs it as a
+ * background job (it can take many minutes with a local LLM); this card
+ * starts the job, then polls its progress and fills in the results as each
+ * submission finishes.
  */
 export default function BatchEvaluateSection({
   subjectId,
@@ -67,9 +87,10 @@ export default function BatchEvaluateSection({
   const [skipDone, setSkipDone] = useState(false);
   const [useRubricModel, setUseRubricModel] = useRubricModelSetting();
   const [useAiDetection, setUseAiDetection] = useAiDetectionSetting();
-  const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<BatchEvaluationResult | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [job, setJob] = useState<BatchJob | null>(null);
   const [msg, setMsg] = useState<MessageState>(null);
+  const running = starting || isActive(job);
 
   // Keep the selected assignment valid as the list changes.
   useEffect(() => {
@@ -81,34 +102,61 @@ export default function BatchEvaluateSection({
   useEffect(() => {
     const own = assignments.find((a) => a.name === assignment)?.rubric_id ?? null;
     setRubricId(own !== null && rubrics.some((r) => r.id === own) ? own : (rubrics[0]?.id ?? null));
-    setResult(null);
+    // Keep a job of this same assignment (e.g. the list reloaded mid-run); clear any other.
+    setJob((j) => (j && j.assignment_name === assignment ? j : null));
     setMsg(null);
   }, [assignment, assignments, rubrics]);
 
+  // While the job runs, fetch its progress every few seconds; stop once it has finished.
+  useEffect(() => {
+    if (!job || !isActive(job)) return;
+    const timer = setTimeout(async () => {
+      try {
+        setJob(await apiFetch<BatchJob>(`/auto-evaluate/jobs/${job.id}`));
+      } catch (err) {
+        setMsg({ text: `Could not fetch progress (retrying): ${err instanceof Error ? err.message : err}`, kind: "error" });
+        setJob((j) => (j ? { ...j } : j)); // a new object, so this effect runs again and retries
+      }
+    }, POLL_MS);
+    return () => clearTimeout(timer);
+  }, [job]);
+
+  // Summary once the job has finished.
+  useEffect(() => {
+    if (job?.status === "done") {
+      setMsg({
+        text: `Done: ${job.evaluated} evaluated, ${job.skipped} skipped, ${job.failed} failed (of ${job.total}).`,
+        kind: job.failed > 0 ? "error" : "success",
+      });
+    } else if (job?.status === "failed") {
+      setMsg({
+        text: `Batch evaluation stopped: ${job.error ?? "unknown error"}. Results already produced are saved -- tick "skip already evaluated" and run again to continue.`,
+        kind: "error",
+      });
+    }
+  }, [job?.status, job?.evaluated, job?.skipped, job?.failed, job?.total, job?.error]);
+
   const count = assignments.find((a) => a.name === assignment)?.submission_count;
+  const finished = job ? job.results.filter((r): r is BatchEvaluationItem => r !== null) : [];
+  const result = job?.status === "done" ? jobResult(job) : null;
+  const percent = job && job.total > 0 ? Math.round((job.done / job.total) * 100) : 0;
 
   async function run() {
     if (!assignment || rubricId === null) return;
     setMsg(null);
-    setResult(null);
-    setRunning(true);
+    setJob(null);
+    setStarting(true);
     try {
-      const res = await apiFetch<BatchEvaluationResult>(
-        `/subjects/${subjectId}/assignments/${encodeURIComponent(assignment)}/auto-evaluate`,
-        { method: "POST", json: { rubric_id: rubricId, skip_already_evaluated: skipDone, use_rubric_model: useRubricModel, use_ai_detection: useAiDetection } }
+      setJob(
+        await apiFetch<BatchJob>(
+          `/subjects/${subjectId}/assignments/${encodeURIComponent(assignment)}/auto-evaluate/jobs`,
+          { method: "POST", json: { rubric_id: rubricId, skip_already_evaluated: skipDone, use_rubric_model: useRubricModel, use_ai_detection: useAiDetection } }
+        )
       );
-      setResult(res);
-      setMsg({
-        text: `Done: ${res.evaluated} evaluated, ${res.skipped} skipped, ${res.failed} failed (of ${res.total}).`,
-        kind: res.failed > 0 ? "error" : "success",
-      });
     } catch (err) {
-      setMsg({
-        text: `Batch evaluation failed: ${err instanceof Error ? err.message : err}. Results already produced are saved -- tick "skip already evaluated" and run again to continue.`,
-        kind: "error",
-      });
+      setMsg({ text: `Could not start the evaluation: ${err instanceof Error ? err.message : err}`, kind: "error" });
     } finally {
-      setRunning(false);
+      setStarting(false);
     }
   }
 
@@ -175,13 +223,33 @@ export default function BatchEvaluateSection({
         disabled={running || !assignment || rubricId === null}
         className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
       >
-        {running ? "Evaluating…" : `Evaluate all${count !== undefined ? ` ${count} submission(s)` : ""}`}
+        {starting ? "Starting…" : running ? "Evaluating…" : `Evaluate all${count !== undefined ? ` ${count} submission(s)` : ""}`}
       </button>
 
-      {running && (
-        <div className="mt-3 rounded-md bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
-          ⏳ This can take several minutes (roughly 10–20 seconds per submission with the local model). Keep this page
-          open until it finishes.
+      {job && isActive(job) && (
+        <div className="mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2" data-testid="batch-progress">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+            <span className="font-semibold text-blue-900">
+              {job.status === "queued" ? "Starting…" : `${job.done} / ${job.total} done`}
+            </span>
+            <span className="text-xs text-blue-900">
+              {job.evaluated} evaluated · {job.skipped} skipped · {job.failed} failed
+            </span>
+          </div>
+          <div
+            className="mt-2 h-2 w-full overflow-hidden rounded bg-blue-100"
+            role="progressbar"
+            aria-label="Evaluation progress"
+            aria-valuemin={0}
+            aria-valuemax={job.total}
+            aria-valuenow={job.done}
+          >
+            <div className="h-full bg-blue-600 transition-all" style={{ width: `${percent}%` }} />
+          </div>
+          <p className="mt-2 text-xs text-blue-900">
+            Grading runs on the server and continues even if you close this page. Results appear below as each
+            submission finishes.
+          </p>
         </div>
       )}
       <Message state={msg} />
@@ -196,7 +264,7 @@ export default function BatchEvaluateSection({
         </div>
       )}
 
-      {result && (
+      {finished.length > 0 && (
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -211,7 +279,7 @@ export default function BatchEvaluateSection({
               </tr>
             </thead>
             <tbody>
-              {result.results.map((r) => (
+              {finished.map((r) => (
                 <tr key={r.submission_id}>
                   <td className="border border-gray-200 px-3 py-1.5">
                     {r.student_name} (#{r.submission_id})
