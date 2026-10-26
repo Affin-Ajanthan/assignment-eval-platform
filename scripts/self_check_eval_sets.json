@@ -1,0 +1,533 @@
+{
+  "description": "Labelled test sets for scripts/evaluate_self_check.py. Paths are relative to the --data-root folder (checksim/submisstions). A pair is a known copy when both students are in the same group; groups are not merged with each other. report_groups null = report labels unknown, reports not scored. Not evaluated (no labels): Java, ML.",
+  "sets": [
+    {
+      "name": "CS101 Assignment 2 (Python)",
+      "source": "ANSWER_KEY.md",
+      "students": {
+        "01": {
+          "code": "01_Kasun_Perera/kasun_perera_code.zip",
+          "report": "01_Kasun_Perera/kasun_perera_report.pdf"
+        },
+        "02": {
+          "code": "02_Nimali_Fernando/nimali_fernando_code.zip",
+          "report": "02_Nimali_Fernando/nimali_fernando_report.pdf"
+        },
+        "03": {
+          "code": "03_Tharindu_Silva/tharindu_silva_code.zip",
+          "report": "03_Tharindu_Silva/tharindu_silva_report.pdf"
+        },
+        "04": {
+          "code": "04_Ayesha_Rahman/ayesha_rahman_code.zip",
+          "report": "04_Ayesha_Rahman/ayesha_rahman_report.pdf"
+        },
+        "05": {
+          "code": "05_Ravindu_Jayasinghe/ravindu_jayasinghe_code.zip",
+          "report": "05_Ravindu_Jayasinghe/ravindu_jayasinghe_report.pdf"
+        },
+        "06": {
+          "code": "06_Hiruni_Wickramasinghe/hiruni_wickramasinghe_code.zip",
+          "report": "06_Hiruni_Wickramasinghe/hiruni_wickramasinghe_report.pdf"
+        },
+        "07": {
+          "code": "07_Imran_Farook/imran_farook_code.zip",
+          "report": "07_Imran_Farook/imran_farook_report.pdf"
+        },
+        "08": {
+          "code": "08_Sachini_Gunawardena/sachini_gunawardena_code.zip",
+          "report": "08_Sachini_Gunawardena/sachini_gunawardena_report.pdf"
+        },
+        "09": {
+          "code": "09_Dinuka_Bandara/dinuka_bandara_code.zip",
+          "report": "09_Dinuka_Bandara/dinuka_bandara_report.pdf"
+        },
+        "10": {
+          "code": "10_Fathima_Nuzha/fathima_nuzha_code.zip",
+          "report": "10_Fathima_Nuzha/fathima_nuzha_report.pdf"
+        }
+      },
+      "code_groups": [
+        [
+          "01",
+          "03"
+        ],
+        [
+          "02",
+          "06"
+        ]
+      ],
+      "report_groups": [
+        [
+          "01",
+          "03"
+        ],
+        [
+          "01",
+          "10"
+        ]
+      ],
+      "known_hard": {
+        "code": [
+          [
+            "02",
+            "06"
+          ]
+        ],
+        "report": [
+          [
+            "01",
+            "10"
+          ]
+        ]
+      },
+      "notes": "02-06: restructured copy (class -> functions). 01-10: two report sections paraphrased."
+    },
+    {
+      "name": "CS102 Assignment 3 Library (Python)",
+      "source": "ANSWER_KEY_submission02.md",
+      "students": {
+        "01": {
+          "code": "submission02/01_Kavindu_Rathnayake/kavindu_rathnayake_library.zip",
+          "report": "submission02/01_Kavindu_Rathnayake/kavindu_rathnayake_report.pdf"
+        },
+        "02": {
+          "code": "submission02/02_Sanduni_Herath - Copy/sanduni_herath_library.zip",
+          "report": "submission02/02_Sanduni_Herath/sanduni_herath_report.pdf"
+        },
+        "03": {
+          "code": "submission02/03_Malith_Dissanayake/malith_dissanayake_library.zip",
+          "report": "submission02/03_Malith_Dissanayake/malith_dissanayake_report.pdf"
+        },
+        "04": {
+          "code": "submission02/04_Nethmi_Senanayake/nethmi_senanayake_library.zip",
+          "report": "submission02/04_Nethmi_Senanayake/nethmi_senanayake_report.pdf"
+        },
+        "05": {
+          "code": "submission02/05_Yasiru_Abeysekara/yasiru_abeysekara_library.zip",
+          "report": "submission02/05_Yasiru_Abeysekara/yasiru_abeysekara_report.pdf"
+        }
+      },
+      "code_groups": [
+        [
+          "01",
+          "03"
+        ]
+      ],
+      "report_groups": [
+        [
+          "02",
+          "04"
+        ]
+      ],
+      "known_hard": {
+        "code": [
+          [
+            "01",
+            "03"
+          ]
+        ],
+        "report": [
+          [
+            "02",
+            "04"
+          ]
+        ]
+      },
+      "notes": "01-03: only lending.py copied (1 of 5 modules). 02-04: one 220-word report section copied. Sanduni's code is read from '02_Sanduni_Herath - Copy': the zip in '02_Sanduni_Herath' was replaced with Kavindu's project (folder kavindu_rathnayake_library inside) for other tests."
+    },
+    {
+      "name": "Student Performance System (Go)",
+      "source": "Go languge assignments/Rubric_Grading*.xlsx",
+      "students": {
+        "1": {
+          "code": "Go languge assignments/extracted/Student_1/Source"
+        },
+        "2": {
+          "code": "Go languge assignments/extracted/Student_2/Source"
+        },
+        "3": {
+          "code": "Go languge assignments/extracted/Student_3/Source"
+        },
+        "4": {
+          "code": "Go languge assignments/extracted/Student_4/Source"
+        },
+        "5": {
+          "code": "Go languge assignments/extracted/Student_5/Source"
+        },
+        "6": {
+          "code": "Go languge assignments/extracted/Student_6/Source"
+        },
+        "7": {
+          "code": "Go languge assignments/extracted/Student_7/Source"
+        },
+        "8": {
+          "code": "Go languge assignments/extracted/Student_8/Source"
+        },
+        "9": {
+          "code": "Go languge assignments/extracted/Student_9/Source"
+        },
+        "10": {
+          "code": "Go languge assignments/extracted/Student_10/Source"
+        }
+      },
+      "code_groups": [
+        [
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        [
+          "5",
+          "6"
+        ]
+      ],
+      "report_groups": null,
+      "known_hard": {
+        "code": [
+          [
+            "5",
+            "6"
+          ]
+        ]
+      },
+      "notes": "2 exact, 3 + unused code, 4 all renamed (copies of 1); 6 renamed + switch + different sort + unused code (copy of 5). Report labels not stated, so reports are not scored."
+    },
+    {
+      "name": "Student Performance System (PHP)",
+      "source": "PHP language/Rubric_Grading*.xlsx",
+      "students": {
+        "1": {
+          "code": "PHP language/extracted/Student_1/Source"
+        },
+        "2": {
+          "code": "PHP language/extracted/Student_2/Source"
+        },
+        "3": {
+          "code": "PHP language/extracted/Student_3/Source"
+        },
+        "4": {
+          "code": "PHP language/extracted/Student_4/Source"
+        },
+        "5": {
+          "code": "PHP language/extracted/Student_5/Source"
+        },
+        "6": {
+          "code": "PHP language/extracted/Student_6/Source"
+        },
+        "7": {
+          "code": "PHP language/extracted/Student_7/Source"
+        },
+        "8": {
+          "code": "PHP language/extracted/Student_8/Source"
+        },
+        "9": {
+          "code": "PHP language/extracted/Student_9/Source"
+        },
+        "10": {
+          "code": "PHP language/extracted/Student_10/Source"
+        }
+      },
+      "code_groups": [
+        [
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        [
+          "5",
+          "6"
+        ]
+      ],
+      "report_groups": null,
+      "known_hard": {
+        "code": [
+          [
+            "5",
+            "6"
+          ]
+        ]
+      },
+      "notes": "2 exact, 3 + unused code, 4 all renamed (copies of 1); 6 renamed + switch + different sort + unused code (copy of 5). Report labels not stated, so reports are not scored."
+    },
+    {
+      "name": "Student Performance System (Ruby)",
+      "source": "Rubu language Assignments/Rubric_Grading*.xlsx",
+      "students": {
+        "1": {
+          "code": "Rubu language Assignments/extracted/Student_1/Source"
+        },
+        "2": {
+          "code": "Rubu language Assignments/extracted/Student_2/Source"
+        },
+        "3": {
+          "code": "Rubu language Assignments/extracted/Student_3/Source"
+        },
+        "4": {
+          "code": "Rubu language Assignments/extracted/Student_4/Source"
+        },
+        "5": {
+          "code": "Rubu language Assignments/extracted/Student_5/Source"
+        },
+        "6": {
+          "code": "Rubu language Assignments/extracted/Student_6/Source"
+        },
+        "7": {
+          "code": "Rubu language Assignments/extracted/Student_7/Source"
+        },
+        "8": {
+          "code": "Rubu language Assignments/extracted/Student_8/Source"
+        },
+        "9": {
+          "code": "Rubu language Assignments/extracted/Student_9/Source"
+        },
+        "10": {
+          "code": "Rubu language Assignments/extracted/Student_10/Source"
+        }
+      },
+      "code_groups": [
+        [
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        [
+          "5",
+          "6"
+        ]
+      ],
+      "report_groups": null,
+      "known_hard": {
+        "code": [
+          [
+            "5",
+            "6"
+          ]
+        ]
+      },
+      "notes": "2 exact, 3 + unused code, 4 all renamed (copies of 1); 6 renamed + switch + different sort + unused code (copy of 5). Report labels not stated, so reports are not scored."
+    },
+    {
+      "name": "Student Performance System, C# (20 students)",
+      "source": "Rubric_Grading_All_Students (1).xlsx",
+      "students": {
+        "1": {
+          "code": "C# assigmnents/Student_1.zip"
+        },
+        "2": {
+          "code": "C# assigmnents/Student_2.zip"
+        },
+        "3": {
+          "code": "C# assigmnents/Student_3.zip"
+        },
+        "4": {
+          "code": "C# assigmnents/Student_4.zip"
+        },
+        "5": {
+          "code": "C# assigmnents/Student_5.zip"
+        },
+        "6": {
+          "code": "C# assigmnents/Student_6.zip"
+        },
+        "7": {
+          "code": "C# assigmnents/Student_7.zip"
+        },
+        "8": {
+          "code": "C# assigmnents/Student_8.zip"
+        },
+        "9": {
+          "code": "C# assigmnents/Student_9.zip"
+        },
+        "10": {
+          "code": "C# assigmnents/Student_10.zip"
+        },
+        "11": {
+          "code": "C# assigmnents/Student_11.zip"
+        },
+        "12": {
+          "code": "C# assigmnents/Student_12.zip"
+        },
+        "13": {
+          "code": "C# assigmnents/Student_13.zip"
+        },
+        "14": {
+          "code": "C# assigmnents/Student_14.zip"
+        },
+        "15": {
+          "code": "C# assigmnents/Student_15.zip"
+        },
+        "16": {
+          "code": "C# assigmnents/Student_16.zip"
+        },
+        "17": {
+          "code": "C# assigmnents/Student_17.zip"
+        },
+        "18": {
+          "code": "C# assigmnents/Student_18.zip"
+        },
+        "19": {
+          "code": "C# assigmnents/Student_19.zip"
+        },
+        "20": {
+          "code": "C# assigmnents/Student_20.zip"
+        }
+      },
+      "code_groups": [
+        [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "17"
+        ],
+        [
+          "6",
+          "7",
+          "8",
+          "19"
+        ],
+        [
+          "9",
+          "10",
+          "11",
+          "16"
+        ],
+        [
+          "12",
+          "13"
+        ],
+        [
+          "14",
+          "15"
+        ],
+        [
+          "18",
+          "20"
+        ]
+      ],
+      "report_groups": null,
+      "known_hard": {
+        "code": [
+          [
+            "1",
+            "17"
+          ]
+        ]
+      },
+      "notes": "17 is a heavily edited copy of 1; 5 and 19 change logic; 16 is a broken copy of 9. Report labels not stated, so reports are not scored."
+    },
+    {
+      "name": "Student Performance System, C (20 students)",
+      "source": "Rubric_Grading_All_Students (1).xlsx",
+      "students": {
+        "1": {
+          "code": "student managment/Student_1 (2).zip"
+        },
+        "2": {
+          "code": "student managment/Student_2 (2).zip"
+        },
+        "3": {
+          "code": "student managment/Student_3 (2).zip"
+        },
+        "4": {
+          "code": "student managment/Student_4 (2).zip"
+        },
+        "5": {
+          "code": "student managment/Student_5 (2).zip"
+        },
+        "6": {
+          "code": "student managment/Student_6 (1).zip"
+        },
+        "7": {
+          "code": "student managment/Student_7 (1).zip"
+        },
+        "8": {
+          "code": "student managment/Student_8 (1).zip"
+        },
+        "9": {
+          "code": "student managment/Student_9 (1).zip"
+        },
+        "10": {
+          "code": "student managment/Student_10 (1).zip"
+        },
+        "11": {
+          "code": "student managment/Student_11 (1).zip"
+        },
+        "12": {
+          "code": "student managment/Student_12 (1).zip"
+        },
+        "13": {
+          "code": "student managment/Student_13 (1).zip"
+        },
+        "14": {
+          "code": "student managment/Student_14 (1).zip"
+        },
+        "15": {
+          "code": "student managment/Student_15 (1).zip"
+        },
+        "16": {
+          "code": "student managment/Student_16 (1).zip"
+        },
+        "17": {
+          "code": "student managment/Student_17 (1).zip"
+        },
+        "18": {
+          "code": "student managment/Student_18 (1).zip"
+        },
+        "19": {
+          "code": "student managment/Student_19 (1).zip"
+        },
+        "20": {
+          "code": "student managment/Student_20 (1).zip"
+        }
+      },
+      "code_groups": [
+        [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "17"
+        ],
+        [
+          "6",
+          "7",
+          "8",
+          "19"
+        ],
+        [
+          "9",
+          "10",
+          "11",
+          "16"
+        ],
+        [
+          "12",
+          "13"
+        ],
+        [
+          "14",
+          "15"
+        ],
+        [
+          "18",
+          "20"
+        ]
+      ],
+      "report_groups": null,
+      "known_hard": {
+        "code": [
+          [
+            "1",
+            "17"
+          ]
+        ]
+      },
+      "notes": "17 is a heavily edited copy of 1; 5 and 19 change logic; 16 is a broken copy of 9. Report labels not stated, so reports are not scored."
+    }
+  ]
+}

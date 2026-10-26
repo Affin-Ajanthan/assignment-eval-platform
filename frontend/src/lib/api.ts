@@ -86,6 +86,8 @@ export interface Assignment {
   /** Student self-checks before the deadline (on by default). */
   student_similarity_check: boolean;
   student_ai_check: boolean;
+  /** Code similarity (instructor check and self-check) ignores code most of the class shares. */
+  ignore_common_code: boolean;
   /** Students see no marks or feedback before this time; null = as soon as each is saved. */
   marks_release_at: string | null;
   /** Whether students can see marks and feedback now. */
@@ -274,6 +276,9 @@ export interface SimilarityCheckResult {
   compared: number;
   pairs: SimilarityPair[];
   semantic: SemanticSummary;
+  starter_code_excluded?: boolean;
+  /** Distinct code patterns ignored because most of the class shares them (0 = option off). */
+  common_code_removed?: number;
 }
 
 export interface AutoEvaluation {
