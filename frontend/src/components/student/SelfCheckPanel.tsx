@@ -1,6 +1,7 @@
 "use client";
 
-import { MySubmission, StudentAssignment } from "@/lib/api";
+import { useState } from "react";
+import { MySubmission, SelfCheckKind, StudentAssignment } from "@/lib/api";
 import { formatDateTime } from "@/lib/datetime";
 import Message from "@/components/Message";
 import { AiResult, SimilarityResult } from "@/components/student/SelfCheckResults";
@@ -8,23 +9,42 @@ import { CHECKS } from "@/lib/selfCheckBands";
 import { useHiddenResults } from "@/lib/useHiddenResults";
 import { useSelfCheckStatus } from "@/lib/useSelfCheckStatus";
 
-/** "Check my submission": similarity and AI-content self-checks while the assignment is open. */
-export default function SelfCheckPanel({ assignment, submission }: { assignment: StudentAssignment; submission: MySubmission }) {
+/** The checks this assignment allows for the parts the student uploaded. */
+function availableChecks(assignment: StudentAssignment, submission: MySubmission): SelfCheckKind[] {
+  return CHECKS.map((c) => c.kind).filter((kind) =>
+    kind === "ai_content"
+      ? assignment.student_ai_check && (submission.has_code || submission.has_report)
+      : assignment.student_similarity_check && (kind === "code_similarity" ? submission.has_code : submission.has_report),
+  );
+}
+
+/** The open panel: loads this submission's checks (and polls while one runs). */
+function SelfCheckBody({
+  assignment,
+  submission,
+  kinds,
+}: {
+  assignment: StudentAssignment;
+  submission: MySubmission;
+  kinds: SelfCheckKind[];
+}) {
   const { status, msg, starting, start } = useSelfCheckStatus(submission.id, submission.submitted_at);
   const [hidden, toggleHidden] = useHiddenResults();
 
-  if (!status || !status.can_run || !(status.similarity_enabled || status.ai_enabled)) return null;
+  if (!status) return <p className="mt-2 text-xs text-gray-500">Loading your checks...</p>;
+  if (!status.can_run) return <p className="mt-2 text-xs text-gray-600">Self-checks are closed for this submission.</p>;
 
-  const available = CHECKS.filter((c) =>
-    c.kind === "ai_content"
-      ? status.ai_enabled && (submission.has_code || submission.has_report)
-      : status.similarity_enabled && (c.kind === "code_similarity" ? submission.has_code : submission.has_report),
+  // The server has the final say on which checks are switched on.
+  const available = CHECKS.filter(
+    (c) =>
+      kinds.includes(c.kind) && (c.kind === "ai_content" ? status.ai_enabled : status.similarity_enabled),
   );
-  if (available.length === 0) return null;
+  if (available.length === 0) {
+    return <p className="mt-2 text-xs text-gray-600">Your instructor has turned self-checks off for this assignment.</p>;
+  }
 
   return (
-    <div className="mt-4 rounded-md border border-blue-100 bg-blue-50/40 p-4" data-testid="self-check-panel">
-      <h4 className="font-bold">Check my submission</h4>
+    <>
       <p className="mt-1 text-xs text-gray-600">
         Available until the deadline ({formatDateTime(assignment.deadline)}). You can run each check{" "}
         {status.limit_per_hour} times per hour. Results show only your own work.
@@ -84,6 +104,41 @@ export default function SelfCheckPanel({ assignment, submission }: { assignment:
         })}
       </div>
       <Message state={msg} />
+    </>
+  );
+}
+
+/**
+ * "Check my submission": similarity and AI-content self-checks while the
+ * assignment is open. Collapsed by default -- nothing is requested until the
+ * student opens it, so a page with many assignments stays light.
+ */
+export default function SelfCheckPanel({ assignment, submission }: { assignment: StudentAssignment; submission: MySubmission }) {
+  const [open, setOpen] = useState(false);
+  const kinds = availableChecks(assignment, submission);
+  if (kinds.length === 0) return null;
+
+  return (
+    <div className="mt-4 rounded-md border border-blue-100 bg-blue-50/40 p-4" data-testid="self-check-panel">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 text-left"
+      >
+        <span className="font-bold">Check my submission</span>
+        <span className="text-xs font-semibold text-blue-700">{open ? "Close ▴" : "Open ▾"}</span>
+      </button>
+      {!open && (
+        <p className="mt-1 text-xs text-gray-600">
+          Check your work for{" "}
+          {[kinds.some((k) => k !== "ai_content") && "similarity", kinds.includes("ai_content") && "AI content"]
+            .filter(Boolean)
+            .join(" and ")}{" "}
+          before the deadline.
+        </p>
+      )}
+      {open && <SelfCheckBody assignment={assignment} submission={submission} kinds={kinds} />}
     </div>
   );
 }

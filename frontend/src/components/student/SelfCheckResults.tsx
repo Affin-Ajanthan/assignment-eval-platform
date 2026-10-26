@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { SelfCheck, SelfCheckBand } from "@/lib/api";
 import Badge from "@/components/Badge";
 import { BAND_STYLE, HIGHLIGHT_BORDER, MEANING } from "@/lib/selfCheckBands";
@@ -7,11 +10,26 @@ export function Band({ band, ai = false }: { band: SelfCheckBand; ai?: boolean }
   return <Badge tone={`border ${style.cls}`}>{ai ? style.ai : style.similarity}</Badge>;
 }
 
+// How many matching code ranges / report passages are shown before "Show more".
+const FIRST_SHOWN = 3;
+
+function ShowMore({ total, all, onToggle }: { total: number; all: boolean; onToggle: () => void }) {
+  if (total <= FIRST_SHOWN) return null;
+  return (
+    <button type="button" onClick={onToggle} aria-expanded={all} className="mt-1 text-xs font-semibold text-blue-700 hover:underline">
+      {all ? "Show fewer" : `Show ${total - FIRST_SHOWN} more`}
+    </button>
+  );
+}
+
 /** A code or report similarity result: band, what it means, and the student's own matching parts. */
 export function SimilarityResult({ check }: { check: SelfCheck }) {
+  const [all, setAll] = useState(false);
   const r = check.result!;
   const band = r.band ?? "low";
   const part = check.kind === "code_similarity" ? "code" : "report";
+  const highlights = r.highlights ?? [];
+  const passages = r.passages ?? [];
   return (
     <div className="mt-2 text-sm">
       <p>
@@ -19,10 +37,10 @@ export function SimilarityResult({ check }: { check: SelfCheck }) {
         {r.note ? r.note : `Compared with ${r.compared} other submission(s); ${r.similar_submissions} stand out as similar.`}
       </p>
       {!r.note && <p className="mt-1 text-gray-700">{MEANING[band][part]}</p>}
-      {check.kind === "code_similarity" && (r.highlights?.length ?? 0) > 0 && (
+      {check.kind === "code_similarity" && highlights.length > 0 && (
         <div className="mt-2">
           <p className="text-xs font-semibold text-gray-700">Parts of your code with potential matches</p>
-          {r.highlights!.map((h, i) => (
+          {(all ? highlights : highlights.slice(0, FIRST_SHOWN)).map((h, i) => (
             <div key={i} className="mt-1">
               <p className="text-xs text-gray-500">
                 {h.file}, lines {h.start_line}–{h.end_line}
@@ -35,12 +53,13 @@ export function SimilarityResult({ check }: { check: SelfCheck }) {
               </pre>
             </div>
           ))}
+          <ShowMore total={highlights.length} all={all} onToggle={() => setAll(!all)} />
         </div>
       )}
-      {check.kind === "report_similarity" && (r.passages?.length ?? 0) > 0 && (
+      {check.kind === "report_similarity" && passages.length > 0 && (
         <div className="mt-2">
           <p className="text-xs font-semibold text-gray-700">Passages of your report with potential matches</p>
-          {r.passages!.map((text, i) => (
+          {(all ? passages : passages.slice(0, FIRST_SHOWN)).map((text, i) => (
             <blockquote
               key={i}
               className={`mt-1 border-l-4 bg-gray-50 px-3 py-2 text-xs text-gray-700 ${HIGHLIGHT_BORDER[band]}`}
@@ -48,6 +67,7 @@ export function SimilarityResult({ check }: { check: SelfCheck }) {
               {text}
             </blockquote>
           ))}
+          <ShowMore total={passages.length} all={all} onToggle={() => setAll(!all)} />
         </div>
       )}
       <p className="mt-2 text-xs text-gray-500">

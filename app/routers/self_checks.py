@@ -74,12 +74,26 @@ class SelfCheckHistoryRow(BaseModel):
 _SELF_CHECK_FAILED = "The check could not be completed. Please try again later."
 
 
+def _is_stale(check: SelfCheck) -> bool:
+    """A check still "running" long after it started (e.g. the server restarted mid-check)."""
+    return (check.status == "running"
+            and check.created_at < utcnow_naive() - timedelta(minutes=_self_checks.STALE_AFTER_MINUTES))
+
+
+def _shown_status(check: SelfCheck) -> str:
+    """Status as reported to users. Reads never write: a stale running check is
+    reported as failed here, and only marked failed in the database when a new
+    check is started (_expire_stale_checks)."""
+    return "failed" if _is_stale(check) else check.status
+
+
 def _self_check_out(check: SelfCheck) -> SelfCheckOut:
+    status = _shown_status(check)
     return SelfCheckOut(
-        id=check.id, kind=check.kind, status=check.status, created_at=as_utc(check.created_at),
+        id=check.id, kind=check.kind, status=status, created_at=as_utc(check.created_at),
         finished_at=as_utc(check.finished_at) if check.finished_at else None,
-        error=_SELF_CHECK_FAILED if check.status == "failed" else None,
-        result=_self_checks.for_student(check.kind, check.result) if check.status == "done" else None,
+        error=_SELF_CHECK_FAILED if status == "failed" else None,
+        result=_self_checks.for_student(check.kind, check.result) if status == "done" else None,
     )
 
 
@@ -173,7 +187,6 @@ def start_self_check(
 @router.get("/submissions/{submission_id}/self-checks", response_model=SelfCheckStatusOut)
 def self_check_status(submission_id: int, student: User = Depends(require_student), db: Session = Depends(get_db)):
     submission = _own_submission(db, student, submission_id)
-    _expire_stale_checks(db, submission.id)
     a = submission.assignment
     latest: dict[str, Optional[SelfCheckOut]] = {}
     remaining: dict[str, int] = {}
@@ -209,7 +222,7 @@ def self_check_history(assignment_id: int, instructor: User = Depends(require_in
             code_similarity_checks=count("code_similarity"), report_similarity_checks=count("report_similarity"),
             ai_checks=count("ai_content"),
             last_check_at=as_utc(last.created_at) if last else None,
-            latest_kind=last.kind if last else None, latest_status=last.status if last else None,
+            latest_kind=last.kind if last else None, latest_status=_shown_status(last) if last else None,
         ))
     rows.sort(key=lambda r: (r.last_check_at is None, -(r.last_check_at.timestamp() if r.last_check_at else 0)))
     return rows

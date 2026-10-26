@@ -414,3 +414,33 @@ def test_docx_report_without_a_saved_extraction_is_still_read(tmp_path, monkeypa
     assert _run(tok, sid, "ai_content").status_code == 202
     ai = _latest(tok, sid, "ai_content")
     assert ai["status"] == "done" and ai["result"]["report"] in ("low", "moderate", "high")
+
+
+def test_status_reads_never_write_and_report_stale_checks_as_failed(tmp_path):
+    _, _, assignment, students = _setup(tmp_path)
+    tok_a, sid_a = students["a"]
+    db = SessionLocal()
+    try:
+        student_id = db.get(Submission, sid_a).student_id
+        stale = SelfCheck(submission_id=sid_a, student_id=student_id, assignment_id=assignment["id"],
+                          kind="code_similarity", status="running",
+                          created_at=datetime.now(timezone.utc).replace(tzinfo=None)
+                          - timedelta(minutes=self_checks.STALE_AFTER_MINUTES + 1))
+        db.add(stale)
+        db.commit()
+        stale_id = stale.id
+    finally:
+        db.close()
+    shown = _latest(tok_a, sid_a, "code_similarity")
+    assert shown["status"] == "failed" and shown["error"]  # the student can start a new check
+    db = SessionLocal()
+    try:
+        assert db.get(SelfCheck, stale_id).status == "running"  # the read did not write
+    finally:
+        db.close()
+    assert _run(tok_a, sid_a, "code_similarity").status_code == 202  # starting one clears it
+    db = SessionLocal()
+    try:
+        assert db.get(SelfCheck, stale_id).status == "failed"
+    finally:
+        db.close()
