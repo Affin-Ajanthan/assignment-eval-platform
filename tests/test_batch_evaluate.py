@@ -256,3 +256,26 @@ def test_report_ai_text_signal_off_never_loads_the_detector(monkeypatch):
     result = report_analysis.ai_text_signal("Some report text. " * 50, enabled=False)
     assert (result.signal, result.method, result.score) == ("off", "off", 0)
 
+
+
+def test_batch_runs_submissions_concurrently_and_keeps_their_order(monkeypatch):
+    import threading
+
+    subject, tok, rubric, assignment, subs = _setup(2)
+    real = main._run_auto_evaluation
+    # Both evaluations must be running at the same moment to pass the barrier;
+    # run one after another, the first would wait alone and time out.
+    both_running = threading.Barrier(2, timeout=10)
+
+    def together(db, submission, rubric_, **kwargs):
+        both_running.wait()
+        return real(db, submission, rubric_, **kwargs)
+
+    monkeypatch.setattr(main, "_run_auto_evaluation", together)
+    monkeypatch.setattr(main, "AUTO_EVAL_WORKERS", 3)  # capped at the 2 submissions
+    body = _batch(subject, assignment, tok, rubric["id"]).json()
+
+    assert (body["evaluated"], body["failed"]) == (2, 0), body
+    assert [item["submission_id"] for item in body["results"]] == [s["id"] for s in subs]
+    for s in subs:  # each worker saved its result with its own database session
+        assert client.get(f"/submissions/{s['id']}/auto-evaluate", headers=auth_headers(tok)).json() is not None

@@ -29,12 +29,14 @@ http://localhost:8000) and sign in.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 import re
 import tempfile
 import shutil
 import uuid
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -123,6 +125,8 @@ add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON", "ai_
 # Submissions made before assignments existed keep assignment_id NULL (and
 # their free-text assignment_name); nothing else about them changes.
 add_missing_columns("submissions", {"assignment_id": "INTEGER REFERENCES assignments(id)"})
+add_missing_columns("grades", {"feedback": "TEXT"})
+add_missing_columns("assignments", {"marks_release_at": "DATETIME"})
 add_missing_columns("assignments", {"submission_types": "JSON"})
 add_missing_columns("assignments", {"starter_code": "TEXT", "starter_code_filename": "VARCHAR"})
 add_missing_columns("assignments", {"report_template_text": "TEXT", "report_template_filename": "VARCHAR"})
@@ -273,6 +277,9 @@ class AssignmentIn(BaseModel):
     # Student self-checks before the deadline; both on by default.
     student_similarity_check: bool = True
     student_ai_check: bool = True
+    # Optional: students see no marks or feedback before this time. None shows
+    # each mark as soon as it is saved.
+    marks_release_at: Optional[datetime] = None
 
 
 class AssignmentUpdate(BaseModel):
@@ -287,6 +294,7 @@ class AssignmentUpdate(BaseModel):
     code_languages: Optional[list[CodeLanguage]] = None  # [] removes the restriction
     student_similarity_check: Optional[bool] = None  # can be changed at any time
     student_ai_check: Optional[bool] = None
+    marks_release_at: Optional[datetime] = None  # send null explicitly to release marks now
 
 
 class AssignmentOut(BaseModel):
@@ -317,12 +325,20 @@ class AssignmentOut(BaseModel):
     code_languages: list[str] = []
     student_similarity_check: bool = True
     student_ai_check: bool = True
+    marks_release_at: Optional[UTCDateTime] = None
+    marks_released: bool = True  # whether students can see marks and feedback now
+
+
+class CriterionMarkOut(BaseModel):
+    name: str
+    score: float
+    max_points: float
 
 
 class MySubmissionOut(BaseModel):
-    """What a student sees about their own submission: status and the
-    final total only -- no criterion-level marks, comments or evaluator
-    output."""
+    """What a student sees about their own submission: status, the final
+    total, the per-criterion marks and the instructor's feedback for them
+    -- never the internal comments or the evaluator output."""
 
     id: int
     submitted_at: UTCDateTime
@@ -332,6 +348,9 @@ class MySubmissionOut(BaseModel):
     has_video: bool
     final_mark: Optional[float]
     max_mark: Optional[float]
+    # Empty when graded with "Final mark only" (no per-criterion marks) or not graded.
+    criterion_marks: list[CriterionMarkOut] = []
+    feedback: Optional[str] = None
     can_edit: bool  # assignment open and not yet graded
 
 
@@ -349,6 +368,8 @@ class StudentAssignmentOut(BaseModel):
     # Which self-checks the instructor allows for this assignment.
     student_similarity_check: bool = True
     student_ai_check: bool = True
+    # Set only while marks are still held back: when they will be released.
+    marks_release_at: Optional[UTCDateTime] = None
     my_submission: Optional[MySubmissionOut]
 
 
@@ -381,7 +402,8 @@ class GradeIn(BaseModel):
     criterion_scores: dict[str, float] = Field(default_factory=dict)
     # Final mark only, without per-criterion marks. Send this OR criterion_scores.
     total_score: Optional[float] = None
-    comments: Optional[str] = None
+    comments: Optional[str] = None  # internal notes, instructors only
+    feedback: Optional[str] = Field(default=None, max_length=5000)  # for the student
 
 
 class GradeOut(BaseModel):
@@ -391,6 +413,7 @@ class GradeOut(BaseModel):
     criterion_scores: dict[str, float]
     total_score: float
     comments: Optional[str]
+    feedback: Optional[str] = None
     graded_by: Optional[str]
     graded_at: UTCDateTime
 
@@ -1241,6 +1264,8 @@ def _assignment_out(db: Session, a: Assignment) -> AssignmentOut:
         code_languages=a.code_languages or [],
         student_similarity_check=_on(a.student_similarity_check),
         student_ai_check=_on(a.student_ai_check),
+        marks_release_at=_as_utc(a.marks_release_at),
+        marks_released=a.marks_released_at(_utcnow_naive()),
     )
 
 
@@ -1259,14 +1284,49 @@ def _clean_starter_code(code: str, filename: str) -> tuple[Optional[str], Option
     return code, filename
 
 
-def _my_submission_out(submission: Submission, assignment_open: bool) -> MySubmissionOut:
-    return MySubmissionOut(
-        id=submission.id, submitted_at=_as_utc(submission.submitted_at), status=submission.status,
+def _criterion_marks(grade: Grade | None) -> list[CriterionMarkOut]:
+    """The grade's per-criterion marks in the rubric's order; empty for a
+    "Final mark only" grade (it has no per-criterion marks)."""
+    if grade is None or not grade.criterion_scores or grade.rubric is None:
+        return []
+    return [
+        CriterionMarkOut(name=c["name"], score=grade.criterion_scores[c["name"]], max_points=c["max_points"])
+        for c in grade.rubric.criteria
+        if c["name"] in grade.criterion_scores
+    ]
+
+
+def _marks_released(submission: Submission, now: datetime) -> bool:
+    """Whether the student may see this submission's marks and feedback yet.
+    Before the assignment's release date the student is told only that the
+    work was submitted -- not even that it has been graded."""
+    return submission.assignment is None or submission.assignment.marks_released_at(now)
+
+
+def _my_submission_out(submission: Submission, assignment_open: bool, now: datetime) -> MySubmissionOut:
+    can_edit = assignment_open and submission.status != "graded"
+    common = dict(
+        id=submission.id, submitted_at=_as_utc(submission.submitted_at),
         has_code=bool(submission.code_path), has_report=bool(submission.report_path),
-        has_video=bool(submission.video_path),
-        final_mark=submission.final_mark, max_mark=submission.max_mark,
-        can_edit=assignment_open and submission.status != "graded",
+        has_video=bool(submission.video_path), can_edit=can_edit,
     )
+    if not _marks_released(submission, now):
+        return MySubmissionOut(**common, status="submitted", final_mark=None, max_mark=None)
+    grade = submission.latest_grade
+    return MySubmissionOut(
+        **common, status=submission.status,
+        final_mark=submission.final_mark, max_mark=submission.max_mark,
+        criterion_marks=_criterion_marks(grade),
+        feedback=grade.feedback if grade else None,
+    )
+
+
+def _student_submission_out(submission: Submission, now: datetime) -> SubmissionOut:
+    """A submission as its student sees it: no mark before the release date."""
+    out = SubmissionOut.model_validate(submission)
+    if not _marks_released(submission, now):
+        out = out.model_copy(update={"status": "submitted", "final_mark": None, "max_mark": None})
+    return out
 
 
 def _student_assignment_out(db: Session, student: User, a: Assignment, now: datetime) -> StudentAssignmentOut:
@@ -1285,7 +1345,8 @@ def _student_assignment_out(db: Session, student: User, a: Assignment, now: date
         code_languages=a.code_languages or [],
         student_similarity_check=_on(a.student_similarity_check),
         student_ai_check=_on(a.student_ai_check),
-        my_submission=_my_submission_out(mine, status == "open") if mine else None,
+        marks_release_at=None if a.marks_released_at(now) else _as_utc(a.marks_release_at),
+        my_submission=_my_submission_out(mine, status == "open", now) if mine else None,
     )
 
 
@@ -1307,6 +1368,7 @@ def create_assignment(payload: AssignmentIn, instructor: User = Depends(require_
         code_languages=_langs.normalise_languages(payload.code_languages),
         student_similarity_check=payload.student_similarity_check,
         student_ai_check=payload.student_ai_check,
+        marks_release_at=_to_naive_utc(payload.marks_release_at) if payload.marks_release_at else None,
         created_by_id=instructor.id,
     )
     db.add(assignment)
@@ -1395,6 +1457,11 @@ def update_assignment(
         assignment.student_similarity_check = payload.student_similarity_check
     if payload.student_ai_check is not None:
         assignment.student_ai_check = payload.student_ai_check
+    # Like the self-check switches, the release date can change at any time;
+    # an explicit null releases the marks straight away.
+    if "marks_release_at" in payload.model_fields_set:
+        release = payload.marks_release_at
+        assignment.marks_release_at = _to_naive_utc(release) if release else None
     if payload.code_languages is not None:
         languages = _langs.normalise_languages(payload.code_languages)
         if languages != (assignment.code_languages or None):
@@ -1871,6 +1938,12 @@ def list_submissions(
 
     if subject_id is not None:
         query = query.filter(Submission.subject_id == subject_id)
+    if user.role == "student":
+        # Filter by the status the student is shown, after held-back grades
+        # are hidden, so the filter cannot reveal them either.
+        now = _utcnow_naive()
+        shown = [_student_submission_out(s, now) for s in query.order_by(Submission.submitted_at.desc()).all()]
+        return [s for s in shown if not status or s.status == status]
     if status:
         query = query.filter(Submission.status == status)
     return query.order_by(Submission.submitted_at.desc()).all()
@@ -1883,6 +1956,8 @@ def get_submission(submission_id: int, user: User = Depends(get_current_user), d
         raise HTTPException(404, "Submission not found")
     if not _can_view_submission(user, submission, db):
         raise HTTPException(403, "You cannot view this submission")
+    if user.role == "student":
+        return _student_submission_out(submission, _utcnow_naive())
     return submission
 
 
@@ -2022,6 +2097,7 @@ def grade_submission(
         criterion_scores=payload.criterion_scores,
         total_score=total,
         comments=payload.comments,
+        feedback=(payload.feedback or "").strip() or None,
         graded_by_id=instructor.id,
         graded_by=instructor.full_name,
     )
@@ -2494,6 +2570,14 @@ def get_auto_evaluation(submission_id: int, user: User = Depends(get_current_use
     )
 
 
+# How many submissions a batch auto-evaluation grades at the same time. 1 (the
+# default) runs them one after another. More workers overlap the CPU steps
+# (unzipping, report extraction, code analysis) with grading, and with
+# OLLAMA_NUM_PARALLEL set to the same number Ollama grades that many at once.
+# All of them share one GPU, so the gain depends on its memory: measure first.
+AUTO_EVAL_WORKERS = max(1, int(os.environ.get("AUTO_EVAL_WORKERS", "1")))
+
+
 @app.post(
     "/subjects/{subject_id}/assignments/{assignment_name}/auto-evaluate",
     response_model=BatchAutoEvaluateOut,
@@ -2504,11 +2588,11 @@ def auto_evaluate_assignment(
 ):
     """Auto-evaluate every submission of one assignment against one rubric.
 
-    Submissions are processed one after another (a local LLM and Whisper
-    share one GPU, so there is nothing to gain from running them in
-    parallel). Each result is saved as soon as it is produced and one
+    Submissions are processed AUTO_EVAL_WORKERS at a time (one after another
+    by default). Each result is saved as soon as it is produced and one
     failing submission never aborts the rest, so after an interruption the
-    call can simply be repeated with ``skip_already_evaluated`` set.
+    call can simply be repeated with ``skip_already_evaluated`` set. Results
+    keep the submissions' order whatever order they finish in.
     Running the similarity check first lets its flags feed the grading.
     """
     if subject_id not in instructor_subject_ids(db, instructor):
@@ -2543,35 +2627,57 @@ def auto_evaluate_assignment(
         )
         stored = {row.submission_id: row for row in stored_rows}  # later rows overwrite earlier ones
 
-    results: list[BatchEvaluationItemOut] = []
-    for submission in submissions:
-        name = submission.student_name
+    results: list[BatchEvaluationItemOut | None] = [None] * len(submissions)
+    to_run: list[tuple[int, int]] = []  # (position in results, submission id)
+    for position, submission in enumerate(submissions):
         if submission.id in stored:
             prev = stored[submission.id]
-            results.append(BatchEvaluationItemOut(
-                submission_id=submission.id, student_name=name, status="skipped",
+            results[position] = BatchEvaluationItemOut(
+                submission_id=submission.id, student_name=submission.student_name, status="skipped",
                 recommended_score=prev.recommended_score, recommended_max=prev.recommended_max,
                 grader=prev.grader, model=prev.model, review_flags=list(prev.review_flags or []),
                 similarity_flagged=prev.similarity_flagged,
                 ai_flagged=_ai_flagged(prev.code_ai_flagged, prev.report_ai_signal),
-                ai_signals=prev.ai_signals))
-            continue
+                ai_signals=prev.ai_signals)
+        else:
+            to_run.append((position, submission.id))
+
+    rubric_id = rubric.id
+
+    def evaluate(submission_id: int) -> BatchEvaluationItemOut:
+        # Its own session: a SQLAlchemy session must not be shared between threads.
+        worker_db = SessionLocal()
         try:
-            ev = _run_auto_evaluation(db, submission, rubric, use_rubric_model=payload.use_rubric_model,
-                                      use_ai_detection=payload.use_ai_detection)
-        except Exception as exc:  # one bad submission must not stop the batch
-            db.rollback()
-            results.append(BatchEvaluationItemOut(
-                submission_id=submission.id, student_name=name, status="failed",
-                error=f"{exc.__class__.__name__}: {exc}"[:200]))
-            continue
-        results.append(BatchEvaluationItemOut(
-            submission_id=submission.id, student_name=name, status="evaluated",
-            recommended_score=ev.recommended_score, recommended_max=ev.recommended_max,
-            grader=ev.grader, model=ev.model, review_flags=list(ev.review_flags or []),
-            similarity_flagged=ev.similarity_flagged,
-            ai_flagged=_ai_flagged(ev.code_ai_flagged, ev.report_ai_signal),
-            ai_signals=ev.ai_signals))
+            submission = worker_db.get(Submission, submission_id)
+            name = submission.student_name
+            try:
+                ev = _run_auto_evaluation(worker_db, submission, worker_db.get(Rubric, rubric_id),
+                                          use_rubric_model=payload.use_rubric_model,
+                                          use_ai_detection=payload.use_ai_detection)
+            except Exception as exc:  # one bad submission must not stop the batch
+                worker_db.rollback()
+                return BatchEvaluationItemOut(
+                    submission_id=submission_id, student_name=name, status="failed",
+                    error=f"{exc.__class__.__name__}: {exc}"[:200])
+            return BatchEvaluationItemOut(
+                submission_id=submission_id, student_name=name, status="evaluated",
+                recommended_score=ev.recommended_score, recommended_max=ev.recommended_max,
+                grader=ev.grader, model=ev.model, review_flags=list(ev.review_flags or []),
+                similarity_flagged=ev.similarity_flagged,
+                ai_flagged=_ai_flagged(ev.code_ai_flagged, ev.report_ai_signal),
+                ai_signals=ev.ai_signals)
+        finally:
+            worker_db.close()
+
+    ids = [submission_id for _, submission_id in to_run]
+    workers = min(AUTO_EVAL_WORKERS, len(ids))
+    if workers <= 1:
+        items = [evaluate(submission_id) for submission_id in ids]
+    else:
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="auto-eval") as pool:
+            items = list(pool.map(evaluate, ids))  # map keeps the input order
+    for (position, _), item in zip(to_run, items):
+        results[position] = item
 
     def _count(status: str) -> int:
         return sum(1 for r in results if r.status == status)
