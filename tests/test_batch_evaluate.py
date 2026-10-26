@@ -430,3 +430,34 @@ def test_progress_is_only_for_the_subjects_instructors():
     assert _progress(job_id, other_tok).status_code == 403                             # another subject's instructor
     assert _progress(job_id, new_student(client, subject["id"])).status_code == 403    # a student
     assert _progress(999999, tok).status_code == 404                                   # no such job
+
+
+def _latest(subject, assignment, tok):
+    return client.get(f"/subjects/{subject['id']}/assignments/{assignment}/auto-evaluate/jobs/latest",
+                      headers=auth_headers(tok))
+
+
+def test_latest_job_lets_the_page_show_a_run_again(monkeypatch):
+    subject, tok, rubric, assignment, subs = _setup(2)
+    assert _latest(subject, assignment, tok).json() is None  # never run
+
+    first = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+    second = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+    latest = _latest(subject, assignment, tok).json()
+    assert latest["id"] == second != first and latest["status"] == "done"
+    assert len([r for r in latest["results"] if r]) == 2
+
+    # A job still running (the instructor left the page) is what comes back.
+    monkeypatch.setattr(main, "_run_batch_job", lambda job_id: None)
+    running = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+    latest = _latest(subject, assignment, tok).json()
+    assert (latest["id"], latest["status"]) == (running, "queued")
+
+
+def test_latest_job_is_per_assignment_and_only_for_the_subjects_instructors():
+    subject, tok, rubric, assignment, subs = _setup(1)
+    _start_job(subject, assignment, tok, rubric["id"])
+    _, other_tok, _ = setup_subject_with_users(client)
+
+    assert _latest(subject, "Some Other Assignment", tok).json() is None
+    assert _latest(subject, assignment, other_tok).status_code == 403

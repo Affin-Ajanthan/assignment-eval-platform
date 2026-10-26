@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { AISignal, apiFetch, Assignment, BatchEvaluationItem, BatchEvaluationResult, BatchJob, Rubric } from "@/lib/api";
 import Badge from "@/components/Badge";
 import { methodLabel } from "@/components/AISignalsPanel";
-import { formatMark } from "@/lib/datetime";
+import { formatDateTime, formatMark } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
 import DownloadExcelButton from "@/components/instructor/DownloadExcelButton";
 import RubricModelToggle, {
@@ -107,6 +107,24 @@ export default function BatchEvaluateSection({
     setMsg(null);
   }, [assignment, assignments, rubrics]);
 
+  // Show the assignment's latest run again after leaving and coming back: a
+  // running job resumes its progress bar, a finished one shows its results.
+  useEffect(() => {
+    if (!assignment) return;
+    let cancelled = false;
+    apiFetch<BatchJob | null>(
+      `/subjects/${subjectId}/assignments/${encodeURIComponent(assignment)}/auto-evaluate/jobs/latest`
+    )
+      .then((latest) => {
+        // Keep a job started here meanwhile (it is the same or newer).
+        if (!cancelled && latest) setJob((j) => (j && j.assignment_name === assignment && j.id >= latest.id ? j : latest));
+      })
+      .catch(() => {}); // only a convenience: without it the card simply starts empty
+    return () => {
+      cancelled = true;
+    };
+  }, [subjectId, assignment]);
+
   // While the job runs, fetch its progress every few seconds; stop once it has finished.
   useEffect(() => {
     if (!job || !isActive(job)) return;
@@ -121,20 +139,21 @@ export default function BatchEvaluateSection({
     return () => clearTimeout(timer);
   }, [job]);
 
-  // Summary once the job has finished.
+  // Summary once the job has finished (also for a finished run loaded on return).
   useEffect(() => {
+    const when = job?.finished_at ? ` (finished ${formatDateTime(job.finished_at)})` : "";
     if (job?.status === "done") {
       setMsg({
-        text: `Done: ${job.evaluated} evaluated, ${job.skipped} skipped, ${job.failed} failed (of ${job.total}).`,
+        text: `Done${when}: ${job.evaluated} evaluated, ${job.skipped} skipped, ${job.failed} failed (of ${job.total}).`,
         kind: job.failed > 0 ? "error" : "success",
       });
     } else if (job?.status === "failed") {
       setMsg({
-        text: `Batch evaluation stopped: ${job.error ?? "unknown error"}. Results already produced are saved -- tick "skip already evaluated" and run again to continue.`,
+        text: `Batch evaluation stopped${when}: ${job.error ?? "unknown error"}. Results already produced are saved -- tick "skip already evaluated" and run again to continue.`,
         kind: "error",
       });
     }
-  }, [job?.status, job?.evaluated, job?.skipped, job?.failed, job?.total, job?.error]);
+  }, [job?.status, job?.evaluated, job?.skipped, job?.failed, job?.total, job?.error, job?.finished_at]);
 
   const count = assignments.find((a) => a.name === assignment)?.submission_count;
   const finished = job ? job.results.filter((r): r is BatchEvaluationItem => r !== null) : [];

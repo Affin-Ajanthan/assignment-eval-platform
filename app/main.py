@@ -2515,6 +2515,28 @@ def start_auto_evaluate_job(
     return _batch_job_status_out(job)
 
 
+@app.get(
+    "/subjects/{subject_id}/assignments/{assignment_name}/auto-evaluate/jobs/latest",
+    response_model=Optional[BatchJobOut],
+)
+def get_latest_auto_evaluate_job(
+    subject_id: int, assignment_name: str,
+    instructor: User = Depends(require_instructor), db: Session = Depends(get_db),
+):
+    """The assignment's most recent batch job (running or finished), or null
+    if it was never run. Lets the page show a run again after the instructor
+    left and came back."""
+    if subject_id not in instructor_subject_ids(db, instructor):
+        raise HTTPException(403, "You are not assigned to this subject")
+    job = (
+        db.query(BatchJob)
+        .filter(BatchJob.subject_id == subject_id, BatchJob.assignment_name == assignment_name)
+        .order_by(BatchJob.id.desc())
+        .first()
+    )
+    return _batch_job_status_out(job) if job else None
+
+
 @app.get("/auto-evaluate/jobs/{job_id}", response_model=BatchJobOut)
 def get_auto_evaluate_job(
     job_id: int, instructor: User = Depends(require_instructor), db: Session = Depends(get_db),
