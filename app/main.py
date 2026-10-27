@@ -78,6 +78,8 @@ from .evaluator.pipeline import evaluate_submission as _run_pipeline
 from .evaluator.semantic_consistency import get_consistency_service
 from .evaluator.ai_text_detection import get_ai_text_detector, model_name as ai_text_model_name
 from .evaluator.rubric_grading import Criterion as _EvalCriterion, HeuristicRubricGrader
+from .evaluator import code_testing as _code_testing
+from .evaluator.code_execution import SandboxUnavailable, sandbox_enabled as _sandbox_enabled
 from .models import (
     SUBMISSION_TYPES,
     Assignment,
@@ -123,6 +125,10 @@ add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON", "ai_
 add_missing_columns("submissions", {"assignment_id": "INTEGER REFERENCES assignments(id)"})
 add_missing_columns("grades", {"feedback": "TEXT"})
 add_missing_columns("assignments", {"marks_release_at": "DATETIME"})
+add_missing_columns("submissions", {"test_earned": "FLOAT", "test_total": "FLOAT", "tests_run_at": "DATETIME"})
+add_missing_columns("assignments", {"test_cases": "JSON"})
+add_missing_columns("assignments", {"test_main_file": "VARCHAR"})
+add_missing_columns("assignments", {"assignment_type": "VARCHAR NOT NULL DEFAULT 'submission'"})
 add_missing_columns("assignments", {"submission_types": "JSON"})
 add_missing_columns("assignments", {"starter_code": "TEXT", "starter_code_filename": "VARCHAR"})
 add_missing_columns("assignments", {"report_template_text": "TEXT", "report_template_filename": "VARCHAR"})
@@ -246,11 +252,37 @@ class RubricOut(BaseModel):
 
 SubmissionType = Literal["code", "report", "video"]
 _STARTER_CODE_MAX = 200_000
+_TEST_CASES_MAX = 50
+_TEST_TEXT_MAX = 10_000
+
+
+class TestCaseIn(BaseModel):
+    """One test for submitted code: ``input`` goes to the program's standard
+    input and its output is compared with ``expected_output``."""
+
+    name: str = Field(default="", max_length=200)  # blank: "Test 1", "Test 2", ...
+    input: str = Field(default="", max_length=_TEST_TEXT_MAX)
+    expected_output: str = Field(max_length=_TEST_TEXT_MAX)
+    # exact: the whole output (ignoring trailing spaces and line-ending style);
+    # contains: the expected text appears somewhere in the output (menu programs).
+    match: Literal["exact", "contains"] = "exact"
+    visible: bool = False  # visible tests are shown to students; hidden ones never are
+    points: float = Field(default=1, gt=0, le=1000)
+
+
+class TestCaseOut(TestCaseIn):
+    id: int
+
+
+AssignmentType = Literal["submission", "code_challenge"]
 
 
 class AssignmentIn(BaseModel):
     subject_id: int
     name: str = Field(max_length=200)
+    # "submission": students upload files. "code_challenge": code only, run
+    # against test_cases. Left out: a code challenge if there are test cases.
+    assignment_type: Optional[AssignmentType] = None
     description: str = Field(default="", max_length=10_000)
     # ISO 8601. Times with an offset are converted to UTC; times without
     # one are taken as UTC (the frontend always sends UTC).
@@ -274,6 +306,10 @@ class AssignmentIn(BaseModel):
     # Optional: students see no marks or feedback before this time. None shows
     # each mark as soon as it is saved.
     marks_release_at: Optional[datetime] = None
+    # Optional test cases for submitted code; needs "code" in submission_types.
+    test_cases: list[TestCaseIn] = Field(default_factory=list, max_length=_TEST_CASES_MAX)
+    # The file the tests run (a name or a path in the submission); blank picks it automatically.
+    test_main_file: str = Field(default="", max_length=200)
 
 
 class AssignmentUpdate(BaseModel):
@@ -290,6 +326,9 @@ class AssignmentUpdate(BaseModel):
     student_ai_check: Optional[bool] = None
     ignore_common_code: Optional[bool] = None  # can be changed at any time
     marks_release_at: Optional[datetime] = None  # send null explicitly to release marks now
+    # Replaces the whole list ([] removes every test); leave out to keep them.
+    test_cases: Optional[list[TestCaseIn]] = Field(default=None, max_length=_TEST_CASES_MAX)
+    test_main_file: Optional[str] = Field(default=None, max_length=200)  # "" picks it automatically
 
 
 class AssignmentOut(BaseModel):
@@ -298,6 +337,7 @@ class AssignmentOut(BaseModel):
     id: int
     subject_id: int
     subject_name: str
+    assignment_type: str = "submission"  # submission | code_challenge
     name: str
     description: str
     available_from: UTCDateTime
@@ -323,6 +363,9 @@ class AssignmentOut(BaseModel):
     ignore_common_code: bool = True
     marks_release_at: Optional[UTCDateTime] = None
     marks_released: bool = True  # whether students can see marks and feedback now
+    # Every test case, hidden ones included: this is the instructor view only.
+    test_cases: list[TestCaseOut] = []
+    test_main_file: str = ""
 
 
 class CriterionMarkOut(BaseModel):
@@ -350,6 +393,16 @@ class MySubmissionOut(BaseModel):
     can_edit: bool  # assignment open and not yet graded
 
 
+class SampleTestOut(BaseModel):
+    """A visible test as a student sees it."""
+
+    name: str
+    input: str
+    expected_output: str
+    match: str
+    points: float
+
+
 class StudentAssignmentOut(BaseModel):
     id: int
     subject_id: int
@@ -359,6 +412,7 @@ class StudentAssignmentOut(BaseModel):
     available_from: UTCDateTime
     deadline: UTCDateTime
     status: str  # open | closed (upcoming assignments aren't listed)
+    assignment_type: str = "submission"  # submission | code_challenge (a challenge is answered in the code editor)
     submission_types: list[str]
     code_languages: list[str] = []  # empty = any supported language
     # Which self-checks the instructor allows for this assignment.
@@ -366,6 +420,10 @@ class StudentAssignmentOut(BaseModel):
     student_ai_check: bool = True
     # Set only while marks are still held back: when they will be released.
     marks_release_at: Optional[UTCDateTime] = None
+    # The tests marked visible, as examples for the student; hidden tests are
+    # never sent, only how many there are.
+    sample_tests: list[SampleTestOut] = []
+    hidden_test_count: int = 0
     my_submission: Optional[MySubmissionOut]
 
 
@@ -744,6 +802,8 @@ def _require_assignment_rubric(submission: Submission, rubric: Rubric) -> None:
     only, so marks never end up on another rubric. Without one, any rubric of the
     subject is allowed."""
     assignment = submission.assignment
+    if assignment is not None and assignment.kind == "code_challenge":
+        raise HTTPException(400, "A code challenge is marked from its tests, not with a rubric.")
     if assignment is not None and assignment.rubric_id is not None and assignment.rubric_id != rubric.id:
         raise HTTPException(
             400, f"This assignment is graded with the rubric '{assignment.rubric.name}', not '{rubric.name}'"
@@ -1242,7 +1302,42 @@ def _assignment_out(db: Session, a: Assignment) -> AssignmentOut:
         ignore_common_code=_on(a.ignore_common_code),
         marks_release_at=_as_utc(a.marks_release_at),
         marks_released=a.marks_released_at(_utcnow_naive()),
+        test_cases=[TestCaseOut(**t) for t in a.test_cases or []],
+        test_main_file=a.test_main_file or "",
+        assignment_type=a.kind,
     )
+
+
+def _assignment_kind(payload: AssignmentIn) -> str:
+    """The type of a new assignment, checked against its other fields. A code
+    challenge accepts code only and needs at least one test case; test cases
+    belong to code challenges only. Without an explicit type, test cases make
+    it a code challenge."""
+    kind = payload.assignment_type or ("code_challenge" if payload.test_cases else "submission")
+    if kind == "code_challenge":
+        if payload.rubric_id is not None:
+            raise HTTPException(400, "A code challenge is marked by its test cases, not by a rubric.")
+        if "submission_types" in payload.model_fields_set and list(set(payload.submission_types)) != ["code"]:
+            raise HTTPException(400, "A code challenge accepts code submissions only.")
+        if not payload.test_cases:
+            raise HTTPException(400, "A code challenge needs at least one test case.")
+    elif payload.test_cases:
+        raise HTTPException(400, "Test cases belong to code challenges: choose the code challenge type.")
+    return kind
+
+
+def _clean_test_cases(tests: list[TestCaseIn], accepted_types: list[str]) -> Optional[list[dict]]:
+    """Number the tests 1, 2, ... and name blank ones "Test N". Tests run on
+    submitted code, so they need an assignment that accepts code. None when
+    there are no tests."""
+    if not tests:
+        return None
+    if "code" not in accepted_types:
+        raise HTTPException(400, "Test cases need an assignment that accepts code submissions.")
+    return [
+        {**t.model_dump(), "id": n, "name": t.name.strip() or f"Test {n}"}
+        for n, t in enumerate(tests, start=1)
+    ]
 
 
 def _clean_starter_code(code: str, filename: str) -> tuple[Optional[str], Optional[str]]:
@@ -1317,11 +1412,15 @@ def _student_assignment_out(db: Session, student: User, a: Assignment, now: date
         id=a.id, subject_id=a.subject_id, subject_name=a.subject.name if a.subject else "",
         name=a.name, description=a.description or "",
         available_from=_as_utc(a.available_from), deadline=_as_utc(a.deadline), status=status,
+        assignment_type=a.kind,
         submission_types=a.accepted_types(),
         code_languages=a.code_languages or [],
         student_similarity_check=_on(a.student_similarity_check),
         student_ai_check=_on(a.student_ai_check),
         marks_release_at=None if a.marks_released_at(now) else _as_utc(a.marks_release_at),
+        sample_tests=[SampleTestOut(**{k: t[k] for k in SampleTestOut.model_fields})
+                      for t in a.test_cases or [] if t.get("visible")],
+        hidden_test_count=sum(1 for t in a.test_cases or [] if not t.get("visible")),
         my_submission=_my_submission_out(mine, status == "open", now) if mine else None,
     )
 
@@ -1336,8 +1435,10 @@ def create_assignment(payload: AssignmentIn, instructor: User = Depends(require_
     _require_unique_assignment_name(db, payload.subject_id, name)
     _check_assignment_rubric(db, payload.subject_id, payload.rubric_id)
     starter_code, starter_filename = _clean_starter_code(payload.starter_code, payload.starter_code_filename)
-    types = _normalise_submission_types(payload.submission_types)
+    kind = _assignment_kind(payload)
+    types = ["code"] if kind == "code_challenge" else _normalise_submission_types(payload.submission_types)
     assignment = Assignment(
+        assignment_type=kind,
         subject_id=payload.subject_id, name=name, description=payload.description.strip(),
         available_from=available_from, deadline=deadline, rubric_id=payload.rubric_id,
         submission_types=types, starter_code=starter_code, starter_code_filename=starter_filename,
@@ -1346,6 +1447,8 @@ def create_assignment(payload: AssignmentIn, instructor: User = Depends(require_
         student_ai_check=payload.student_ai_check,
         ignore_common_code=payload.ignore_common_code,
         marks_release_at=_to_naive_utc(payload.marks_release_at) if payload.marks_release_at else None,
+        test_cases=_clean_test_cases(payload.test_cases, types),
+        test_main_file=payload.test_main_file.strip() or None,
         created_by_id=instructor.id,
     )
     db.add(assignment)
@@ -1418,10 +1521,14 @@ def update_assignment(
     deadline = _to_naive_utc(payload.deadline) if payload.deadline else assignment.deadline
     _validate_window(available_from, deadline)
     if "rubric_id" in payload.model_fields_set:
+        if assignment.kind == "code_challenge" and payload.rubric_id is not None:
+            raise HTTPException(400, "A code challenge is marked by its test cases, not by a rubric.")
         _check_assignment_rubric(db, assignment.subject_id, payload.rubric_id)
         assignment.rubric_id = payload.rubric_id
     if payload.submission_types is not None:
         types = _normalise_submission_types(payload.submission_types)
+        if assignment.kind == "code_challenge" and types != ["code"]:
+            raise HTTPException(400, "A code challenge accepts code submissions only.")
         if types != assignment.accepted_types():
             has_submissions = db.query(Submission.id).filter(Submission.assignment_id == assignment.id).first()
             if has_submissions:
@@ -1441,6 +1548,17 @@ def update_assignment(
     if "marks_release_at" in payload.model_fields_set:
         release = payload.marks_release_at
         assignment.marks_release_at = _to_naive_utc(release) if release else None
+    # Tests can be changed at any time (e.g. to fix an expected output); the
+    # list is replaced as a whole. Checked against the types as saved above.
+    if payload.test_main_file is not None:
+        assignment.test_main_file = payload.test_main_file.strip() or None
+    if payload.test_cases is not None:
+        if assignment.kind == "code_challenge":
+            if not payload.test_cases:
+                raise HTTPException(400, "A code challenge needs at least one test case.")
+            assignment.test_cases = _clean_test_cases(payload.test_cases, assignment.accepted_types())
+        elif payload.test_cases:
+            raise HTTPException(400, "Test cases belong to code challenges: choose the code challenge type.")
     if payload.code_languages is not None:
         languages = _langs.normalise_languages(payload.code_languages)
         if languages != (assignment.code_languages or None):
@@ -2500,6 +2618,9 @@ def _create_batch_job(
     )
     if not total:
         raise HTTPException(404, "No submissions found for this assignment")
+    named = db.query(Assignment).filter(Assignment.subject_id == subject_id, Assignment.name == assignment_name).first()
+    if named is not None and named.kind == "code_challenge":
+        raise HTTPException(400, "A code challenge is marked from its tests, not with a rubric.")
     # One run per assignment at a time: a second one would grade the same
     # submissions again, in parallel, for nothing.
     active = (
@@ -2766,7 +2887,101 @@ def _run_batch_job(job_id: int) -> None:
         db.close()
 
 
+class TestResultOut(BaseModel):
+    """One test's outcome. This is the instructor view: it includes hidden
+    tests and the expected output."""
+
+    test_id: int
+    name: str
+    visible: bool
+    points: float
+    match: str
+    status: str  # passed | failed | error | timeout
+    passed: bool
+    expected_output: str
+    actual_output: str
+    stderr: str = ""
+
+
+class TestRunOut(BaseModel):
+    submission_id: int
+    file: str  # the file that was run
+    language: str
+    passed: int  # tests passed
+    total: int  # tests run
+    saved: bool = False  # true when the score was saved as the submission's mark
+    earned_points: float  # points of the tests that passed
+    total_points: float  # points of every test run
+    results: list[TestResultOut]
+
+
+def _run_tests_for(db: Session, instructor: User, submission_id: int, *, challenge_only: bool = False):
+    """Check access, then run the assignment's tests on a submission's code in
+    the Docker sandbox. Returns (submission, run, score)."""
+    submission = db.get(Submission, submission_id)
+    if not submission:
+        raise HTTPException(404, "Submission not found")
+    if submission.subject_id not in instructor_subject_ids(db, instructor):
+        raise HTTPException(403, "You are not assigned to this subject")
+    assignment = submission.assignment
+    if assignment is None or not assignment.test_cases:
+        raise HTTPException(400, "This assignment has no test cases.")
+    if challenge_only and assignment.kind != "code_challenge":
+        raise HTTPException(400, "Only a code challenge is marked from its tests.")
+    if not submission.code_path:
+        raise HTTPException(400, "This submission has no code.")
+    if not _sandbox_enabled():
+        raise HTTPException(503, "Code execution is off. Set CODE_SANDBOX=docker and restart the backend.")
+    try:
+        run = _code_testing.run_tests(
+            BASE_DIR / submission.code_path, assignment.test_cases, main_file=assignment.test_main_file or "")
+    except _code_testing.CodeTestError as exc:
+        raise HTTPException(400, str(exc))
+    except SandboxUnavailable as exc:
+        raise HTTPException(503, str(exc))
+    return submission, run, _code_testing.score_run(run.results)
+
+
+def _test_run_out(submission: Submission, run, score, *, saved: bool = False) -> TestRunOut:
+    return TestRunOut(
+        submission_id=submission.id, file=run.file, language=run.language, saved=saved,
+        passed=score.passed, total=score.count, earned_points=score.earned, total_points=score.total,
+        results=[TestResultOut(**vars(r)) for r in run.results],
+    )
+
+
+@app.post("/submissions/{submission_id}/run-tests", response_model=TestRunOut)
+def run_submission_tests(
+    submission_id: int, instructor: User = Depends(require_instructor), db: Session = Depends(get_db),
+):
+    """Run the assignment's test cases on this submission's code in the Docker
+    sandbox and return every test's result. Changes nothing. Needs CODE_SANDBOX=docker."""
+    submission, run, score = _run_tests_for(db, instructor, submission_id)
+    return _test_run_out(submission, run, score)
+
+
+@app.post("/submissions/{submission_id}/mark-from-tests", response_model=TestRunOut)
+def mark_submission_from_tests(
+    submission_id: int, instructor: User = Depends(require_instructor), db: Session = Depends(get_db),
+):
+    """Run the tests (as run-tests does) and save the points of the tests passed
+    as this code challenge submission's mark, e.g. 12 of 16. Running again
+    replaces the mark. The student sees it like any other mark, once the
+    assignment's marks are released."""
+    submission, run, score = _run_tests_for(db, instructor, submission_id, challenge_only=True)
+    submission.test_earned, submission.test_total = score.earned, score.total
+    submission.tests_run_at = _utcnow_naive()
+    submission.status = "graded"
+    db.commit()
+    return _test_run_out(submission, run, score, saved=True)
+
+
 # Student self-checks live in app/routers/self_checks.py.
 from .routers.self_checks import router as _self_check_router  # noqa: E402  (after `app` exists)
 
 app.include_router(_self_check_router)
+
+# Students run their typed code against a code challenge's visible tests: app/routers/sample_runs.py.
+from .routers.sample_runs import router as _sample_run_router  # noqa: E402
+
+app.include_router(_sample_run_router)

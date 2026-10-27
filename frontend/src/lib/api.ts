@@ -92,6 +92,29 @@ export interface Assignment {
   marks_release_at: string | null;
   /** Whether students can see marks and feedback now. */
   marks_released: boolean;
+  /** Test cases for submitted code (instructor view: hidden ones included). */
+  test_cases: TestCase[];
+  /** The file the tests run (a name or path in the submission); "" = picked automatically. */
+  test_main_file: string;
+  /** "submission": students upload files; "code_challenge": code only, run against test cases. Fixed at creation. */
+  assignment_type: AssignmentKind;
+}
+
+export type AssignmentKind = "submission" | "code_challenge";
+
+/** exact: the whole output (ignoring trailing spaces); contains: the expected text appears in it. */
+export type TestMatch = "exact" | "contains";
+
+/** One test for submitted code: `input` goes to standard input, the output is compared with `expected_output`. */
+export interface TestCase {
+  id: number;
+  name: string;
+  input: string;
+  expected_output: string;
+  match: TestMatch;
+  /** Shown to students; hidden tests are only used for marking. */
+  visible: boolean;
+  points: number;
 }
 
 /** A student's own submission: status, marks and feedback (once released). */
@@ -129,7 +152,71 @@ export interface StudentAssignment {
   student_ai_check: boolean;
   /** Set only while marks are held back: when they will be released. */
   marks_release_at: string | null;
+  /** The visible tests, as examples; hidden tests are never sent, only counted. */
+  sample_tests: SampleTest[];
+  hidden_test_count: number;
+  /** A code challenge is answered in the code editor instead of by uploading files. */
+  assignment_type: AssignmentKind;
   my_submission: MySubmission | null;
+}
+
+/** A visible test's outcome from POST /assignments/{id}/sample-run (nothing about hidden tests). */
+export interface SampleRunResult {
+  name: string;
+  input: string;
+  match: TestMatch;
+  expected_output: string;
+  status: "passed" | "failed" | "error" | "timeout";
+  passed: boolean;
+  actual_output: string;
+  stderr: string;
+}
+
+export interface SampleRun {
+  language: string;
+  passed: number;
+  total: number;
+  /** Hidden tests are not run here; they are used when the work is marked. */
+  hidden_test_count: number;
+  remaining_runs: number;
+  results: SampleRunResult[];
+}
+
+/** A visible test as a student sees it. */
+export interface SampleTest {
+  name: string;
+  input: string;
+  expected_output: string;
+  match: TestMatch;
+  points: number;
+}
+
+/** One test's outcome from POST /submissions/{id}/run-tests (instructor view). */
+export interface TestResult {
+  test_id: number;
+  name: string;
+  visible: boolean;
+  points: number;
+  match: TestMatch;
+  status: "passed" | "failed" | "error" | "timeout";
+  passed: boolean;
+  expected_output: string;
+  actual_output: string;
+  stderr: string;
+}
+
+export interface TestRun {
+  submission_id: number;
+  /** The file that was run, relative to the submission's code folder. */
+  file: string;
+  language: string;
+  passed: number;
+  total: number;
+  /** True when the score was saved as the submission's mark (mark-from-tests). */
+  saved: boolean;
+  earned_points: number;
+  total_points: number;
+  results: TestResult[];
 }
 
 export interface Submission {

@@ -298,7 +298,7 @@ def test_student_sees_open_and_past_assignments_but_not_upcoming_ones():
     assert set(open_one) == {"id", "subject_id", "subject_name", "name", "description", "available_from",
                              "deadline", "status", "submission_types", "code_languages",
                                  "student_similarity_check", "student_ai_check", "marks_release_at",
-                                 "my_submission"}
+                                 "sample_tests", "hidden_test_count", "assignment_type", "my_submission"}
 
 
 def test_backend_enforces_the_submission_window():
@@ -566,7 +566,8 @@ def test_marks_and_feedback_are_hidden_from_students_until_the_release_date():
     assert len(client.get("/submissions?status=submitted", headers=H(stok)).json()) == 1
     hidden_views = json.dumps([client.get("/assignments", headers=H(stok)).json(), listed, detail,
                                client.get(f"/assignments/{a['id']}", headers=H(stok)).json()])
-    assert "HELD-BACK" not in hidden_views and "34" not in hidden_views
+    # Look for the mark as a mark: a bare "34" also matches timestamps like 10:34:59.
+    assert "HELD-BACK" not in hidden_views and '"final_mark": 34' not in hidden_views
 
     # The instructor still sees everything.
     assert client.get(f"/submissions/{sub['id']}/grade", headers=H(itok)).json()["total_score"] == 34
@@ -595,3 +596,168 @@ def test_a_release_date_in_the_past_shows_marks_and_other_edits_keep_the_date():
     client.put(f"/assignments/{a['id']}", headers=H(itok), json={"marks_release_at": _iso(timedelta(minutes=-1))})
     _grade(itok, sub["id"], rubric["id"], {"Code Quality": 5, "Documentation": 5, "Functionality": 10})
     assert client.get("/assignments", headers=H(stok)).json()[0]["my_submission"]["final_mark"] == 20
+
+
+# --------------------------------------------------------------------------
+# Test cases for submitted code
+# --------------------------------------------------------------------------
+
+SORT_TESTS = [
+    {"name": "Sorts three numbers", "input": "3\n2 3 1\n", "expected_output": "1 2 3", "visible": True, "points": 2},
+    {"input": "0\n\n", "expected_output": "SECRET-EMPTY-LIST", "match": "contains", "points": 3},
+]
+
+
+def test_test_cases_are_saved_numbered_and_named_for_the_instructor():
+    subject, itok, _ = setup_subject_with_users(client)
+    r = client.post("/assignments", headers=H(itok), json={
+        "subject_id": subject["id"], "name": "Sorting", "available_from": _iso(timedelta(hours=-1)),
+        "deadline": _iso(timedelta(days=7)), "test_cases": SORT_TESTS})
+    assert r.status_code == 200, r.text
+    tests = r.json()["test_cases"]
+    assert [(t["id"], t["name"], t["match"], t["visible"], t["points"]) for t in tests] == [
+        (1, "Sorts three numbers", "exact", True, 2), (2, "Test 2", "contains", False, 3)]
+    assert tests[0]["input"] == "3\n2 3 1\n" and tests[1]["expected_output"] == "SECRET-EMPTY-LIST"
+
+    a_id = r.json()["id"]
+    # Editing something else keeps the tests; sending a list replaces them; [] removes them.
+    assert len(client.put(f"/assignments/{a_id}", headers=H(itok), json={"description": "x"}).json()["test_cases"]) == 2
+    replaced = client.put(f"/assignments/{a_id}", headers=H(itok), json={"test_cases": SORT_TESTS[:1]}).json()
+    assert [t["id"] for t in replaced["test_cases"]] == [1]
+    # A code challenge can't be left without tests.
+    emptied = client.put(f"/assignments/{a_id}", headers=H(itok), json={"test_cases": []})
+    assert emptied.status_code == 400 and "at least one test case" in emptied.json()["detail"]
+
+
+def test_test_cases_are_validated():
+    subject, itok, _ = setup_subject_with_users(client)
+    base = {"subject_id": subject["id"], "available_from": _iso(timedelta(hours=-1)), "deadline": _iso(timedelta(days=7))}
+
+    def create(name, **extra):
+        return client.post("/assignments", headers=H(itok), json={**base, "name": name, **extra})
+
+    no_code = create("Report only", submission_types=["report"], test_cases=SORT_TESTS)
+    assert no_code.status_code == 400 and "accepts code" in no_code.json()["detail"]
+    assert create("Bad match", test_cases=[{"expected_output": "x", "match": "regex"}]).status_code == 422
+    assert create("Zero points", test_cases=[{"expected_output": "x", "points": 0}]).status_code == 422
+    assert create("No expected", test_cases=[{"input": "1"}]).status_code == 422
+    assert create("Too many", test_cases=[{"expected_output": "x"}] * 51).status_code == 422
+
+    # A code challenge stays code-only.
+    a = create("With tests", test_cases=SORT_TESTS).json()
+    r = client.put(f"/assignments/{a['id']}", headers=H(itok), json={"submission_types": ["report"]})
+    assert r.status_code == 400 and "accepts code submissions only" in r.json()["detail"]
+
+
+def test_students_never_receive_test_cases():
+    subject, itok, stok = setup_subject_with_users(client)
+    a = client.post("/assignments", headers=H(itok), json={
+        "subject_id": subject["id"], "name": "Hidden tests", "available_from": _iso(timedelta(hours=-1)),
+        "deadline": _iso(timedelta(days=7)), "test_cases": SORT_TESTS}).json()
+    student_views = json.dumps([client.get("/assignments", headers=H(stok)).json(),
+                                client.get(f"/assignments/{a['id']}", headers=H(stok)).json()])
+    assert "SECRET-EMPTY-LIST" not in student_views and "test_cases" not in student_views
+
+
+def test_students_see_the_visible_tests_as_samples_and_only_a_count_of_the_hidden_ones():
+    subject, itok, stok = setup_subject_with_users(client)
+    tests = SORT_TESTS + [{"input": "HIDDEN-INPUT", "expected_output": "HIDDEN-EXPECTED", "points": 4}]
+    a = client.post("/assignments", headers=H(itok), json={
+        "subject_id": subject["id"], "name": "Samples", "available_from": _iso(timedelta(hours=-1)),
+        "deadline": _iso(timedelta(days=7)), "test_cases": tests}).json()
+
+    mine = client.get("/assignments", headers=H(stok)).json()[0]
+    assert mine["sample_tests"] == [{"name": "Sorts three numbers", "input": "3\n2 3 1\n",
+                                     "expected_output": "1 2 3", "match": "exact", "points": 2}]
+    assert mine["hidden_test_count"] == 2
+    # Hidden tests: nothing but the count, in any student view.
+    student_views = json.dumps([client.get("/assignments", headers=H(stok)).json(),
+                                client.get(f"/assignments/{a['id']}", headers=H(stok)).json()])
+    for secret in ("SECRET-EMPTY-LIST", "HIDDEN-INPUT", "HIDDEN-EXPECTED"):
+        assert secret not in student_views, secret
+
+    # An assignment without tests shows none.
+    client.post("/assignments", headers=H(itok), json={
+        "subject_id": subject["id"], "name": "Plain", "available_from": _iso(timedelta(hours=-1)),
+        "deadline": _iso(timedelta(days=7))})
+    plain = next(x for x in client.get("/assignments", headers=H(stok)).json() if x["name"] == "Plain")
+    assert (plain["sample_tests"], plain["hidden_test_count"]) == ([], 0)
+
+
+# --------------------------------------------------------------------------
+# Assignment type: submission or code challenge
+# --------------------------------------------------------------------------
+
+
+def _new_assignment(itok, subject, name, **extra):
+    return client.post("/assignments", headers=H(itok), json={
+        "subject_id": subject["id"], "name": name, "available_from": _iso(timedelta(hours=-1)),
+        "deadline": _iso(timedelta(days=7)), **extra})
+
+
+def test_a_code_challenge_accepts_code_only_and_needs_test_cases():
+    subject, itok, _ = setup_subject_with_users(client)
+    r = _new_assignment(itok, subject, "Challenge", assignment_type="code_challenge", test_cases=SORT_TESTS)
+    assert r.status_code == 200, r.text
+    assert (r.json()["assignment_type"], r.json()["submission_types"]) == ("code_challenge", ["code"])
+
+    no_tests = _new_assignment(itok, subject, "Empty challenge", assignment_type="code_challenge")
+    assert no_tests.status_code == 400 and "at least one test case" in no_tests.json()["detail"]
+    more = _new_assignment(itok, subject, "Too wide", assignment_type="code_challenge", test_cases=SORT_TESTS,
+                           submission_types=["code", "report"])
+    assert more.status_code == 400 and "accepts code submissions only" in more.json()["detail"]
+    # Sending ["code"] explicitly is fine.
+    ok = _new_assignment(itok, subject, "Code listed", assignment_type="code_challenge", test_cases=SORT_TESTS,
+                         submission_types=["code"])
+    assert ok.status_code == 200 and ok.json()["submission_types"] == ["code"]
+
+
+def test_a_submission_assignment_keeps_its_file_types_and_takes_no_test_cases():
+    subject, itok, _ = setup_subject_with_users(client)
+    plain = _new_assignment(itok, subject, "Plain", assignment_type="submission",
+                            submission_types=["code", "report"])
+    assert (plain.json()["assignment_type"], plain.json()["submission_types"]) == ("submission", ["code", "report"])
+    assert _new_assignment(itok, subject, "Default").json()["assignment_type"] == "submission"  # no type, no tests
+
+    with_tests = _new_assignment(itok, subject, "Wrong type", assignment_type="submission", test_cases=SORT_TESTS)
+    assert with_tests.status_code == 400 and "belong to code challenges" in with_tests.json()["detail"]
+    late = client.put(f"/assignments/{plain.json()['id']}", headers=H(itok), json={"test_cases": SORT_TESTS})
+    assert late.status_code == 400 and "belong to code challenges" in late.json()["detail"]
+    # The type itself can't be changed afterwards.
+    changed = client.put(f"/assignments/{plain.json()['id']}", headers=H(itok), json={"assignment_type": "code_challenge"})
+    assert changed.status_code == 200 and changed.json()["assignment_type"] == "submission"
+
+
+def test_test_cases_without_a_type_make_a_code_challenge():
+    subject, itok, _ = setup_subject_with_users(client)
+    r = _new_assignment(itok, subject, "Inferred", test_cases=SORT_TESTS)
+    assert r.status_code == 200 and r.json()["assignment_type"] == "code_challenge"
+    assert r.json()["submission_types"] == ["code"]
+
+
+def test_a_code_challenge_has_no_rubric_but_can_drop_an_old_one():
+    subject, itok, _ = setup_subject_with_users(client)
+    rubric = _rubric(itok, subject["id"])
+    refused = _new_assignment(itok, subject, "Rubric on challenge", assignment_type="code_challenge",
+                              test_cases=SORT_TESTS, rubric_id=rubric["id"])
+    assert refused.status_code == 400 and "not by a rubric" in refused.json()["detail"]
+
+    ok = _new_assignment(itok, subject, "Tests only", assignment_type="code_challenge", test_cases=SORT_TESTS)
+    assert ok.status_code == 200 and ok.json()["rubric_id"] is None
+    url = f"/assignments/{ok.json()['id']}"
+    attach = client.put(url, headers=H(itok), json={"rubric_id": rubric["id"]})
+    assert attach.status_code == 400 and "not by a rubric" in attach.json()["detail"]
+    # Sending no rubric (null) is fine: that is what the form sends for a challenge.
+    assert client.put(url, headers=H(itok), json={"rubric_id": None}).status_code == 200
+
+    # A plain submission assignment still takes a rubric.
+    plain = _new_assignment(itok, subject, "Plain with rubric", rubric_id=rubric["id"])
+    assert plain.status_code == 200 and plain.json()["rubric_id"] == rubric["id"]
+
+
+def test_students_are_told_which_assignments_are_code_challenges():
+    subject, itok, stok = setup_subject_with_users(client)
+    _new_assignment(itok, subject, "Challenge for the editor", test_cases=SORT_TESTS)
+    _new_assignment(itok, subject, "Plain upload")
+    kinds = {a["name"]: a["assignment_type"] for a in client.get("/assignments", headers=H(stok)).json()}
+    assert kinds == {"Challenge for the editor": "code_challenge", "Plain upload": "submission"}

@@ -15,6 +15,7 @@ import { useRequireRole } from "@/lib/useRequireRole";
 import AccountBar from "@/components/AccountBar";
 import CrossModalConsistencyPanel from "@/components/CrossModalConsistencyPanel";
 import SubmissionFiles from "@/components/SubmissionFiles";
+import TestRunPanel from "@/components/instructor/TestRunPanel";
 import AISignalsPanel from "@/components/AISignalsPanel";
 import AssignmentsSection from "@/components/instructor/AssignmentsSection";
 import BatchEvaluateSection from "@/components/instructor/BatchEvaluateSection";
@@ -156,6 +157,8 @@ export default function InstructorPage() {
   const [gradingSubmissionId, setGradingSubmissionId] = useState<number | null>(null);
   // Which submission's uploaded files are expanded in the submissions table.
   const [filesOpenFor, setFilesOpenFor] = useState<{ id: number; kind: SubmissionFile["kind"] } | null>(null);
+  // Which submission's test results are open in the submissions table.
+  const [testsOpenFor, setTestsOpenFor] = useState<number | null>(null);
   // Which assignment's submissions the table shows: "all", "a:<assignment id>",
   // or "n:<name>" for submissions whose assignment was deleted (kept as records).
   const [submissionFilter, setSubmissionFilter] = useState("all");
@@ -257,6 +260,14 @@ export default function InstructorPage() {
     () => Array.from(new Set(submissions.map((s) => s.assignment_name))),
     [submissions]
   );
+  // "Evaluate a whole assignment" grades with a rubric, which a code challenge does not have.
+  const rubricAssignmentNames = useMemo(
+    () =>
+      assignmentNames.filter(
+        (n) => !assignments.some((a) => a.name === n && a.assignment_type === "code_challenge"),
+      ),
+    [assignmentNames, assignments]
+  );
   useEffect(() => {
     if (assignmentNames.length && !assignmentNames.includes(similarityAssignment)) {
       setSimilarityAssignment(assignmentNames[0]);
@@ -308,6 +319,16 @@ export default function InstructorPage() {
   function assignmentRubricFor(submissionId: number | null): number | null {
     const submission = submissions.find((s) => s.id === submissionId);
     return assignments.find((a) => a.id === submission?.assignment_id)?.rubric_id ?? null;
+  }
+
+  // A code challenge is marked by its test cases, so the rubric-based AI evaluation does not apply to it.
+  function isCodeChallenge(assignmentId: number | null): boolean {
+    return assignments.find((a) => a.id === assignmentId)?.assignment_type === "code_challenge";
+  }
+
+  // How many test cases the submission's assignment has (0 when none).
+  function testCountFor(assignmentId: number | null): number {
+    return assignments.find((a) => a.id === assignmentId)?.test_cases?.length ?? 0;
   }
 
   // ---- Auto-evaluation ----
@@ -748,7 +769,7 @@ export default function InstructorPage() {
           {subjectId !== null && (
             <BatchEvaluateSection
               subjectId={subjectId}
-              assignmentNames={assignmentNames}
+              assignmentNames={rubricAssignmentNames}
               assignments={assignments}
               rubrics={rubrics}
             />
@@ -932,23 +953,62 @@ export default function InstructorPage() {
                       <td className="border border-gray-200 px-3 py-1.5">{formatMark(s.final_mark, s.max_mark)}</td>
                       <td className="border border-gray-200 px-3 py-1.5">
                         <div className="flex gap-1 whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => confirmDiscardThen(() => openGradingPanel(s.id))}
-                            className="rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700"
-                          >
-                            {s.status === "graded" ? "Re-grade" : "Grade"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openAutoevalPanel(s.id)}
-                            className="rounded-md bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700"
-                          >
-                            Auto-evaluate
-                          </button>
+                          {/* A code challenge is marked from its tests (Tests button), not with the rubric form. */}
+                          {!isCodeChallenge(s.assignment_id) && (
+                            <button
+                              type="button"
+                              onClick={() => confirmDiscardThen(() => openGradingPanel(s.id))}
+                              className="rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+                            >
+                              {s.status === "graded" ? "Re-grade" : "Grade"}
+                            </button>
+                          )}
+                          {!isCodeChallenge(s.assignment_id) && (
+                            <button
+                              type="button"
+                              onClick={() => openAutoevalPanel(s.id)}
+                              className="rounded-md bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700"
+                            >
+                              Auto-evaluate
+                            </button>
+                          )}
+                          {testCountFor(s.assignment_id) > 0 && s.submitted_types.includes("code") && (
+                            <button
+                              type="button"
+                              aria-expanded={testsOpenFor === s.id}
+                              onClick={() => setTestsOpenFor(testsOpenFor === s.id ? null : s.id)}
+                              className="rounded-md bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700"
+                            >
+                              Tests
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
+                    {testsOpenFor === s.id && (
+                      <tr>
+                        <td colSpan={7} className="border border-gray-200 bg-white px-3 py-3">
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <p className="text-sm font-semibold">Code tests for {s.student_name}</p>
+                            <button
+                              type="button"
+                              onClick={() => setTestsOpenFor(null)}
+                              className="rounded-md bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700"
+                            >
+                              Close
+                            </button>
+                          </div>
+                          <TestRunPanel
+                            submissionId={s.id}
+                            testCount={testCountFor(s.assignment_id)}
+                            isChallenge={isCodeChallenge(s.assignment_id)}
+                            onSaved={() => {
+                              if (subjectId !== null) void loadSubmissions(subjectId);
+                            }}
+                          />
+                        </td>
+                      </tr>
+                    )}
                     {filesOpenFor?.id === s.id && (
                       <tr>
                         <td colSpan={7} className="border border-gray-200 bg-white px-3 py-3">

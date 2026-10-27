@@ -173,6 +173,19 @@ class Assignment(Base):
     # assignment before this time, so a whole class can be published at once.
     # NULL shows each mark as soon as it is saved. Enforced by the API.
     marks_release_at = Column(DateTime, nullable=True)
+    # Optional test cases for submitted code (HackerRank style):
+    # [{"id", "name", "input", "expected_output", "match": "exact" | "contains",
+    #   "visible": bool, "points": float}, ...]. "input" is fed to the program's
+    # standard input; hidden tests (visible=False) are never shown to students.
+    test_cases = Column(JSON, nullable=True)
+    # The file the tests run, e.g. "student_management.rb" (a name or a path
+    # inside the submission). NULL: the only Python/Ruby file, or a main.* one.
+    test_main_file = Column(String, nullable=True)
+    # "submission": students upload code, a report and/or a video, graded with a
+    # rubric. "code_challenge": students submit code only, and it is run against
+    # test_cases (HackerRank style). Chosen when the assignment is created and
+    # never changed. Read it through `kind`, which also covers older rows.
+    assignment_type = Column(String, nullable=False, default="submission", server_default="submission")
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
@@ -185,6 +198,12 @@ class Assignment(Base):
         if not self.submission_types:
             return list(SUBMISSION_TYPES)
         return [t for t in SUBMISSION_TYPES if t in self.submission_types]
+
+    @property
+    def kind(self) -> str:
+        """"code_challenge" or "submission". An assignment that already has test
+        cases counts as a code challenge even if it was saved before the type existed."""
+        return "code_challenge" if self.assignment_type == "code_challenge" or self.test_cases else "submission"
 
     def marks_released_at(self, now: datetime) -> bool:
         """Whether students may see marks and feedback at a naive-UTC ``now``."""
@@ -241,6 +260,13 @@ class Submission(Base):
     video_path = Column(String, nullable=True)
     submitted_at = Column(DateTime, default=_utcnow)
     status = Column(String, default="submitted")  # submitted | graded
+    # A code challenge is marked by its tests, not a rubric: when the instructor
+    # runs them as the mark, the points of the tests passed (test_earned) out of
+    # all the tests' points (test_total) are saved here, and `final_mark` /
+    # `max_mark` use them. NULL until then.
+    test_earned = Column(Float, nullable=True)
+    test_total = Column(Float, nullable=True)
+    tests_run_at = Column(DateTime, nullable=True)
 
     # Oldest first; re-grading adds a row, so the last one is the current grade.
     grades = relationship("Grade", back_populates="submission", order_by="Grade.id")
@@ -259,12 +285,22 @@ class Submission(Base):
                                         ("video", self.video_path)) if path]
 
     @property
+    def marked_by_tests(self) -> bool:
+        """A code challenge whose tests have been run as the mark."""
+        return (self.test_total is not None and self.assignment is not None
+                and self.assignment.kind == "code_challenge")
+
+    @property
     def final_mark(self) -> float | None:
+        if self.marked_by_tests:
+            return self.test_earned
         grade = self.latest_grade
         return grade.total_score if grade else None
 
     @property
     def max_mark(self) -> float | None:
+        if self.marked_by_tests:
+            return self.test_total
         grade = self.latest_grade
         return grade.rubric.max_total if grade and grade.rubric else None
 

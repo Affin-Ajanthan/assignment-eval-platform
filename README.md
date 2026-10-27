@@ -228,6 +228,78 @@ Every one of these endpoints is scoped: an instructor can only act on
 subjects an admin assigned them to, and a student can only submit to
 and see their own work in subjects they're enrolled in.
 
+### Code challenges (HackerRank-style test cases)
+
+Creating an assignment starts with a choice, fixed once the assignment exists:
+
+- **Submission**: students upload code, a report and/or a video; it is graded
+  with a rubric (everything described above).
+- **Code challenge**: students submit **code only**. It is run against the
+  instructor's **test cases**, and the **points of the tests passed are the
+  mark**. A challenge has **no rubric**: the server refuses a rubric on it, and
+  refuses the rubric Grade form, the single Auto-evaluate and "Evaluate a whole
+  assignment" for it (400, "A code challenge is marked from its tests").
+
+**Test cases** (1 to 50 per challenge, set in the assignment form): a name, the
+**input** fed to the program's standard input, the **expected output**, a
+**match** mode, **visible** or hidden, and **points**. `exact` compares the whole
+output (trailing spaces, line-ending style and surrounding blank lines are
+ignored); `contains` looks for the expected text anywhere in the output, which
+suits menu programs that print prompts. The instructor can name the **main
+file** to run (e.g. `student_management.rb`); left empty, the only Python/Ruby
+file in the submission is used, or one named `main`, `app`, `run`, `program` or
+`index`.
+
+**Languages: Python and Ruby only, for now.** Other languages can be submitted
+to a normal assignment, but a challenge cannot run them yet.
+
+**Students** answer in a code editor on the assignment card instead of
+uploading a file (the typed code is saved as `main.py` / `main.rb`, through the
+same `/submissions` endpoints). The visible tests are shown as examples. **Run
+sample tests** (`POST /assignments/{id}/sample-run`) runs the typed code against
+the **visible tests only** and shows each one's expected and actual output. It
+is practice: no submission is made and no mark changes. Limits, since every run
+starts Docker containers: one run at a time per student,
+`CODE_SAMPLE_RUNS_PER_HOUR` (10) per student, and `CODE_SAMPLE_MAX_PARALLEL` (2)
+at once on the server. The counts are in memory and start again when the
+backend restarts.
+
+**Hidden tests never leave the server.** Students receive the visible tests,
+and only how *many* hidden tests there are; a sample run returns no test ids
+or points that could hint at them. The instructor's view shows every test.
+
+**Instructors** open **Tests** on a submission:
+
+- `POST /submissions/{id}/run-tests` runs every test and returns each result
+  (expected vs actual output, error output, status `passed` / `failed` /
+  `error` / `timeout`) and the score. It changes nothing.
+- `POST /submissions/{id}/mark-from-tests` does the same and **saves the points
+  of the tests passed as the mark** (e.g. 12 of 16; 8 of 10 tests worth 2
+  points each is 16 of 20) and sets the submission to graded. Running it again
+  replaces the mark. The student sees it like any mark, including the
+  assignment's marks release date; there is no per-criterion breakdown. It is
+  stored on the submission (`test_earned`, `test_total`, `tests_run_at`).
+
+**The sandbox.** Running student code is **off by default**: set
+`CODE_SANDBOX=docker` in `.env`, start Docker Desktop (Docker is needed only on
+the machine that runs the backend, not for browsers) and pull the images once:
+
+```bash
+docker pull python:3.12-slim
+docker pull ruby:3.3-slim
+```
+
+Without it, students see "Running code is not available right now." and
+instructors see "Code execution is off. Set CODE_SANDBOX=docker...". Each test
+runs in its own container with **no network, 256 MB of memory (no swap), 0.5
+CPU, 64 processes, a read-only filesystem, all Linux capabilities dropped, an
+unprivileged user and a time limit** (`CODE_TEST_TIMEOUT`, 10 s). The code is
+mounted read-only and copied to a small in-memory scratch folder, so programs
+that save and load files still work and nothing one test writes is seen by the
+next. There is no "run it locally" fallback. Settings: `CODE_SANDBOX`,
+`CODE_TEST_TIMEOUT`, `CODE_SANDBOX_IMAGE`, `CODE_SANDBOX_RUBY_IMAGE`,
+`CODE_SAMPLE_RUNS_PER_HOUR`, `CODE_SAMPLE_MAX_PARALLEL` (see `.env.example`).
+
 ### Semantic code similarity (UniXcoder)
 
 Winnowing fingerprints (Jaccard + containment) catch literal and
@@ -506,7 +578,7 @@ video frame
 analysis, cross-modal consistency, the full pipeline, and the FastAPI
 endpoints including similarity-check and auto-evaluate). The 23 tests
 marked `slow` exercise real models (e.g. `faster-whisper` transcription,
-UniXcoder, a running Ollama) and skip (not fail) when a model can't be
+UniXcoder, a running Ollama, Docker for the code-challenge sandbox) and skip (not fail) when a model can't be
 downloaded or reached, which is exactly what happens in a
 network-restricted sandbox -- they pass in a normal deployment.
 `conftest.py` gives every test run its own empty database and uploads
@@ -558,6 +630,13 @@ rejection), covering the same flow the automated backend tests cover.
   a keyword baseline; `eval/results/models_20261020_182000/`). That run
   used temperature 0, before the sampling settings above; keep
   instructor override as the final word.
+- Code challenges run **Python and Ruby only**; each test starts its own
+  Docker container (about 1-3 seconds), so a long test list takes a while;
+  `exact` matching is strict about inner spaces and wording; and the mark
+  measures only what the tests check, not code quality, style or a report. Each
+  mark is saved one submission at a time ("Mark all" for a class is not built).
+  Sample-run limits reset when the backend restarts. The editor is a plain code
+  box, without syntax colouring.
 - `HeuristicRubricGrader` and the AI-content heuristics are keyword/style
   signals, not semantic understanding or validated classifiers. Treat
   every score and flag as a starting point for human review.
