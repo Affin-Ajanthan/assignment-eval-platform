@@ -92,6 +92,8 @@ export interface Assignment {
   marks_released: boolean;
   /** Test cases for submitted code (instructor view: hidden ones included). */
   test_cases: TestCase[];
+  /** The file the tests run (a name or path in the submission); "" = picked automatically. */
+  test_main_file: string;
 }
 
 /** exact: the whole output (ignoring trailing spaces); contains: the expected text appears in it. */

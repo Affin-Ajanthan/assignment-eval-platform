@@ -33,6 +33,7 @@ type FormState = {
   releaseDate: string; // "" (with releaseTime "") = show each mark as soon as it is saved
   releaseTime: string;
   testCases: TestCaseRow[]; // only used when the assignment accepts code
+  testMainFile: string; // the file the tests run; "" = picked automatically
 };
 
 const TYPE_OPTIONS: { value: SubmissionType; label: string; hint: string }[] = [
@@ -64,6 +65,7 @@ const EMPTY: FormState = {
   releaseDate: "",
   releaseTime: "",
   testCases: [],
+  testMainFile: "",
 };
 
 // Starter code is one source file (not a notebook): the backend's CODE_EXTENSIONS (app/common.py).
@@ -116,6 +118,7 @@ export default function AssignmentsSection({
       releaseDate: release.date,
       releaseTime: release.time,
       testCases: toTestRows(a.test_cases ?? []),
+      testMainFile: a.test_main_file ?? "",
     });
   }
 
@@ -172,6 +175,7 @@ export default function AssignmentsSection({
       // null also clears an earlier date, releasing the marks straight away.
       marks_release_at: release ? release.toISOString() : null,
       test_cases: testPayload.tests,
+      test_main_file: form.types.includes("code") && form.testCases.length > 0 ? form.testMainFile.trim() : "",
     };
     setSaving(true);
     try {
@@ -315,7 +319,28 @@ export default function AssignmentsSection({
         )}
 
         {form.types.includes("code") && (
-          <TestCasesEditor rows={form.testCases} onChange={(rows) => set("testCases", rows)} />
+          <>
+            <TestCasesEditor rows={form.testCases} onChange={(rows) => set("testCases", rows)} />
+            {form.testCases.length > 0 && (
+              <div className="mt-3">
+                <label className="block text-sm font-semibold" htmlFor="test-main-file">
+                  Main file to run <span className="font-normal text-gray-500">(optional)</span>
+                </label>
+                <input
+                  id="test-main-file"
+                  value={form.testMainFile}
+                  maxLength={200}
+                  placeholder="student_management.rb"
+                  onChange={(e) => set("testMainFile", e.target.value)}
+                  className={input}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  The file name (or path) the tests run: Python (.py) and Ruby (.rb) only. Empty: the only Python or
+                  Ruby file in the submission, or one named main, app, run, program or index.
+                </p>
+              </div>
+            )}
+          </>
         )}
 
         <fieldset className="mt-3">

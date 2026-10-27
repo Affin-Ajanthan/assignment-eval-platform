@@ -78,6 +78,8 @@ from .evaluator.pipeline import evaluate_submission as _run_pipeline
 from .evaluator.semantic_consistency import get_consistency_service
 from .evaluator.ai_text_detection import get_ai_text_detector, model_name as ai_text_model_name
 from .evaluator.rubric_grading import Criterion as _EvalCriterion, HeuristicRubricGrader
+from .evaluator import code_testing as _code_testing
+from .evaluator.code_execution import SandboxUnavailable, sandbox_enabled as _sandbox_enabled
 from .models import (
     SUBMISSION_TYPES,
     Assignment,
@@ -124,6 +126,7 @@ add_missing_columns("submissions", {"assignment_id": "INTEGER REFERENCES assignm
 add_missing_columns("grades", {"feedback": "TEXT"})
 add_missing_columns("assignments", {"marks_release_at": "DATETIME"})
 add_missing_columns("assignments", {"test_cases": "JSON"})
+add_missing_columns("assignments", {"test_main_file": "VARCHAR"})
 add_missing_columns("assignments", {"submission_types": "JSON"})
 add_missing_columns("assignments", {"starter_code": "TEXT", "starter_code_filename": "VARCHAR"})
 add_missing_columns("assignments", {"report_template_text": "TEXT", "report_template_filename": "VARCHAR"})
@@ -294,6 +297,8 @@ class AssignmentIn(BaseModel):
     marks_release_at: Optional[datetime] = None
     # Optional test cases for submitted code; needs "code" in submission_types.
     test_cases: list[TestCaseIn] = Field(default_factory=list, max_length=_TEST_CASES_MAX)
+    # The file the tests run (a name or a path in the submission); blank picks it automatically.
+    test_main_file: str = Field(default="", max_length=200)
 
 
 class AssignmentUpdate(BaseModel):
@@ -311,6 +316,7 @@ class AssignmentUpdate(BaseModel):
     marks_release_at: Optional[datetime] = None  # send null explicitly to release marks now
     # Replaces the whole list ([] removes every test); leave out to keep them.
     test_cases: Optional[list[TestCaseIn]] = Field(default=None, max_length=_TEST_CASES_MAX)
+    test_main_file: Optional[str] = Field(default=None, max_length=200)  # "" picks it automatically
 
 
 class AssignmentOut(BaseModel):
@@ -345,6 +351,7 @@ class AssignmentOut(BaseModel):
     marks_released: bool = True  # whether students can see marks and feedback now
     # Every test case, hidden ones included: this is the instructor view only.
     test_cases: list[TestCaseOut] = []
+    test_main_file: str = ""
 
 
 class CriterionMarkOut(BaseModel):
@@ -1261,6 +1268,7 @@ def _assignment_out(db: Session, a: Assignment) -> AssignmentOut:
         marks_release_at=_as_utc(a.marks_release_at),
         marks_released=a.marks_released_at(_utcnow_naive()),
         test_cases=[TestCaseOut(**t) for t in a.test_cases or []],
+        test_main_file=a.test_main_file or "",
     )
 
 
@@ -1379,6 +1387,7 @@ def create_assignment(payload: AssignmentIn, instructor: User = Depends(require_
         student_ai_check=payload.student_ai_check,
         marks_release_at=_to_naive_utc(payload.marks_release_at) if payload.marks_release_at else None,
         test_cases=_clean_test_cases(payload.test_cases, types),
+        test_main_file=payload.test_main_file.strip() or None,
         created_by_id=instructor.id,
     )
     db.add(assignment)
@@ -1474,6 +1483,8 @@ def update_assignment(
         assignment.marks_release_at = _to_naive_utc(release) if release else None
     # Tests can be changed at any time (e.g. to fix an expected output); the
     # list is replaced as a whole. Checked against the types as saved above.
+    if payload.test_main_file is not None:
+        assignment.test_main_file = payload.test_main_file.strip() or None
     if payload.test_cases is not None:
         assignment.test_cases = _clean_test_cases(payload.test_cases, assignment.accepted_types())
     elif assignment.test_cases and "code" not in assignment.accepted_types():
@@ -2800,6 +2811,63 @@ def _run_batch_job(job_id: int) -> None:
             db.commit()
     finally:
         db.close()
+
+
+class TestResultOut(BaseModel):
+    """One test's outcome. This is the instructor view: it includes hidden
+    tests and the expected output."""
+
+    test_id: int
+    name: str
+    visible: bool
+    points: float
+    match: str
+    status: str  # passed | failed | error | timeout
+    passed: bool
+    expected_output: str
+    actual_output: str
+    stderr: str = ""
+
+
+class TestRunOut(BaseModel):
+    submission_id: int
+    file: str  # the file that was run
+    language: str
+    passed: int
+    total: int
+    results: list[TestResultOut]
+
+
+@app.post("/submissions/{submission_id}/run-tests", response_model=TestRunOut)
+def run_submission_tests(
+    submission_id: int, instructor: User = Depends(require_instructor), db: Session = Depends(get_db),
+):
+    """Run the assignment's test cases on this submission's code in the Docker
+    sandbox and return every test's result. Needs CODE_SANDBOX=docker."""
+    submission = db.get(Submission, submission_id)
+    if not submission:
+        raise HTTPException(404, "Submission not found")
+    if submission.subject_id not in instructor_subject_ids(db, instructor):
+        raise HTTPException(403, "You are not assigned to this subject")
+    assignment = submission.assignment
+    if assignment is None or not assignment.test_cases:
+        raise HTTPException(400, "This assignment has no test cases.")
+    if not submission.code_path:
+        raise HTTPException(400, "This submission has no code.")
+    if not _sandbox_enabled():
+        raise HTTPException(503, "Code execution is off. Set CODE_SANDBOX=docker and restart the backend.")
+    try:
+        run = _code_testing.run_tests(
+            BASE_DIR / submission.code_path, assignment.test_cases, main_file=assignment.test_main_file or "")
+    except _code_testing.CodeTestError as exc:
+        raise HTTPException(400, str(exc))
+    except SandboxUnavailable as exc:
+        raise HTTPException(503, str(exc))
+    results = [TestResultOut(**vars(r)) for r in run.results]
+    return TestRunOut(
+        submission_id=submission.id, file=run.file, language=run.language,
+        passed=sum(1 for r in results if r.passed), total=len(results), results=results,
+    )
 
 
 # Student self-checks live in app/routers/self_checks.py.

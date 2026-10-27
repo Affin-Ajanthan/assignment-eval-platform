@@ -174,6 +174,9 @@ class Assignment(Base):
     #   "visible": bool, "points": float}, ...]. "input" is fed to the program's
     # standard input; hidden tests (visible=False) are never shown to students.
     test_cases = Column(JSON, nullable=True)
+    # The file the tests run, e.g. "student_management.rb" (a name or a path
+    # inside the submission). NULL: the only Python/Ruby file, or a main.* one.
+    test_main_file = Column(String, nullable=True)
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
