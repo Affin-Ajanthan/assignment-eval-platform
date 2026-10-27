@@ -146,7 +146,45 @@ export interface StudentAssignment {
   student_ai_check: boolean;
   /** Set only while marks are held back: when they will be released. */
   marks_release_at: string | null;
+  /** The visible tests, as examples; hidden tests are never sent, only counted. */
+  sample_tests: SampleTest[];
+  hidden_test_count: number;
   my_submission: MySubmission | null;
+}
+
+/** A visible test as a student sees it. */
+export interface SampleTest {
+  name: string;
+  input: string;
+  expected_output: string;
+  match: TestMatch;
+  points: number;
+}
+
+/** One test's outcome from POST /submissions/{id}/run-tests (instructor view). */
+export interface TestResult {
+  test_id: number;
+  name: string;
+  visible: boolean;
+  points: number;
+  match: TestMatch;
+  status: "passed" | "failed" | "error" | "timeout";
+  passed: boolean;
+  expected_output: string;
+  actual_output: string;
+  stderr: string;
+}
+
+export interface TestRun {
+  submission_id: number;
+  /** The file that was run, relative to the submission's code folder. */
+  file: string;
+  language: string;
+  passed: number;
+  total: number;
+  earned_points: number;
+  total_points: number;
+  results: TestResult[];
 }
 
 export interface Submission {

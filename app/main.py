@@ -379,6 +379,16 @@ class MySubmissionOut(BaseModel):
     can_edit: bool  # assignment open and not yet graded
 
 
+class SampleTestOut(BaseModel):
+    """A visible test as a student sees it."""
+
+    name: str
+    input: str
+    expected_output: str
+    match: str
+    points: float
+
+
 class StudentAssignmentOut(BaseModel):
     id: int
     subject_id: int
@@ -395,6 +405,10 @@ class StudentAssignmentOut(BaseModel):
     student_ai_check: bool = True
     # Set only while marks are still held back: when they will be released.
     marks_release_at: Optional[UTCDateTime] = None
+    # The tests marked visible, as examples for the student; hidden tests are
+    # never sent, only how many there are.
+    sample_tests: list[SampleTestOut] = []
+    hidden_test_count: int = 0
     my_submission: Optional[MySubmissionOut]
 
 
@@ -1363,6 +1377,9 @@ def _student_assignment_out(db: Session, student: User, a: Assignment, now: date
         student_similarity_check=_on(a.student_similarity_check),
         student_ai_check=_on(a.student_ai_check),
         marks_release_at=None if a.marks_released_at(now) else _as_utc(a.marks_release_at),
+        sample_tests=[SampleTestOut(**{k: t[k] for k in SampleTestOut.model_fields})
+                      for t in a.test_cases or [] if t.get("visible")],
+        hidden_test_count=sum(1 for t in a.test_cases or [] if not t.get("visible")),
         my_submission=_my_submission_out(mine, status == "open", now) if mine else None,
     )
 

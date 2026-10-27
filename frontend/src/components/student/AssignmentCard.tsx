@@ -55,6 +55,41 @@ export default function AssignmentCard({
         </div>
       )}
 
+      {(a.sample_tests.length > 0 || a.hidden_test_count > 0) && (
+        <div className="mt-3" data-testid="sample-tests">
+          <p className="text-sm font-semibold">Tests for your code</p>
+          <p className="text-xs text-gray-500">
+            Your code is run with each test&apos;s input and its output is compared with the expected output.
+            {a.hidden_test_count > 0 &&
+              ` ${a.hidden_test_count} more test${a.hidden_test_count === 1 ? " is" : "s are"} hidden and used only for marking.`}
+          </p>
+          {a.sample_tests.map((t, i) => (
+            <details key={i} className="mt-2 rounded-md border border-gray-200 bg-gray-50">
+              <summary className="cursor-pointer px-3 py-1.5 text-sm">
+                <span className="font-semibold">{t.name}</span>{" "}
+                <span className="text-xs text-gray-500">
+                  {t.points} point{t.points === 1 ? "" : "s"} · {t.match === "contains" ? "output contains" : "exact output"}
+                </span>
+              </summary>
+              <div className="grid gap-2 px-3 pb-2 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-gray-600">Input</p>
+                  <pre className="mt-1 overflow-auto whitespace-pre-wrap rounded border border-gray-200 bg-white p-2 font-mono text-xs">
+                    {t.input === "" ? "(none)" : t.input}
+                  </pre>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-gray-600">Expected output</p>
+                  <pre className="mt-1 overflow-auto whitespace-pre-wrap rounded border border-gray-200 bg-white p-2 font-mono text-xs">
+                    {t.expected_output}
+                  </pre>
+                </div>
+              </div>
+            </details>
+          ))}
+        </div>
+      )}
+
       <dl className="mt-3 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[max-content_1fr]">
         <dt className="font-semibold">Available from</dt>
         <dd>{formatDateTime(a.available_from)}</dd>

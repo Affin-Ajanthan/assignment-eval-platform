@@ -298,7 +298,7 @@ def test_student_sees_open_and_past_assignments_but_not_upcoming_ones():
     assert set(open_one) == {"id", "subject_id", "subject_name", "name", "description", "available_from",
                              "deadline", "status", "submission_types", "code_languages",
                                  "student_similarity_check", "student_ai_check", "marks_release_at",
-                                 "my_submission"}
+                                 "sample_tests", "hidden_test_count", "my_submission"}
 
 
 def test_backend_enforces_the_submission_window():
@@ -655,3 +655,26 @@ def test_students_never_receive_test_cases():
     student_views = json.dumps([client.get("/assignments", headers=H(stok)).json(),
                                 client.get(f"/assignments/{a['id']}", headers=H(stok)).json()])
     assert "SECRET-EMPTY-LIST" not in student_views and "test_cases" not in student_views
+
+
+def test_students_see_the_visible_tests_as_samples_and_only_a_count_of_the_hidden_ones():
+    subject, itok, stok = setup_subject_with_users(client)
+    tests = SORT_TESTS + [{"input": "HIDDEN-INPUT", "expected_output": "HIDDEN-EXPECTED", "points": 4}]
+    a = client.post("/assignments", headers=H(itok), json={
+        "subject_id": subject["id"], "name": "Samples", "available_from": _iso(timedelta(hours=-1)),
+        "deadline": _iso(timedelta(days=7)), "test_cases": tests}).json()
+
+    mine = client.get("/assignments", headers=H(stok)).json()[0]
+    assert mine["sample_tests"] == [{"name": "Sorts three numbers", "input": "3\n2 3 1\n",
+                                     "expected_output": "1 2 3", "match": "exact", "points": 2}]
+    assert mine["hidden_test_count"] == 2
+    # Hidden tests: nothing but the count, in any student view.
+    student_views = json.dumps([client.get("/assignments", headers=H(stok)).json(),
+                                client.get(f"/assignments/{a['id']}", headers=H(stok)).json()])
+    for secret in ("SECRET-EMPTY-LIST", "HIDDEN-INPUT", "HIDDEN-EXPECTED"):
+        assert secret not in student_views, secret
+
+    # An assignment without tests shows none.
+    client.put(f"/assignments/{a['id']}", headers=H(itok), json={"test_cases": []})
+    plain = client.get("/assignments", headers=H(stok)).json()[0]
+    assert (plain["sample_tests"], plain["hidden_test_count"]) == ([], 0)
