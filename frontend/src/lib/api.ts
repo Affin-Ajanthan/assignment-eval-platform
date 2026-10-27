@@ -210,6 +210,8 @@ export interface TestRun {
   language: string;
   passed: number;
   total: number;
+  /** True when the score was saved as the submission's mark (mark-from-tests). */
+  saved: boolean;
   earned_points: number;
   total_points: number;
   results: TestResult[];

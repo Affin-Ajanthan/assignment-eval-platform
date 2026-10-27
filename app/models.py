@@ -256,6 +256,13 @@ class Submission(Base):
     video_path = Column(String, nullable=True)
     submitted_at = Column(DateTime, default=_utcnow)
     status = Column(String, default="submitted")  # submitted | graded
+    # A code challenge is marked by its tests, not a rubric: when the instructor
+    # runs them as the mark, the points of the tests passed (test_earned) out of
+    # all the tests' points (test_total) are saved here, and `final_mark` /
+    # `max_mark` use them. NULL until then.
+    test_earned = Column(Float, nullable=True)
+    test_total = Column(Float, nullable=True)
+    tests_run_at = Column(DateTime, nullable=True)
 
     # Oldest first; re-grading adds a row, so the last one is the current grade.
     grades = relationship("Grade", back_populates="submission", order_by="Grade.id")
@@ -274,12 +281,22 @@ class Submission(Base):
                                         ("video", self.video_path)) if path]
 
     @property
+    def marked_by_tests(self) -> bool:
+        """A code challenge whose tests have been run as the mark."""
+        return (self.test_total is not None and self.assignment is not None
+                and self.assignment.kind == "code_challenge")
+
+    @property
     def final_mark(self) -> float | None:
+        if self.marked_by_tests:
+            return self.test_earned
         grade = self.latest_grade
         return grade.total_score if grade else None
 
     @property
     def max_mark(self) -> float | None:
+        if self.marked_by_tests:
+            return self.test_total
         grade = self.latest_grade
         return grade.rubric.max_total if grade and grade.rubric else None
 

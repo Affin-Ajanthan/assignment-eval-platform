@@ -260,6 +260,14 @@ export default function InstructorPage() {
     () => Array.from(new Set(submissions.map((s) => s.assignment_name))),
     [submissions]
   );
+  // "Evaluate a whole assignment" grades with a rubric, which a code challenge does not have.
+  const rubricAssignmentNames = useMemo(
+    () =>
+      assignmentNames.filter(
+        (n) => !assignments.some((a) => a.name === n && a.assignment_type === "code_challenge"),
+      ),
+    [assignmentNames, assignments]
+  );
   useEffect(() => {
     if (assignmentNames.length && !assignmentNames.includes(similarityAssignment)) {
       setSimilarityAssignment(assignmentNames[0]);
@@ -755,7 +763,7 @@ export default function InstructorPage() {
           {subjectId !== null && (
             <BatchEvaluateSection
               subjectId={subjectId}
-              assignmentNames={assignmentNames}
+              assignmentNames={rubricAssignmentNames}
               assignments={assignments}
               rubrics={rubrics}
             />
@@ -939,13 +947,16 @@ export default function InstructorPage() {
                       <td className="border border-gray-200 px-3 py-1.5">{formatMark(s.final_mark, s.max_mark)}</td>
                       <td className="border border-gray-200 px-3 py-1.5">
                         <div className="flex gap-1 whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => confirmDiscardThen(() => openGradingPanel(s.id))}
-                            className="rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700"
-                          >
-                            {s.status === "graded" ? "Re-grade" : "Grade"}
-                          </button>
+                          {/* A code challenge is marked from its tests (Tests button), not with the rubric form. */}
+                          {!isCodeChallenge(s.assignment_id) && (
+                            <button
+                              type="button"
+                              onClick={() => confirmDiscardThen(() => openGradingPanel(s.id))}
+                              className="rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+                            >
+                              {s.status === "graded" ? "Re-grade" : "Grade"}
+                            </button>
+                          )}
                           {!isCodeChallenge(s.assignment_id) && (
                             <button
                               type="button"
@@ -981,7 +992,14 @@ export default function InstructorPage() {
                               Close
                             </button>
                           </div>
-                          <TestRunPanel submissionId={s.id} testCount={testCountFor(s.assignment_id)} />
+                          <TestRunPanel
+                            submissionId={s.id}
+                            testCount={testCountFor(s.assignment_id)}
+                            isChallenge={isCodeChallenge(s.assignment_id)}
+                            onSaved={() => {
+                              if (subjectId !== null) void loadSubmissions(subjectId);
+                            }}
+                          />
                         </td>
                       </tr>
                     )}

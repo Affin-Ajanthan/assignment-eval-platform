@@ -391,3 +391,119 @@ def test_real_docker_runs_a_ruby_menu_program(tmp_path):
     run = ct.run_tests(tmp_path, tests, main_file="menu.rb")
     assert run.file == "Source/menu.rb" and run.language == "ruby"
     assert [r.passed for r in run.results] == [True, False]  # exact fails: the menu text is part of the output
+
+
+# --------------------------------------------------------------------------
+# Marking a code challenge from its tests
+# --------------------------------------------------------------------------
+
+
+def _fake_run(passing_ids):
+    """A run_tests that passes the tests whose ids are in `passing_ids`."""
+    def run(code_dir, tests, *, main_file="", **kwargs):
+        results = [ct.TestResult(test_id=t["id"], name=t["name"], visible=t["visible"], points=t["points"],
+                                 match=t["match"], status="passed" if t["id"] in passing_ids else "failed",
+                                 passed=t["id"] in passing_ids, expected_output=t["expected_output"],
+                                 actual_output="") for t in tests]
+        return ct.TestRun(file="main.py", language="python", results=results)
+    return run
+
+
+def _challenge_submission(name):
+    """A challenge with API_TESTS (2 + 1 points) and one student's submission to it."""
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _assignment_with_tests(subject, itok, name, API_TESTS)
+    r = submit(client, subject["id"], name, {"code": ("main.py", io.BytesIO(b"print(1)\n"), "text/x-python")},
+               student_tok=stok)
+    assert r.status_code == 200, r.text
+    return subject, itok, stok, assignment, r.json()["id"]
+
+
+def _mark(submission_id, itok):
+    return client.post(f"/submissions/{submission_id}/mark-from-tests", headers=auth_headers(itok))
+
+
+def test_marking_from_the_tests_saves_the_points_as_the_mark_the_student_sees(monkeypatch):
+    subject, itok, stok, assignment, sub_id = _challenge_submission("Marked by tests")
+    monkeypatch.setenv("CODE_SANDBOX", "docker")
+    monkeypatch.setattr(main._code_testing, "run_tests", _fake_run({1}))  # test 1 (2 points) passes, test 2 (1 point) fails
+
+    r = _mark(sub_id, itok)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert (body["saved"], body["earned_points"], body["total_points"], body["passed"], body["total"]) == (
+        True, 2, 3, 1, 2)
+
+    mine = client.get(f"/submissions/{sub_id}", headers=auth_headers(itok)).json()
+    assert (mine["status"], mine["final_mark"], mine["max_mark"]) == ("graded", 2, 3)
+    seen = client.get("/assignments", headers=auth_headers(stok)).json()[0]["my_submission"]
+    assert (seen["status"], seen["final_mark"], seen["max_mark"], seen["can_edit"]) == ("graded", 2, 3, False)
+    assert (seen["criterion_marks"], seen["feedback"]) == ([], None)  # no rubric, so no per-criterion marks
+    listed = client.get("/submissions", headers=auth_headers(stok)).json()
+    assert [(s["final_mark"], s["max_mark"]) for s in listed] == [(2, 3)]
+
+    # Running again replaces the mark.
+    monkeypatch.setattr(main._code_testing, "run_tests", _fake_run({1, 2}))
+    assert _mark(sub_id, itok).json()["earned_points"] == 3
+    assert client.get(f"/submissions/{sub_id}", headers=auth_headers(itok)).json()["final_mark"] == 3
+
+
+def test_just_running_the_tests_does_not_change_the_mark(monkeypatch):
+    subject, itok, stok, assignment, sub_id = _challenge_submission("Run only")
+    monkeypatch.setenv("CODE_SANDBOX", "docker")
+    monkeypatch.setattr(main._code_testing, "run_tests", _fake_run({1, 2}))
+
+    r = client.post(f"/submissions/{sub_id}/run-tests", headers=auth_headers(itok))
+    assert r.status_code == 200 and r.json()["saved"] is False
+    after = client.get(f"/submissions/{sub_id}", headers=auth_headers(itok)).json()
+    assert (after["status"], after["final_mark"], after["max_mark"]) == ("submitted", None, None)
+
+
+def test_a_tests_mark_is_held_back_until_the_release_date(monkeypatch):
+    subject, itok, stok, assignment, sub_id = _challenge_submission("Held back")
+    monkeypatch.setenv("CODE_SANDBOX", "docker")
+    monkeypatch.setattr(main._code_testing, "run_tests", _fake_run({1}))
+    put = lambda body: client.put(f"/assignments/{assignment['id']}", headers=auth_headers(itok), json=body)  # noqa: E731
+    later = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
+    assert put({"marks_release_at": later}).status_code == 200
+    assert _mark(sub_id, itok).status_code == 200
+
+    hidden = client.get("/assignments", headers=auth_headers(stok)).json()[0]["my_submission"]
+    assert (hidden["status"], hidden["final_mark"], hidden["max_mark"]) == ("submitted", None, None)
+    assert client.get(f"/submissions/{sub_id}", headers=auth_headers(stok)).json()["final_mark"] is None
+
+    assert put({"marks_release_at": None}).status_code == 200  # release: the same saved mark appears
+    shown = client.get("/assignments", headers=auth_headers(stok)).json()[0]["my_submission"]
+    assert (shown["status"], shown["final_mark"], shown["max_mark"]) == ("graded", 2, 3)
+
+
+def test_marking_follows_the_same_access_rules_as_running_the_tests(monkeypatch):
+    from tests.auth_helpers import new_student
+
+    subject, itok, stok, assignment, sub_id = _challenge_submission("Mark access")
+    monkeypatch.setenv("CODE_SANDBOX", "docker")
+    monkeypatch.setattr(main._code_testing, "run_tests", _fake_run({1}))
+    _, other_itok, _ = setup_subject_with_users(client)
+    assert _mark(sub_id, other_itok).status_code == 403                       # another subject's instructor
+    assert _mark(sub_id, new_student(client, subject["id"])).status_code == 403  # a student
+    assert client.post("/submissions/999999/mark-from-tests", headers=auth_headers(itok)).status_code == 404
+    monkeypatch.delenv("CODE_SANDBOX")
+    assert _mark(sub_id, itok).status_code == 503                             # sandbox off: nothing is marked
+    assert client.get(f"/submissions/{sub_id}", headers=auth_headers(itok)).json()["final_mark"] is None
+
+
+def test_a_code_challenge_cannot_be_marked_with_a_rubric(monkeypatch):
+    subject, itok, stok, assignment, sub_id = _challenge_submission("No rubric marking")
+    rubric = client.post("/rubrics", headers=auth_headers(itok), json={
+        "name": "R", "subject_id": subject["id"], "criteria": [{"name": "Only", "max_points": 10}]}).json()
+    h = auth_headers(itok)
+
+    grade = client.post(f"/submissions/{sub_id}/grade", headers=h,
+                        json={"rubric_id": rubric["id"], "criterion_scores": {"Only": 5}})
+    assert grade.status_code == 400 and "marked from its tests" in grade.json()["detail"]
+    assert client.post(f"/submissions/{sub_id}/auto-evaluate", headers=h,
+                       json={"rubric_id": rubric["id"]}).status_code == 400
+    name = "No rubric marking"
+    batch = client.post(f"/subjects/{subject['id']}/assignments/{name}/auto-evaluate/jobs", headers=h,
+                        json={"rubric_id": rubric["id"]})
+    assert batch.status_code == 400 and "marked from its tests" in batch.json()["detail"]

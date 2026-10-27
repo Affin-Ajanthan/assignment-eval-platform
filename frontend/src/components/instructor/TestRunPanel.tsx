@@ -64,17 +64,39 @@ function TestRow({ r }: { r: TestResult }) {
  * Docker sandbox) and shows each test's expected and actual output. This is the
  * instructor's view: hidden tests are included and marked as hidden.
  */
-export default function TestRunPanel({ submissionId, testCount }: { submissionId: number; testCount: number }) {
+export default function TestRunPanel({
+  submissionId,
+  testCount,
+  isChallenge,
+  onSaved,
+}: {
+  submissionId: number;
+  testCount: number;
+  /** A code challenge is marked from its tests: the panel can save the score as the mark. */
+  isChallenge: boolean;
+  /** Called after a mark was saved, so the submissions table shows it. */
+  onSaved: () => void;
+}) {
   const [run, setRun] = useState<TestRun | null>(null);
   const [running, setRunning] = useState(false);
   const [msg, setMsg] = useState<MessageState>(null);
 
-  async function start() {
+  /** Run the tests; with `save`, also keep the points of the tests passed as the submission's mark. */
+  async function start(save: boolean) {
     setMsg(null);
     setRun(null);
     setRunning(true);
     try {
-      setRun(await apiFetch<TestRun>(`/submissions/${submissionId}/run-tests`, { method: "POST" }));
+      const path = save ? "mark-from-tests" : "run-tests";
+      const result = await apiFetch<TestRun>(`/submissions/${submissionId}/${path}`, { method: "POST" });
+      setRun(result);
+      if (result.saved) {
+        setMsg({
+          text: `Saved as this submission's mark: ${num(result.earned_points)} / ${num(result.total_points)}.`,
+          kind: "success",
+        });
+        onSaved();
+      }
     } catch (err) {
       setMsg({ text: err instanceof Error ? err.message : String(err), kind: "error" });
     } finally {
@@ -82,16 +104,30 @@ export default function TestRunPanel({ submissionId, testCount }: { submissionId
     }
   }
 
+  const button = "rounded-md px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60";
   return (
     <div data-testid="test-run-panel">
-      <button
-        type="button"
-        onClick={start}
-        disabled={running}
-        className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-      >
-        {running ? "Running…" : run ? "Run again" : `Run ${testCount} test${testCount === 1 ? "" : "s"}`}
-      </button>
+      <div className="flex flex-wrap gap-2">
+        {isChallenge && (
+          <button
+            type="button"
+            onClick={() => start(true)}
+            disabled={running}
+            title="Runs every test and saves the points of the tests passed as the mark, replacing any earlier mark"
+            className={`${button} bg-blue-600 hover:bg-blue-700`}
+          >
+            {running ? "Running…" : `Run ${testCount} test${testCount === 1 ? "" : "s"} and save as mark`}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => start(false)}
+          disabled={running}
+          className={`${button} ${isChallenge ? "bg-gray-600 hover:bg-gray-700" : "bg-blue-600 hover:bg-blue-700"}`}
+        >
+          {running ? "Running…" : isChallenge ? "Run without saving" : run ? "Run again" : `Run ${testCount} test${testCount === 1 ? "" : "s"}`}
+        </button>
+      </div>
       {running && (
         <p className="mt-2 text-xs text-gray-600">
           Running each test in the sandbox: this takes a few seconds per test. Keep this page open.

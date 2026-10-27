@@ -125,6 +125,7 @@ add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON", "ai_
 add_missing_columns("submissions", {"assignment_id": "INTEGER REFERENCES assignments(id)"})
 add_missing_columns("grades", {"feedback": "TEXT"})
 add_missing_columns("assignments", {"marks_release_at": "DATETIME"})
+add_missing_columns("submissions", {"test_earned": "FLOAT", "test_total": "FLOAT", "tests_run_at": "DATETIME"})
 add_missing_columns("assignments", {"test_cases": "JSON"})
 add_missing_columns("assignments", {"test_main_file": "VARCHAR"})
 add_missing_columns("assignments", {"assignment_type": "VARCHAR NOT NULL DEFAULT 'submission'"})
@@ -793,6 +794,8 @@ def _require_assignment_rubric(submission: Submission, rubric: Rubric) -> None:
     only, so marks never end up on another rubric. Without one, any rubric of the
     subject is allowed."""
     assignment = submission.assignment
+    if assignment is not None and assignment.kind == "code_challenge":
+        raise HTTPException(400, "A code challenge is marked from its tests, not with a rubric.")
     if assignment is not None and assignment.rubric_id is not None and assignment.rubric_id != rubric.id:
         raise HTTPException(
             400, f"This assignment is graded with the rubric '{assignment.rubric.name}', not '{rubric.name}'"
@@ -2602,6 +2605,9 @@ def _create_batch_job(
     )
     if not total:
         raise HTTPException(404, "No submissions found for this assignment")
+    named = db.query(Assignment).filter(Assignment.subject_id == subject_id, Assignment.name == assignment_name).first()
+    if named is not None and named.kind == "code_challenge":
+        raise HTTPException(400, "A code challenge is marked from its tests, not with a rubric.")
     # One run per assignment at a time: a second one would grade the same
     # submissions again, in parallel, for nothing.
     active = (
@@ -2890,17 +2896,15 @@ class TestRunOut(BaseModel):
     language: str
     passed: int  # tests passed
     total: int  # tests run
+    saved: bool = False  # true when the score was saved as the submission's mark
     earned_points: float  # points of the tests that passed
     total_points: float  # points of every test run
     results: list[TestResultOut]
 
 
-@app.post("/submissions/{submission_id}/run-tests", response_model=TestRunOut)
-def run_submission_tests(
-    submission_id: int, instructor: User = Depends(require_instructor), db: Session = Depends(get_db),
-):
-    """Run the assignment's test cases on this submission's code in the Docker
-    sandbox and return every test's result. Needs CODE_SANDBOX=docker."""
+def _run_tests_for(db: Session, instructor: User, submission_id: int, *, challenge_only: bool = False):
+    """Check access, then run the assignment's tests on a submission's code in
+    the Docker sandbox. Returns (submission, run, score)."""
     submission = db.get(Submission, submission_id)
     if not submission:
         raise HTTPException(404, "Submission not found")
@@ -2909,6 +2913,8 @@ def run_submission_tests(
     assignment = submission.assignment
     if assignment is None or not assignment.test_cases:
         raise HTTPException(400, "This assignment has no test cases.")
+    if challenge_only and assignment.kind != "code_challenge":
+        raise HTTPException(400, "Only a code challenge is marked from its tests.")
     if not submission.code_path:
         raise HTTPException(400, "This submission has no code.")
     if not _sandbox_enabled():
@@ -2920,12 +2926,41 @@ def run_submission_tests(
         raise HTTPException(400, str(exc))
     except SandboxUnavailable as exc:
         raise HTTPException(503, str(exc))
-    score = _code_testing.score_run(run.results)
+    return submission, run, _code_testing.score_run(run.results)
+
+
+def _test_run_out(submission: Submission, run, score, *, saved: bool = False) -> TestRunOut:
     return TestRunOut(
-        submission_id=submission.id, file=run.file, language=run.language,
+        submission_id=submission.id, file=run.file, language=run.language, saved=saved,
         passed=score.passed, total=score.count, earned_points=score.earned, total_points=score.total,
         results=[TestResultOut(**vars(r)) for r in run.results],
     )
+
+
+@app.post("/submissions/{submission_id}/run-tests", response_model=TestRunOut)
+def run_submission_tests(
+    submission_id: int, instructor: User = Depends(require_instructor), db: Session = Depends(get_db),
+):
+    """Run the assignment's test cases on this submission's code in the Docker
+    sandbox and return every test's result. Changes nothing. Needs CODE_SANDBOX=docker."""
+    submission, run, score = _run_tests_for(db, instructor, submission_id)
+    return _test_run_out(submission, run, score)
+
+
+@app.post("/submissions/{submission_id}/mark-from-tests", response_model=TestRunOut)
+def mark_submission_from_tests(
+    submission_id: int, instructor: User = Depends(require_instructor), db: Session = Depends(get_db),
+):
+    """Run the tests (as run-tests does) and save the points of the tests passed
+    as this code challenge submission's mark, e.g. 12 of 16. Running again
+    replaces the mark. The student sees it like any other mark, once the
+    assignment's marks are released."""
+    submission, run, score = _run_tests_for(db, instructor, submission_id, challenge_only=True)
+    submission.test_earned, submission.test_total = score.earned, score.total
+    submission.tests_run_at = _utcnow_naive()
+    submission.status = "graded"
+    db.commit()
+    return _test_run_out(submission, run, score, saved=True)
 
 
 # Student self-checks live in app/routers/self_checks.py.
