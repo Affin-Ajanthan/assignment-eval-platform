@@ -566,7 +566,8 @@ def test_marks_and_feedback_are_hidden_from_students_until_the_release_date():
     assert len(client.get("/submissions?status=submitted", headers=H(stok)).json()) == 1
     hidden_views = json.dumps([client.get("/assignments", headers=H(stok)).json(), listed, detail,
                                client.get(f"/assignments/{a['id']}", headers=H(stok)).json()])
-    assert "HELD-BACK" not in hidden_views and "34" not in hidden_views
+    # Look for the mark as a mark: a bare "34" also matches timestamps like 10:34:59.
+    assert "HELD-BACK" not in hidden_views and '"final_mark": 34' not in hidden_views
 
     # The instructor still sees everything.
     assert client.get(f"/submissions/{sub['id']}/grade", headers=H(itok)).json()["total_score"] == 34
