@@ -2930,3 +2930,8 @@ def run_submission_tests(
 from .routers.self_checks import router as _self_check_router  # noqa: E402  (after `app` exists)
 
 app.include_router(_self_check_router)
+
+# Students run their typed code against a code challenge's visible tests: app/routers/sample_runs.py.
+from .routers.sample_runs import router as _sample_run_router  # noqa: E402
+
+app.include_router(_sample_run_router)
