@@ -536,6 +536,8 @@ export interface SelfCheckResult {
   band?: SelfCheckBand;
   compared?: number;
   similar_submissions?: number;
+  /** Too few submissions to say what is normal for the class: fixed limits were used. Absent on older results. */
+  small_class?: boolean;
   highlights?: { file: string; start_line: number; end_line: number; text: string; truncated: boolean }[];
   passages?: string[];
   note?: string;

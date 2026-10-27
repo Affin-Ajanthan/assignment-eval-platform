@@ -51,3 +51,28 @@ def test_manifest_is_well_formed():
         if s.get("report_groups"):
             assert all("report" in files for files in s["students"].values()), s["name"]
         assert all("code" in files for files in s["students"].values()), s["name"]
+
+
+def test_sample_subsets_are_seeded_unique_and_built_around_copies():
+    ids = [str(i) for i in range(1, 11)]
+    groups = [["1", "2", "3"], ["5", "6"]]
+    a = ev.sample_subsets(ids, groups, 3, 20, seed=7)
+    assert a == ev.sample_subsets(ids, groups, 3, 20, seed=7)      # same seed, same classes
+    assert a != ev.sample_subsets(ids, groups, 3, 20, seed=8)
+    assert len(a) == len(set(a)) == 20 and all(len(s) == 3 and len(set(s)) == 3 for s in a)
+    pairs = ev.positive_pairs(groups)
+    with_copy = [s for s in a if any(frozenset(p) in pairs for p in __import__("itertools").combinations(s, 2))]
+    assert len(with_copy) >= 10                                      # every other class is built around a copy
+    # asking for more classes than exist stops instead of looping forever
+    assert len(ev.sample_subsets(ids, groups, 2, 500, seed=1)) <= 45
+    assert ev.sample_subsets(ids, None, 2, 5, seed=1)               # no known copies: uniform draws only
+
+
+def test_tally_counts_each_pair_under_the_old_and_new_rule():
+    counts = {}
+    ev.tally(counts, copy=True, old_band="low", new_band="moderate")    # a copy the new rule catches
+    ev.tally(counts, copy=True, old_band="high", new_band="high")
+    ev.tally(counts, copy=False, old_band="low", new_band="low")
+    ev.tally(counts, copy=False, old_band="low", new_band="moderate")   # an honest pair newly flagged
+    assert counts == {"pairs": 4, "copy": 2, "copy_old": 1, "copy_new": 2,
+                      "honest": 2, "honest_old": 0, "honest_new": 1}

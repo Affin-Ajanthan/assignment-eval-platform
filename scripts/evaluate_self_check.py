@@ -17,11 +17,19 @@ Reports, per set and overall:
   - every missed copy and every false alarm, with its scores.
 Known-hard cases (partial or restructured copies) are listed separately.
 
+Small classes (--class-size 2 3 4): instead of each whole set, draw random
+classes of that many students from every set (seeded; half are built around a
+known copy so there is something to find) and compare the old Moderate rule
+(always relative to the class median) with the current one (code: fixed floors
+for a single pair; reports: fixed floors below 10 pairs). Reports, per size,
+copies caught and honest pairs flagged under each rule.
+
 Nothing is stored and the app's database is never touched.
 
 Examples:
     python scripts/evaluate_self_check.py --data-root "C:/Users/me/OneDrive/Desktop/checksim/submisstions"
     python scripts/evaluate_self_check.py --data-root ... --set PHP --no-semantic
+    python scripts/evaluate_self_check.py --data-root ... --class-size 2 3 4 --samples 40 --seed 1
 """
 
 from __future__ import annotations
@@ -29,6 +37,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import shutil
 import sys
 import tempfile
@@ -68,6 +77,39 @@ def add(total: dict, part: dict) -> None:
     tp, fp, fn = total["tp"], total["fp"], total["fn"]
     total["precision"] = round(tp / (tp + fp), 3) if tp + fp else None
     total["recall"] = round(tp / (tp + fn), 3) if tp + fn else None
+
+
+def sample_subsets(ids: list[str], groups: list[list[str]] | None, size: int, samples: int,
+                   seed: int) -> list[tuple[str, ...]]:
+    """Seeded random classes of ``size`` students, without repeats. Every other
+    class is built around a known copy pair (when the set has one), so copies
+    are present to be found; the rest are uniform draws."""
+    rng = random.Random(seed)
+    pairs = sorted(tuple(sorted(p, key=_num)) for p in positive_pairs(groups))
+    out: list[tuple[str, ...]] = []
+    seen: set[tuple[str, ...]] = set()
+    attempts = 0
+    while len(out) < samples and attempts < samples * 30:
+        attempts += 1
+        if pairs and size >= 2 and len(out) % 2 == 0:
+            base = list(rng.choice(pairs))
+            chosen = base + rng.sample([i for i in ids if i not in base], size - 2)
+        else:
+            chosen = rng.sample(ids, size)
+        key = tuple(sorted(chosen, key=_num))
+        if key not in seen:
+            seen.add(key)
+            out.append(key)
+    return out
+
+
+def tally(counts: dict, copy: bool, old_band: str, new_band: str) -> None:
+    """One pair under the old and the new Moderate rule (flagged = Moderate or High)."""
+    counts["pairs"] = counts.get("pairs", 0) + 1
+    key = "copy" if copy else "honest"
+    counts[key] = counts.get(key, 0) + 1
+    counts[f"{key}_old"] = counts.get(f"{key}_old", 0) + (old_band in FLAGGED)
+    counts[f"{key}_new"] = counts.get(f"{key}_new", 0) + (new_band in FLAGGED)
 
 
 def pct(x) -> str:
@@ -188,6 +230,72 @@ def _summarise(spec, part, bands, truth_pairs, pair_rows, extra) -> dict:
     }
 
 
+def evaluate_small_classes(specs: list[dict], data_root: Path, sizes: list[int], samples: int, seed: int,
+                           semantic: bool, work: Path) -> dict:
+    """Old vs new Moderate rule on random small classes drawn from the labelled sets."""
+    from app import self_checks
+    from app.evaluator.semantic_consistency import get_consistency_service
+    from app.similarity import report_similarity as report_sim
+    from app.similarity_runs import code_similarity_for_dirs, report_text_for_path
+
+    counts: dict[tuple[str, int], dict] = {}
+    for spec in specs:
+        dirs = {}
+        for sid, files in spec["students"].items():
+            src = data_root / files["code"]
+            if not src.exists():
+                raise SystemExit(f"[{spec['name']}] student {sid}: not found: {src}")
+            dirs[sid] = _prepare(src, work / spec["name"].replace(" ", "_"), sid)
+        ids = sorted(dirs, key=_num)
+        texts = {}
+        if spec.get("report_groups"):
+            for sid, files in spec["students"].items():
+                text, _ = report_text_for_path(data_root / files["report"])
+                if text is not None:
+                    texts[sid] = text
+        code_truth = positive_pairs(spec["code_groups"])
+        report_truth = positive_pairs(spec.get("report_groups"))
+        for size in sizes:
+            if size > len(ids):
+                continue
+            subsets = sample_subsets(ids, spec["code_groups"], size, samples, seed)
+            print(f"== {spec['name']}: {len(subsets)} classes of {size}", flush=True)
+            for subset in subsets:
+                run = code_similarity_for_dirs({s: dirs[s] for s in subset}, remove_common=True)
+                old, new = self_checks.code_class_lines(run.pairs), self_checks.code_moderate_lines(run.pairs)
+                for p in run.pairs:
+                    tally(counts.setdefault(("code", size), {}),
+                          frozenset((p.submission_a, p.submission_b)) in code_truth,
+                          self_checks.code_pair_band(p, old), self_checks.code_pair_band(p, new))
+            if texts and size <= len(texts):
+                for subset in sample_subsets(sorted(texts, key=_num), spec["report_groups"], size, samples, seed):
+                    cmp = report_sim.compare_reports({s: texts[s] for s in subset},
+                                                     get_consistency_service() if semantic else None)
+                    old, new = self_checks.report_class_lines(cmp.pairs), self_checks.report_moderate_lines(cmp.pairs)
+                    for p in cmp.pairs:
+                        cov = max(p.coverage_a, p.coverage_b)
+                        tally(counts.setdefault(("report", size), {}),
+                              frozenset((p.submission_a, p.submission_b)) in report_truth,
+                              self_checks.report_pair_band(p, cov, old), self_checks.report_pair_band(p, cov, new))
+    return {f"{part}:{size}": c for (part, size), c in sorted(counts.items())}
+
+
+def small_class_markdown(result: dict, sizes: list[int], samples: int, seed: int, semantic: bool) -> str:
+    out = [f"# Self-check similarity, small classes — {datetime.now():%Y-%m-%d %H:%M}", "",
+           f"Random classes of {', '.join(map(str, sizes))} students per set (up to {samples} each, seed {seed}; "
+           f"half built around a known copy). Mode: {'semantic on' if semantic else 'token checks only'}.",
+           "Per pair, flagged = Moderate or High. OLD = Moderate always relative to the class median; "
+           "NEW = the current rule (code: fixed floors for a single pair; reports: fixed floors below 10 pairs).", "",
+           "| Part | Class size | Pairs | Copy pairs | Caught OLD | Caught NEW | Honest pairs | Flagged OLD | Flagged NEW |",
+           "|---|---|---|---|---|---|---|---|---|"]
+    for key, c in result.items():
+        part, size = key.split(":")
+        out.append(f"| {part} | {size} | {c.get('pairs', 0)} | {c.get('copy', 0)} | {c.get('copy_old', 0)} | "
+                   f"{c.get('copy_new', 0)} | {c.get('honest', 0)} | {c.get('honest_old', 0)} | "
+                   f"{c.get('honest_new', 0)} |")
+    return "\n".join(out)
+
+
 # ---- output -------------------------------------------------------------------
 
 def _row_text(r: dict) -> str:
@@ -244,6 +352,10 @@ def main() -> None:
     parser.add_argument("--manifest", type=Path, default=MANIFEST)
     parser.add_argument("--set", action="append", default=[], help="only sets whose name contains this (repeatable)")
     parser.add_argument("--no-semantic", action="store_true", help="token checks only (fast; not the official numbers)")
+    parser.add_argument("--class-size", type=int, nargs="+", metavar="N",
+                        help="evaluate random small classes of these sizes (old vs new Moderate rule)")
+    parser.add_argument("--samples", type=int, default=40, help="classes drawn per set and size (default 40)")
+    parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--out", type=Path, default=ROOT / "eval" / "self_check_eval",
                         help="folder for the .md and .json results (eval/ is git-ignored)")
     args = parser.parse_args()
@@ -263,6 +375,18 @@ def main() -> None:
         raise SystemExit("No set matches --set")
 
     started = time.monotonic()
+    if args.class_size:
+        result = evaluate_small_classes(specs, args.data_root, args.class_size, args.samples, args.seed,
+                                        not args.no_semantic, work / "small")
+        shutil.rmtree(work, ignore_errors=True)
+        args.out.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        md = small_class_markdown(result, args.class_size, args.samples, args.seed, not args.no_semantic)
+        md_path = args.out / f"small_classes_{stamp}.md"
+        md_path.write_text(md, encoding="utf-8")
+        (args.out / f"small_classes_{stamp}.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+        print("\n" + md + f"\n\nResults: {md_path}  ({time.monotonic() - started:.0f} s)")
+        return
     results, totals = [], {}
     for spec in specs:
         print(f"== {spec['name']} ({len(spec['students'])} students)", flush=True)
