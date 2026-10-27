@@ -23,6 +23,18 @@ large program "contains" most of the common patterns of a small one. So a pair
 is moderate only when it stands out above the class's typical overlap (its
 median across every pair in the assignment) by a margin, and above a fixed
 floor -- or when the semantic check marked it for review.
+
+A small class cannot say what is normal. With fewer than MIN_CLASS_PAIRS pairs
+(5 submissions) the result is marked ``small_class`` so the student is told so,
+and the Moderate lines change where measured evidence (scripts/evaluate_self_check.py
+--class-size 2 3 4) showed the class median misleads:
+  - code: a single pair (2 submissions) is its own median and can never stand out
+    above it, so it is judged against the fixed floors. With 3-4 submissions the
+    median is the middle of 3-6 pairs, ignores one copied pair, and measured
+    better than fixed floors, so it is kept.
+  - reports: small classes cannot remove common text and honest pairs reach 17%
+    coverage, so the coverage floor is raised (REPORT_SMALL_CLASS_COVERAGE) and no
+    median is used.
 """
 
 from __future__ import annotations
@@ -55,14 +67,27 @@ LIMIT_PER_HOUR = _env_int("SELF_CHECK_LIMIT_PER_HOUR", 5)
 # A "running" check older than this is treated as failed (e.g. the server restarted).
 STALE_AFTER_MINUTES = 15
 
+# Fewer pairs than this (5 submissions) is a "small class": the student is told
+# the check cannot say what is normal, and reports use fixed floors. Same cutoff
+# as the meaning checks: SemanticThresholds.min_cohort_pairs and
+# report_similarity.SEMANTIC_MIN_COHORT_PAIRS (a test keeps them equal).
+MIN_CLASS_PAIRS = _env_int("SELF_CHECK_MIN_CLASS_PAIRS", 10)
+# Code uses the class median from this many pairs on (3 submissions); a single
+# pair has no median. Set it to MIN_CLASS_PAIRS for fixed floors in every small class.
+MIN_PAIRS_FOR_MEDIAN = _env_int("SELF_CHECK_MIN_PAIRS_FOR_MEDIAN", 3)
+
 # Moderate band: a pair must be at least MARGIN above the class median AND at
-# least the floor. ("high" is the instructor's own flag rule.)
+# least the floor. ("high" is the instructor's own flag rule.) In a small class
+# (fewer than MIN_CLASS_PAIRS pairs) the floors alone apply.
 CODE_MODERATE_JACCARD = _env_float("SELF_CHECK_CODE_MODERATE_JACCARD", 0.45)
 CODE_MODERATE_CONTAINMENT = _env_float("SELF_CHECK_CODE_MODERATE_CONTAINMENT", 0.70)
 CODE_MODERATE_MARGIN = _env_float("SELF_CHECK_CODE_MODERATE_MARGIN", 0.15)
 REPORT_MODERATE_COVERAGE = _env_float("SELF_CHECK_REPORT_MODERATE_COVERAGE", 0.10)
 REPORT_MODERATE_JACCARD = _env_float("SELF_CHECK_REPORT_MODERATE_JACCARD", 0.15)
 REPORT_MODERATE_MARGIN = _env_float("SELF_CHECK_REPORT_MODERATE_MARGIN", 0.10)
+# Small classes cannot remove common text, and honest report pairs there reach
+# ~17% coverage (90th percentile ~9%), so the floor is higher than REPORT_MODERATE_COVERAGE.
+REPORT_SMALL_CLASS_COVERAGE = _env_float("SELF_CHECK_REPORT_SMALL_CLASS_COVERAGE", 0.20)
 
 # How much of the student's own work is shown back.
 MAX_HIGHLIGHTS = 15
@@ -84,14 +109,35 @@ def _median(values: list[float]) -> float:
     return ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) / 2
 
 
-def code_moderate_lines(all_pairs: list) -> dict:
+def code_fixed_lines(n_pairs: int = 0) -> dict:
+    """Moderate lines from the fixed floors alone (no class median)."""
+    return {"mode": "fixed", "pairs": n_pairs, "median_jaccard": None, "median_containment": None,
+            "jaccard_line": CODE_MODERATE_JACCARD, "containment_line": CODE_MODERATE_CONTAINMENT}
+
+
+def code_class_lines(all_pairs: list) -> dict:
     """The class's typical code overlap and the moderate lines derived from
-    it, from EVERY pair in the assignment (not just the student's)."""
+    it, from EVERY pair in the assignment (not just the student's). Used
+    from MIN_CLASS_PAIRS pairs on; see code_moderate_lines."""
     med_j = _median([p.jaccard for p in all_pairs])
     med_c = _median([p.containment for p in all_pairs])
-    return {"median_jaccard": round(med_j, 4), "median_containment": round(med_c, 4),
+    return {"mode": "class", "pairs": len(all_pairs),
+            "median_jaccard": round(med_j, 4), "median_containment": round(med_c, 4),
             "jaccard_line": round(max(CODE_MODERATE_JACCARD, med_j + CODE_MODERATE_MARGIN), 4),
             "containment_line": round(max(CODE_MODERATE_CONTAINMENT, med_c + CODE_MODERATE_MARGIN), 4)}
+
+
+def code_moderate_lines(all_pairs: list) -> dict:
+    """The moderate lines for this assignment: relative to the class median
+    when there are enough pairs for one, the fixed floors for a single pair."""
+    if len(all_pairs) < MIN_PAIRS_FOR_MEDIAN:
+        return code_fixed_lines(len(all_pairs))
+    return code_class_lines(all_pairs)
+
+
+def is_small_class(lines: dict) -> bool:
+    """Too few submissions to say what is normal for the assignment."""
+    return lines["pairs"] < MIN_CLASS_PAIRS
 
 
 def code_pair_band(pair, lines: dict) -> str:
@@ -104,12 +150,26 @@ def code_pair_band(pair, lines: dict) -> str:
     return "low"
 
 
-def report_moderate_lines(all_pairs: list) -> dict:
+def report_fixed_lines(n_pairs: int = 0) -> dict:
+    """Moderate lines for a small class: fixed, with the raised coverage floor."""
+    return {"mode": "fixed", "pairs": n_pairs, "median_coverage": None, "median_jaccard": None,
+            "coverage_line": REPORT_SMALL_CLASS_COVERAGE, "jaccard_line": REPORT_MODERATE_JACCARD}
+
+
+def report_class_lines(all_pairs: list) -> dict:
     med_cov = _median([max(p.coverage_a, p.coverage_b) for p in all_pairs])
     med_j = _median([p.jaccard for p in all_pairs])
-    return {"median_coverage": round(med_cov, 4), "median_jaccard": round(med_j, 4),
+    return {"mode": "class", "pairs": len(all_pairs),
+            "median_coverage": round(med_cov, 4), "median_jaccard": round(med_j, 4),
             "coverage_line": round(max(REPORT_MODERATE_COVERAGE, med_cov + REPORT_MODERATE_MARGIN), 4),
             "jaccard_line": round(max(REPORT_MODERATE_JACCARD, med_j + REPORT_MODERATE_MARGIN), 4)}
+
+
+def report_moderate_lines(all_pairs: list) -> dict:
+    """Like code_moderate_lines, for reports."""
+    if len(all_pairs) < MIN_CLASS_PAIRS:
+        return report_fixed_lines(len(all_pairs))
+    return report_class_lines(all_pairs)
 
 
 def report_pair_band(pair, own_coverage: float, lines: dict) -> str:
@@ -170,6 +230,7 @@ def code_result(student_sid: str, pairs: list, own_files: list[OwnFile],
         "highlights": code_highlights(own_files, shared & own_hashes),
         "semantic_status": semantic_status,
         "class_baseline": lines,
+        "small_class": is_small_class(lines),
         "pairs": sorted(rows, key=lambda r: -_ORDER[r["band"]]),
     }
 
@@ -202,6 +263,7 @@ def report_result(student_sid: str, pairs: list, semantic_status: str, skipped_r
         "passages": passages[:MAX_PASSAGES],
         "semantic_status": semantic_status,
         "class_baseline": lines,
+        "small_class": is_small_class(lines),
         "pairs": sorted(rows, key=lambda r: -_ORDER[r["band"]]),
     }
 
@@ -219,7 +281,10 @@ def for_student(kind: str, result: dict | None) -> dict | None:
     if kind == "ai_content":
         return {"report": result.get("report"), "code": result.get("code")}
     safe = {"band": result["band"], "compared": result["compared"],
-            "similar_submissions": result["similar_submissions"]}
+            "similar_submissions": result["similar_submissions"],
+            # Too few submissions to say what is normal for the class; results
+            # stored before this field existed read as False.
+            "small_class": bool(result.get("small_class"))}
     if kind == "code_similarity":
         safe["highlights"] = result.get("highlights", [])
     else:

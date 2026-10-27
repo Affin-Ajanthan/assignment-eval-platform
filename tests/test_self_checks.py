@@ -329,7 +329,9 @@ def test_bands_and_student_view_helpers():
     full = {"band": "high", "compared": 3, "similar_submissions": 1, "highlights": [],
             "pairs": [{"other_submission_id": 9, "jaccard": 0.9}]}
     assert self_checks.for_student("code_similarity", full) == {
-        "band": "high", "compared": 3, "similar_submissions": 1, "highlights": []}
+        "band": "high", "compared": 3, "similar_submissions": 1, "small_class": False, "highlights": []}
+    # results stored before small_class existed read as False; the flag passes through when set
+    assert self_checks.for_student("code_similarity", {**full, "small_class": True})["small_class"] is True
 
 
 def test_docx_reports_are_compared_too(tmp_path):
@@ -492,3 +494,94 @@ def test_ignore_common_code_is_on_by_default_and_the_instructor_can_switch_it(tm
     # students never see the setting
     seen = client.get(f"/assignments/{assignment['id']}", headers=auth_headers(tok_a)).json()
     assert "ignore_common_code" not in seen
+
+
+# ---- small classes: fixed floors instead of a class median -------------------
+
+def _report_pair(coverage, jaccard, flag_level=None):
+    from app.similarity.report_similarity import ReportPair
+    return ReportPair(submission_a="1", submission_b="2", words_a=500, words_b=500, shared_fingerprints=1,
+                      jaccard=jaccard, containment=jaccard, coverage_a=coverage, coverage_b=coverage,
+                      passages=[], flag_level=flag_level)
+
+
+def test_the_small_class_cutoff_matches_the_meaning_checks():
+    from app.similarity import report_similarity
+    from app.similarity.semantic import SemanticThresholds
+    assert self_checks.MIN_CLASS_PAIRS == SemanticThresholds().min_cohort_pairs
+    assert self_checks.MIN_CLASS_PAIRS == report_similarity.SEMANTIC_MIN_COHORT_PAIRS == 10  # 5 submissions
+
+
+def test_a_single_pair_has_no_median_so_the_fixed_floors_apply():
+    lines = self_checks.code_moderate_lines([_pair(0.50, 0.60)])
+    assert lines["mode"] == "fixed" and lines["pairs"] == 1 and lines["median_jaccard"] is None
+    assert lines["jaccard_line"] == self_checks.CODE_MODERATE_JACCARD
+    assert lines["containment_line"] == self_checks.CODE_MODERATE_CONTAINMENT
+    assert self_checks.code_pair_band(_pair(0.50, 0.60), lines) == "moderate"  # over the 0.45 floor
+    assert self_checks.code_pair_band(_pair(0.44, 0.69), lines) == "low"        # under both floors
+    assert self_checks.code_pair_band(_pair(0.61, 0.60), lines) == "high"       # instructor's flag rule
+
+
+def test_three_or_more_submissions_keep_the_class_median_for_code():
+    # 3 submissions = 3 pairs: the middle value ignores one copied pair, and measured better
+    # than fixed floors (scripts/evaluate_self_check.py --class-size 3).
+    pairs = [_pair(0.50, 0.60) for _ in range(3)]
+    lines = self_checks.code_moderate_lines(pairs)
+    assert lines["mode"] == "class" and lines["pairs"] == 3 and lines["jaccard_line"] == 0.65
+    assert self_checks.code_pair_band(_pair(0.50, 0.60), lines) == "low"  # normal for this class
+    assert self_checks.is_small_class(lines)  # ... but the student is still told the class is small
+    assert not self_checks.is_small_class(self_checks.code_moderate_lines([_pair(0.50, 0.60)] * 10))
+
+
+def test_a_two_person_class_no_longer_hides_a_restructured_copy():
+    # Nimali <-> Hiruni in CS101: restructured copy, Jaccard 0.52, containment 0.73.
+    only_pair = [_pair(0.52, 0.73)]
+    # Old rule: the lone pair is its own median, so it can never stand out above it.
+    old = self_checks.code_class_lines(only_pair)
+    assert old["mode"] == "class" and self_checks.code_pair_band(only_pair[0], old) == "low"
+    # New rule: judged against the fixed floors, it is Moderate.
+    new = self_checks.code_moderate_lines(only_pair)
+    assert new["mode"] == "fixed" and self_checks.code_pair_band(only_pair[0], new) == "moderate"
+
+
+def test_small_report_classes_use_a_raised_fixed_coverage_floor():
+    few = [_report_pair(0.12, 0.05) for _ in range(9)]
+    lines = self_checks.report_moderate_lines(few)
+    assert lines["mode"] == "fixed" and lines["pairs"] == 9 and lines["median_coverage"] is None
+    assert lines["coverage_line"] == self_checks.REPORT_SMALL_CLASS_COVERAGE == 0.20
+    # honest report pairs in small classes reach ~17% coverage (no common text to remove): not flagged
+    assert self_checks.report_pair_band(few[0], 0.17, lines) == "low"
+    assert self_checks.report_pair_band(few[0], 0.22, lines) == "moderate"
+    assert self_checks.report_pair_band(_report_pair(0.9, 0.9, "high"), 0.9, lines) == "high"
+    assert self_checks.is_small_class(lines)
+    many = self_checks.report_moderate_lines([_report_pair(0.12, 0.05) for _ in range(10)])
+    assert many["mode"] == "class" and many["coverage_line"] == 0.22  # median 0.12 + margin 0.10
+    assert not self_checks.is_small_class(many)
+
+
+def test_the_student_is_told_when_the_class_is_too_small_and_the_instructor_can_see_the_rule(tmp_path):
+    _, _, _, students = _setup(tmp_path, name="Tiny Class")  # 3 students = 3 pairs
+    tok_a, sid_a = students["a"]
+    assert _run(tok_a, sid_a, "code_similarity").status_code == 202
+    check = _latest(tok_a, sid_a, "code_similarity")
+    assert check["result"]["small_class"] is True and check["result"]["band"] == "high"
+    raw = json.dumps(check)
+    assert "class_baseline" not in raw and "median" not in raw and "jaccard_line" not in raw
+    db = SessionLocal()
+    try:
+        stored = db.query(SelfCheck).filter(SelfCheck.submission_id == sid_a).one().result
+        # 3 submissions: code keeps the class median (a rule the instructor can see), but is marked small
+        assert stored["class_baseline"]["mode"] == "class" and stored["class_baseline"]["pairs"] == 3
+        assert stored["small_class"] is True
+    finally:
+        db.close()
+    assert _run(tok_a, sid_a, "report_similarity").status_code == 202
+    assert _latest(tok_a, sid_a, "report_similarity")["result"]["small_class"] is True
+    db = SessionLocal()
+    try:
+        stored = [c for c in db.query(SelfCheck).filter(SelfCheck.submission_id == sid_a).all()
+                  if c.kind == "report_similarity"][0].result
+        assert stored["class_baseline"]["mode"] == "fixed"  # reports: fixed floors in a small class
+        assert stored["class_baseline"]["coverage_line"] == self_checks.REPORT_SMALL_CLASS_COVERAGE
+    finally:
+        db.close()
