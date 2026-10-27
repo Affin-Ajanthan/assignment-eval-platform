@@ -188,6 +188,48 @@ def test_nothing_runs_without_docker_or_without_a_runnable_submission(tmp_path):
 
 
 # --------------------------------------------------------------------------
+# Scoring
+# --------------------------------------------------------------------------
+
+
+def _results(*outcomes):
+    """TestResults from (points, passed) pairs."""
+    return [ct.TestResult(test_id=i, name=f"Test {i}", visible=False, points=points, match="exact",
+                          status="passed" if passed else "failed", passed=passed, expected_output="",
+                          actual_output="") for i, (points, passed) in enumerate(outcomes, start=1)]
+
+
+def test_eight_of_ten_tests_worth_two_points_each_earn_16_of_20():
+    score = ct.score_run(_results(*[(2, True)] * 8, *[(2, False)] * 2))
+    assert (score.earned, score.total, score.passed, score.count) == (16, 20, 8, 10)
+    assert score.marks(20) == 16
+    assert score.marks(10) == 8      # scaled to a criterion worth 10 marks
+    assert score.marks(15) == 12
+
+
+def test_tests_are_weighted_by_their_points_and_failures_of_every_kind_earn_nothing():
+    results = _results((5, True), (3, False), (2, True))
+    for result, status in zip(results[1:], ("error", "timeout")):
+        result.status = status  # a crash and a timeout earn nothing, like a wrong answer
+    results[2].passed = False
+    score = ct.score_run(results)
+    assert (score.earned, score.total, score.passed, score.count) == (5, 10, 1, 3)
+    assert score.marks(40) == 20
+
+
+def test_scores_have_no_float_noise_and_marks_round_to_two_places():
+    score = ct.score_run(_results((0.1, True), (0.2, True), (0.3, False)))
+    assert (score.earned, score.total) == (0.3, 0.6)  # not 0.30000000000000004
+    assert ct.score_run(_results((1, True), (1, False), (1, False))).marks(10) == 3.33
+
+
+def test_a_run_with_no_tests_or_no_points_scores_zero_without_dividing_by_zero():
+    empty = ct.score_run([])
+    assert (empty.earned, empty.total, empty.passed, empty.count, empty.marks(10)) == (0, 0, 0, 0, 0.0)
+    assert ct.score_run(_results((1, True))).marks(0) == 0
+
+
+# --------------------------------------------------------------------------
 # The instructor endpoint
 # --------------------------------------------------------------------------
 
@@ -242,6 +284,8 @@ def test_running_tests_returns_every_test_for_the_instructor(monkeypatch):
     body = r.json()
     assert (body["submission_id"], body["file"], body["language"], body["passed"], body["total"]) == (
         sub["id"], "main.py", "python", 1, 2)
+    # Test 1 is worth 2 points and passed; test 2 is worth the default 1 point and failed.
+    assert (body["earned_points"], body["total_points"]) == (2, 3)
     assert [(t["test_id"], t["status"], t["visible"]) for t in body["results"]] == [(1, "passed", True),
                                                                                     (2, "failed", False)]
     assert body["results"][1]["expected_output"] == "SECRET"  # hidden tests are part of the instructor's view

@@ -2833,8 +2833,10 @@ class TestRunOut(BaseModel):
     submission_id: int
     file: str  # the file that was run
     language: str
-    passed: int
-    total: int
+    passed: int  # tests passed
+    total: int  # tests run
+    earned_points: float  # points of the tests that passed
+    total_points: float  # points of every test run
     results: list[TestResultOut]
 
 
@@ -2863,10 +2865,11 @@ def run_submission_tests(
         raise HTTPException(400, str(exc))
     except SandboxUnavailable as exc:
         raise HTTPException(503, str(exc))
-    results = [TestResultOut(**vars(r)) for r in run.results]
+    score = _code_testing.score_run(run.results)
     return TestRunOut(
         submission_id=submission.id, file=run.file, language=run.language,
-        passed=sum(1 for r in results if r.passed), total=len(results), results=results,
+        passed=score.passed, total=score.count, earned_points=score.earned, total_points=score.total,
+        results=[TestResultOut(**vars(r)) for r in run.results],
     )
 
 

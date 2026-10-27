@@ -84,6 +84,34 @@ class TestRun:
     results: list
 
 
+@dataclass(frozen=True)
+class TestScore:
+    """The points a run earned: the sum of the points of the tests that passed."""
+
+    __test__ = False  # not a pytest test class, despite the name
+
+    earned: float
+    total: float  # the points of every test in the run
+    passed: int
+    count: int
+
+    def marks(self, max_points: float) -> float:
+        """The score scaled to `max_points`, e.g. 16 of 20 test points is 8 of 10 marks.
+        Zero when the run has no points to earn."""
+        return round(self.earned / self.total * max_points, 2) if self.total > 0 else 0.0
+
+
+def score_run(results: list) -> TestScore:
+    """Score a run's results: a test earns its points only when it passed
+    (a wrong answer, a crash and a timeout all earn nothing)."""
+    return TestScore(
+        earned=round(sum(r.points for r in results if r.passed), 2),  # round: no 0.1 + 0.2 float noise
+        total=round(sum(r.points for r in results), 2),
+        passed=sum(1 for r in results if r.passed),
+        count=len(results),
+    )
+
+
 # ---- comparing output -----------------------------------------------------
 
 
