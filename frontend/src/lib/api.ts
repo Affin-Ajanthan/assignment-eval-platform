@@ -153,7 +153,31 @@ export interface StudentAssignment {
   /** The visible tests, as examples; hidden tests are never sent, only counted. */
   sample_tests: SampleTest[];
   hidden_test_count: number;
+  /** A code challenge is answered in the code editor instead of by uploading files. */
+  assignment_type: AssignmentKind;
   my_submission: MySubmission | null;
+}
+
+/** A visible test's outcome from POST /assignments/{id}/sample-run (nothing about hidden tests). */
+export interface SampleRunResult {
+  name: string;
+  input: string;
+  match: TestMatch;
+  expected_output: string;
+  status: "passed" | "failed" | "error" | "timeout";
+  passed: boolean;
+  actual_output: string;
+  stderr: string;
+}
+
+export interface SampleRun {
+  language: string;
+  passed: number;
+  total: number;
+  /** Hidden tests are not run here; they are used when the work is marked. */
+  hidden_test_count: number;
+  remaining_runs: number;
+  results: SampleRunResult[];
 }
 
 /** A visible test as a student sees it. */

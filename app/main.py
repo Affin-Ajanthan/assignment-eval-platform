@@ -406,6 +406,7 @@ class StudentAssignmentOut(BaseModel):
     available_from: UTCDateTime
     deadline: UTCDateTime
     status: str  # open | closed (upcoming assignments aren't listed)
+    assignment_type: str = "submission"  # submission | code_challenge (a challenge is answered in the code editor)
     submission_types: list[str]
     code_languages: list[str] = []  # empty = any supported language
     # Which self-checks the instructor allows for this assignment.
@@ -1399,6 +1400,7 @@ def _student_assignment_out(db: Session, student: User, a: Assignment, now: date
         id=a.id, subject_id=a.subject_id, subject_name=a.subject.name if a.subject else "",
         name=a.name, description=a.description or "",
         available_from=_as_utc(a.available_from), deadline=_as_utc(a.deadline), status=status,
+        assignment_type=a.kind,
         submission_types=a.accepted_types(),
         code_languages=a.code_languages or [],
         student_similarity_check=_on(a.student_similarity_check),

@@ -6,6 +6,7 @@ import Badge from "@/components/Badge";
 import Message, { MessageState } from "@/components/Message";
 import SelfCheckPanel from "@/components/student/SelfCheckPanel";
 import UploadForm from "@/components/student/UploadForm";
+import CodeEditorForm, { editorLanguages } from "@/components/student/CodeEditorForm";
 import { OpenForm, TYPE_LABEL } from "@/components/student/labels";
 import { languageNames } from "@/lib/codeLanguages";
 
@@ -31,6 +32,10 @@ export default function AssignmentCard({
     ? [sub.has_code && "code", sub.has_report && "report", sub.has_video && "video"].filter(Boolean).join(", ")
     : "";
   const formMode = openForm?.id === a.id ? openForm.mode : null;
+  // A code challenge is answered by typing code (and practising on the sample tests), not by uploading a file.
+  // Only when the server can run its language: otherwise the usual upload form is used.
+  const useEditor = a.assignment_type === "code_challenge" && editorLanguages(a).length > 0;
+  const FormComponent = useEditor ? CodeEditorForm : UploadForm;
 
   return (
     <li className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm" data-testid="student-assignment">
@@ -149,7 +154,7 @@ export default function AssignmentCard({
               onClick={() => setOpenForm({ id: a.id, mode: "submit" })}
               className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
             >
-              Submit assignment
+              {useEditor ? "Write your code" : "Submit assignment"}
             </button>
           )}
           {sub?.can_edit && (
@@ -179,7 +184,7 @@ export default function AssignmentCard({
       )}
 
       {formMode && (
-        <UploadForm
+        <FormComponent
           assignment={a}
           mode={formMode}
           onCancel={() => setOpenForm(null)}

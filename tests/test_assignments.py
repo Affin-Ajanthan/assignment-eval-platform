@@ -298,7 +298,7 @@ def test_student_sees_open_and_past_assignments_but_not_upcoming_ones():
     assert set(open_one) == {"id", "subject_id", "subject_name", "name", "description", "available_from",
                              "deadline", "status", "submission_types", "code_languages",
                                  "student_similarity_check", "student_ai_check", "marks_release_at",
-                                 "sample_tests", "hidden_test_count", "my_submission"}
+                                 "sample_tests", "hidden_test_count", "assignment_type", "my_submission"}
 
 
 def test_backend_enforces_the_submission_window():
@@ -753,3 +753,11 @@ def test_a_code_challenge_has_no_rubric_but_can_drop_an_old_one():
     # A plain submission assignment still takes a rubric.
     plain = _new_assignment(itok, subject, "Plain with rubric", rubric_id=rubric["id"])
     assert plain.status_code == 200 and plain.json()["rubric_id"] == rubric["id"]
+
+
+def test_students_are_told_which_assignments_are_code_challenges():
+    subject, itok, stok = setup_subject_with_users(client)
+    _new_assignment(itok, subject, "Challenge for the editor", test_cases=SORT_TESTS)
+    _new_assignment(itok, subject, "Plain upload")
+    kinds = {a["name"]: a["assignment_type"] for a in client.get("/assignments", headers=H(stok)).json()}
+    assert kinds == {"Challenge for the editor": "code_challenge", "Plain upload": "submission"}
