@@ -313,6 +313,11 @@ export default function InstructorPage() {
     return assignments.find((a) => a.id === submission?.assignment_id)?.rubric_id ?? null;
   }
 
+  // A code challenge is marked by its test cases, so the rubric-based AI evaluation does not apply to it.
+  function isCodeChallenge(assignmentId: number | null): boolean {
+    return assignments.find((a) => a.id === assignmentId)?.assignment_type === "code_challenge";
+  }
+
   // How many test cases the submission's assignment has (0 when none).
   function testCountFor(assignmentId: number | null): number {
     return assignments.find((a) => a.id === assignmentId)?.test_cases?.length ?? 0;
@@ -941,13 +946,15 @@ export default function InstructorPage() {
                           >
                             {s.status === "graded" ? "Re-grade" : "Grade"}
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => openAutoevalPanel(s.id)}
-                            className="rounded-md bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700"
-                          >
-                            Auto-evaluate
-                          </button>
+                          {!isCodeChallenge(s.assignment_id) && (
+                            <button
+                              type="button"
+                              onClick={() => openAutoevalPanel(s.id)}
+                              className="rounded-md bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700"
+                            >
+                              Auto-evaluate
+                            </button>
+                          )}
                           {testCountFor(s.assignment_id) > 0 && s.submitted_types.includes("code") && (
                             <button
                               type="button"

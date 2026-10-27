@@ -191,7 +191,8 @@ export default function AssignmentsSection({
       description: form.description,
       available_from: from.toISOString(),
       deadline: due.toISOString(),
-      rubric_id: form.rubricId ? parseInt(form.rubricId, 10) : null,
+      // A code challenge has no rubric (null also detaches one from an older challenge).
+      rubric_id: !challenge && form.rubricId ? parseInt(form.rubricId, 10) : null,
       assignment_type: form.kind,
       // A code challenge is code only: set when creating, left alone when editing.
       submission_types: challenge ? (editingId === null ? ["code"] : undefined) : form.types,
@@ -508,6 +509,12 @@ export default function AssignmentsSection({
           </p>
         </fieldset>
 
+        {form.kind === "code_challenge" ? (
+          <p className="mt-3 text-xs text-gray-600" data-testid="no-rubric-note">
+            No rubric: a code challenge is marked by its test cases (the points of the tests passed).
+          </p>
+        ) : (
+          <>
         <label className="mt-3 block text-sm font-semibold" htmlFor="assignment-rubric">
           Rubric
         </label>
@@ -529,6 +536,8 @@ export default function AssignmentsSection({
             Criteria: {selectedRubric.criteria.map((c) => `${c.name} (${c.max_points})`).join(", ")} — total{" "}
             {selectedRubric.max_total} points.
           </p>
+        )}
+          </>
         )}
 
         <label className="mt-3 block text-sm font-semibold" htmlFor="assignment-starter-code">

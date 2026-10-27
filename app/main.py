@@ -1302,6 +1302,8 @@ def _assignment_kind(payload: AssignmentIn) -> str:
     it a code challenge."""
     kind = payload.assignment_type or ("code_challenge" if payload.test_cases else "submission")
     if kind == "code_challenge":
+        if payload.rubric_id is not None:
+            raise HTTPException(400, "A code challenge is marked by its test cases, not by a rubric.")
         if "submission_types" in payload.model_fields_set and list(set(payload.submission_types)) != ["code"]:
             raise HTTPException(400, "A code challenge accepts code submissions only.")
         if not payload.test_cases:
@@ -1504,6 +1506,8 @@ def update_assignment(
     deadline = _to_naive_utc(payload.deadline) if payload.deadline else assignment.deadline
     _validate_window(available_from, deadline)
     if "rubric_id" in payload.model_fields_set:
+        if assignment.kind == "code_challenge" and payload.rubric_id is not None:
+            raise HTTPException(400, "A code challenge is marked by its test cases, not by a rubric.")
         _check_assignment_rubric(db, assignment.subject_id, payload.rubric_id)
         assignment.rubric_id = payload.rubric_id
     if payload.submission_types is not None:

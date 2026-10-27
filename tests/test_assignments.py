@@ -733,3 +733,23 @@ def test_test_cases_without_a_type_make_a_code_challenge():
     r = _new_assignment(itok, subject, "Inferred", test_cases=SORT_TESTS)
     assert r.status_code == 200 and r.json()["assignment_type"] == "code_challenge"
     assert r.json()["submission_types"] == ["code"]
+
+
+def test_a_code_challenge_has_no_rubric_but_can_drop_an_old_one():
+    subject, itok, _ = setup_subject_with_users(client)
+    rubric = _rubric(itok, subject["id"])
+    refused = _new_assignment(itok, subject, "Rubric on challenge", assignment_type="code_challenge",
+                              test_cases=SORT_TESTS, rubric_id=rubric["id"])
+    assert refused.status_code == 400 and "not by a rubric" in refused.json()["detail"]
+
+    ok = _new_assignment(itok, subject, "Tests only", assignment_type="code_challenge", test_cases=SORT_TESTS)
+    assert ok.status_code == 200 and ok.json()["rubric_id"] is None
+    url = f"/assignments/{ok.json()['id']}"
+    attach = client.put(url, headers=H(itok), json={"rubric_id": rubric["id"]})
+    assert attach.status_code == 400 and "not by a rubric" in attach.json()["detail"]
+    # Sending no rubric (null) is fine: that is what the form sends for a challenge.
+    assert client.put(url, headers=H(itok), json={"rubric_id": None}).status_code == 200
+
+    # A plain submission assignment still takes a rubric.
+    plain = _new_assignment(itok, subject, "Plain with rubric", rubric_id=rubric["id"])
+    assert plain.status_code == 200 and plain.json()["rubric_id"] == rubric["id"]
