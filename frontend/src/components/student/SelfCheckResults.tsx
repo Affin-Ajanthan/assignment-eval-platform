@@ -37,6 +37,12 @@ export function SimilarityResult({ check }: { check: SelfCheck }) {
         {r.note ? r.note : `Compared with ${r.compared} other submission(s); ${r.similar_submissions} stand out as similar.`}
       </p>
       {!r.note && <p className="mt-1 text-gray-700">{MEANING[band][part]}</p>}
+      {r.small_class && !r.note && (
+        <p className="mt-1 text-xs text-gray-600">
+          Only {r.compared} other submission(s) to compare with, so this check can&apos;t tell yet what is normal for this
+          assignment. The result may change as more classmates submit.
+        </p>
+      )}
       {check.kind === "code_similarity" && highlights.length > 0 && (
         <div className="mt-2">
           <p className="text-xs font-semibold text-gray-700">Parts of your code with potential matches</p>

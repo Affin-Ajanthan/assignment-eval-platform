@@ -261,6 +261,8 @@ def _self_check_code(db: Session, submission: Submission) -> dict:
         result = _self_checks.code_result(str(submission.id), [], [], {}, "disabled")
         result["note"] = "No other code submissions to compare with yet."
         return result
+    # Same comparison as the instructor's check, including the assignment's
+    # "ignore common code" option (scripts/evaluate_self_check.py measures it).
     run = code_similarity_run(db, submission.subject_id, submission.assignment_name, others)
     return _self_checks.code_result(
         str(submission.id), run.pairs, run.files_by_submission.get(str(submission.id), []),

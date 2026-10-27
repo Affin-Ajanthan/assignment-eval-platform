@@ -31,6 +31,7 @@ type FormState = {
   languages: CodeLanguageId[]; // [] = any supported language
   selfSimilarity: boolean; // students may run similarity self-checks before the deadline
   selfAi: boolean; // students may run AI-content self-checks before the deadline
+  ignoreCommon: boolean; // code similarity ignores code most of the class shares
   releaseDate: string; // "" (with releaseTime "") = show each mark as soon as it is saved
   releaseTime: string;
   testCases: TestCaseRow[]; // only used when the assignment accepts code
@@ -78,6 +79,7 @@ const EMPTY: FormState = {
   languages: [],
   selfSimilarity: true,
   selfAi: true,
+  ignoreCommon: true,
   releaseDate: "",
   releaseTime: "",
   testCases: [],
@@ -132,6 +134,7 @@ export default function AssignmentsSection({
       languages: a.code_languages ?? [],
       selfSimilarity: a.student_similarity_check ?? true,
       selfAi: a.student_ai_check ?? true,
+      ignoreCommon: a.ignore_common_code ?? true,
       releaseDate: release.date,
       releaseTime: release.time,
       testCases: toTestRows(a.test_cases ?? []),
@@ -202,6 +205,7 @@ export default function AssignmentsSection({
       code_languages: form.types.includes("code") ? form.languages : [],
       student_similarity_check: form.selfSimilarity,
       student_ai_check: form.selfAi,
+      ignore_common_code: form.ignoreCommon,
       // null also clears an earlier date, releasing the marks straight away.
       marks_release_at: release ? release.toISOString() : null,
       test_cases: testPayload.tests,
@@ -407,6 +411,27 @@ export default function AssignmentsSection({
               </div>
             )}
           </>
+        {form.types.includes("code") && (
+          <fieldset className="mt-3">
+            <legend className="text-sm font-semibold">Code similarity</legend>
+            <label className="mt-1 flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={form.ignoreCommon}
+                onChange={(e) => set("ignoreCommon", e.target.checked)}
+              />
+              <span>
+                Ignore code most of the class shares <span className="text-xs text-gray-500">(recommended)</span>
+              </span>
+            </label>
+            <p className="mt-1 text-xs text-gray-500">
+              Code patterns found in more than half of the submissions (menu loops, input helpers, file saving) are
+              left out before comparing, so honest solutions to the same task don&apos;t look alike. Copies still
+              match. Applies to your Similarity Code Check and to students&apos; self-checks; you can change it at any
+              time.
+            </p>
+          </fieldset>
         )}
 
         <fieldset className="mt-3">
@@ -615,6 +640,9 @@ export default function AssignmentsSection({
                     <p className="text-xs text-gray-600" data-testid="test-cases-summary">
                       Test cases: {a.test_cases.length} ({a.test_cases.filter((t) => t.visible).length} visible) ·{" "}
                       {a.test_cases.reduce((sum, t) => sum + t.points, 0)} points
+                  {a.submission_types.includes("code") && (
+                    <p className="text-xs text-gray-600">
+                      Code similarity: {a.ignore_common_code ? "ignores code most of the class shares" : "compares all code"}
                     </p>
                   )}
                   <p className="text-xs text-gray-600" data-testid="marks-release">

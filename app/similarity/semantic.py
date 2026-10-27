@@ -15,8 +15,9 @@ module adds a second, independent signal for that case:
   2. Every chunk is encoded ONCE per submission (batched, CPU-friendly)
      into an L2-normalized mean-pooled vector, using UniXcoder's
      ``<encoder-only>`` input format. Results are cached by content
-     hash, so re-running a check never re-encodes an unchanged
-     submission.
+     hash -- in memory, and on disk (see ``SemanticSimilarityService``) so
+     a server restart does not pay for them again -- so re-running a check
+     never re-encodes an unchanged submission.
   3. A pair's score is a symmetric best-match average over chunk
      cosine similarities (each chunk of A matched to its closest chunk
      of B and vice versa, weighted by chunk length) -- independent of
@@ -47,7 +48,9 @@ import logging
 import os
 import re
 import statistics
+import tempfile
 import threading
+import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -58,6 +61,12 @@ from .python_cleanup import strip_python_dead_code
 from .ts_cleanup import LANGUAGE_BY_EXTENSION, strip_dead_code
 
 log = logging.getLogger(__name__)
+
+# Bump when the on-disk layout of a cached embedding changes: old files then
+# stop matching (the version is part of every cache key) and age out by size.
+CACHE_FORMAT = 1
+DEFAULT_CACHE_MAX_BYTES = 500 * 1024 * 1024
+_MISSING = object()
 
 # The nine-language UniXcoder (Python, Java, JavaScript, PHP, Ruby, Go, C,
 # C++, C#), pinned to one revision so a re-download can never silently change
@@ -377,23 +386,44 @@ class SemanticSimilarityService:
 
     The model is loaded at most once (``load`` is thread-safe and
     idempotent; ``preload_in_background`` lets the app start serving
-    while the first download happens). Embeddings are cached in an LRU
-    keyed by a hash of the normalized code, so the same submission is
-    never encoded twice -- within one check or across repeated checks.
+    while the first download happens). Embeddings are cached by a hash
+    of the normalized code, so the same submission is never encoded
+    twice -- within one check, across repeated checks, and (with a
+    ``cache_dir``) across server restarts:
+
+      1. an in-memory LRU, then
+      2. one ``.npz`` file per submission in ``cache_dir``, written
+         atomically and pruned oldest-first to ``cache_max_bytes``.
+
+    The cache key covers the model revision, the chunking parameters and a
+    format version, so nothing stale is ever read after any of them change.
+    The model is only loaded when something is actually missing, and only
+    one thread at a time runs inference: when several students check at the
+    same moment, the first encodes the class and the rest read its results
+    instead of every one of them encoding it again.
+
+    A service built without ``cache_dir`` (tests, fakes) is memory-only;
+    ``get_semantic_service()`` gives the real one a directory.
     """
 
     def __init__(self, encoder_factory: Callable[[], CodeEncoder] | None = None,
                  cache_size: int = 1024, min_tokens: int = MIN_CODE_TOKENS,
-                 enabled: bool | None = None):
+                 enabled: bool | None = None, cache_dir: Path | str | None = None,
+                 cache_max_bytes: int = DEFAULT_CACHE_MAX_BYTES):
         self._factory = encoder_factory or UniXcoderEncoder
         self._encoder: CodeEncoder | None = None
-        self._lock = threading.Lock()
-        self._cache: OrderedDict[str, SubmissionEmbedding] = OrderedDict()
+        self._lock = threading.Lock()          # guards the in-memory LRU and load state; held only briefly
+        self._encode_lock = threading.Lock()   # one inference pass at a time; never taken while holding _lock
+        self._cache: OrderedDict[str, SubmissionEmbedding | None] = OrderedDict()
         self._cache_size = cache_size
+        self._cache_dir = Path(cache_dir) if cache_dir else None
+        self._cache_max_bytes = cache_max_bytes
         self.min_tokens = min_tokens
         self.enabled = _semantic_enabled() if enabled is None else enabled
         self.status = "not_loaded" if self.enabled else "disabled"  # | ready | unavailable
         self.error: str | None = None
+        if self._cache_dir is not None:
+            self._prune_disk_cache()
 
     def load(self) -> bool:
         if not self.enabled:
@@ -429,57 +459,188 @@ class SemanticSimilarityService:
 
     @staticmethod
     def _key(text: str) -> str:
-        return hashlib.sha256(f"{MODEL_NAME}|{CHUNK_TOKENS}|{CHUNK_OVERLAP}|{text}".encode()).hexdigest()
+        return hashlib.sha256(
+            f"{CACHE_FORMAT}|{MODEL_NAME}|{MODEL_REVISION}|{CHUNK_TOKENS}|{CHUNK_OVERLAP}|{text}".encode()
+        ).hexdigest()
+
+    # ---- the disk cache (best effort: any failure just means a cache miss) ----
+
+    def _disk_path(self, key: str) -> Path:
+        # 32 hex characters (128 bits of the SHA-256) keep the file name short: with the full 64
+        # a deeply nested project folder can pass Windows' 260-character path limit and every write fails.
+        return self._cache_dir / f"{key[:32]}.npz"
+
+    def _disk_get(self, key: str):
+        """(embedding or None, True) when stored, _MISSING when not. A damaged
+        or invalid file is deleted and reported as missing."""
+        if self._cache_dir is None:
+            return _MISSING
+        path = self._disk_path(key)
+        try:
+            import numpy as np
+
+            with np.load(path, allow_pickle=False) as stored:  # closed promptly: an open npz locks the file on Windows
+                if "empty" in stored.files:
+                    result = None
+                else:
+                    result = SubmissionEmbedding(vectors=stored["vectors"], weights=[int(w) for w in stored["weights"]],
+                                                 token_count=int(stored["token_count"]))
+            if result is not None:
+                _validate_embedding(result, key[:8])
+            try:
+                os.utime(path)  # a hit keeps the file young for oldest-first pruning
+            except OSError:
+                pass
+            return result
+        except FileNotFoundError:
+            return _MISSING
+        except Exception as exc:
+            log.warning("Ignoring unreadable semantic cache file %s (%s: %s)", path.name, exc.__class__.__name__, exc)
+            try:
+                path.unlink()
+            except OSError:
+                pass
+            return _MISSING
+
+    def _disk_put(self, key: str, emb: SubmissionEmbedding | None) -> None:
+        if self._cache_dir is None:
+            return
+        tmp_name = None
+        try:
+            import numpy as np
+
+            self._cache_dir.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(dir=self._cache_dir, suffix=".tmp", delete=False) as tmp:
+                tmp_name = tmp.name
+                if emb is None:
+                    np.savez(tmp, empty=np.array(1))
+                else:
+                    np.savez(tmp, vectors=np.asarray(emb.vectors), weights=np.asarray(emb.weights, dtype=np.int64),
+                             token_count=np.array(int(emb.token_count)))
+            os.replace(tmp_name, self._disk_path(key))  # atomic: a reader never sees half a file
+            tmp_name = None
+        except Exception as exc:  # disk full, permissions, a reader holding the file open on Windows...
+            log.warning("Could not write the semantic cache (%s: %s); continuing without it", exc.__class__.__name__, exc)
+        finally:
+            if tmp_name:
+                try:
+                    os.unlink(tmp_name)
+                except OSError:
+                    pass
+
+    def _prune_disk_cache(self) -> None:
+        """Delete the oldest cached files until the folder fits the byte cap
+        (and any leftover temp file from a crashed write)."""
+        try:
+            self._cache_dir.mkdir(parents=True, exist_ok=True)
+            entries = []
+            for p in self._cache_dir.iterdir():
+                try:
+                    st = p.stat()
+                except OSError:
+                    continue
+                if p.suffix == ".tmp":
+                    if time.time() - st.st_mtime > 3600:
+                        p.unlink(missing_ok=True)
+                elif p.suffix == ".npz":
+                    entries.append((st.st_mtime, st.st_size, p))
+            total = sum(size for _, size, _ in entries)
+            for _, size, p in sorted(entries):
+                if total <= self._cache_max_bytes:
+                    break
+                try:
+                    p.unlink()
+                    total -= size
+                except OSError:
+                    pass
+        except Exception as exc:
+            log.warning("Could not prune the semantic cache (%s: %s)", exc.__class__.__name__, exc)
+
+    # ---- lookups ------------------------------------------------------------
+
+    def _lookup(self, key: str):
+        """Memory, then disk. Returns the cached value (None = stored "nothing to
+        embed") or _MISSING."""
+        with self._lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+                return self._cache[key]
+        found = self._disk_get(key)
+        if found is not _MISSING:
+            self._remember(key, found)
+        return found
+
+    def _remember(self, key: str, emb: SubmissionEmbedding | None) -> None:
+        with self._lock:
+            self._cache[key] = emb
+            self._cache.move_to_end(key)
+            while len(self._cache) > self._cache_size:
+                self._cache.popitem(last=False)
+
+    def _place(self, batch: SemanticBatch, sid: str, emb: SubmissionEmbedding | None, fresh: bool) -> None:
+        """Put one result in the batch. Everything is cached as encoded and judged on
+        the way out, so a changed ``min_tokens`` takes effect without re-encoding."""
+        if emb is None or emb.token_count < self.min_tokens:
+            batch.skipped_too_small.append(sid)
+            return
+        batch.embeddings[sid] = emb
+        if fresh:
+            batch.encoded += 1
+        else:
+            batch.cache_hits += 1
 
     def embed_submissions(self, sources: dict[str, str]) -> SemanticBatch:
         """Embed each submission's normalized code once. ``sources``
         maps submission id -> normalized code. Never raises."""
-        if not self.load():
-            if self.status == "disabled":
-                return SemanticBatch(status="disabled",
-                                     warning="Semantic similarity is disabled on this server (SEMANTIC_SIMILARITY=0).")
-            return SemanticBatch(status="unavailable", warning=(
-                "Semantic similarity (UniXcoder) is unavailable -- the model could not be loaded "
-                f"({self.error}). Token-based results below are unaffected."))
+        if not self.enabled:
+            return SemanticBatch(status="disabled",
+                                 warning="Semantic similarity is disabled on this server (SEMANTIC_SIMILARITY=0).")
 
         batch = SemanticBatch(status="ok")
+        keys: dict[str, str] = {}
         pending: dict[str, str] = {}
         for sid, text in sources.items():
             if not text.strip():
                 batch.skipped_too_small.append(sid)
                 continue
-            key = self._key(text)
-            with self._lock:
-                cached = self._cache.get(key)
-                if cached is not None:
-                    self._cache.move_to_end(key)
-            if cached is not None:
-                batch.embeddings[sid] = cached
-                batch.cache_hits += 1
-            else:
+            keys[sid] = self._key(text)
+            found = self._lookup(keys[sid])
+            if found is _MISSING:
                 pending[sid] = text
+            else:
+                self._place(batch, sid, found, fresh=False)
+        if not pending:
+            return batch  # everything was cached: the model is not even loaded
 
-        if pending:
-            ids = list(pending)
-            try:
-                results = self._encoder.encode_many([pending[i] for i in ids])
-            except Exception as exc:
-                log.warning("UniXcoder inference failed: %s", exc)
-                batch.status = "unavailable"
-                batch.embeddings = {}
-                batch.warning = (f"Semantic similarity (UniXcoder) failed during inference "
-                                 f"({exc.__class__.__name__}: {exc}). Token-based results below are unaffected.")
-                return batch
-            for sid, emb in zip(ids, results):
-                if emb is None or emb.token_count < self.min_tokens:
-                    batch.skipped_too_small.append(sid)
-                    continue
-                batch.embeddings[sid] = emb
-                batch.encoded += 1
-                with self._lock:
-                    self._cache[self._key(pending[sid])] = emb
-                    while len(self._cache) > self._cache_size:
-                        self._cache.popitem(last=False)
+        if not self.load():
+            return SemanticBatch(status="unavailable", warning=(
+                "Semantic similarity (UniXcoder) is unavailable -- the model could not be loaded "
+                f"({self.error}). Token-based results below are unaffected."))
+
+        with self._encode_lock:
+            # Another thread may have finished some of these while we waited: read, don't redo.
+            todo: dict[str, str] = {}
+            for sid, text in pending.items():
+                found = self._lookup(keys[sid])
+                if found is _MISSING:
+                    todo[sid] = text
+                else:
+                    self._place(batch, sid, found, fresh=False)
+            if todo:
+                ids = list(todo)
+                try:
+                    results = self._encoder.encode_many([todo[i] for i in ids])
+                except Exception as exc:
+                    log.warning("UniXcoder inference failed: %s", exc)
+                    batch.status = "unavailable"
+                    batch.embeddings = {}
+                    batch.warning = (f"Semantic similarity (UniXcoder) failed during inference "
+                                     f"({exc.__class__.__name__}: {exc}). Token-based results below are unaffected.")
+                    return batch
+                for sid, emb in zip(ids, results):
+                    self._remember(keys[sid], emb)
+                    self._disk_put(keys[sid], emb)
+                    self._place(batch, sid, emb, fresh=True)
         return batch
 
 
@@ -487,11 +648,30 @@ _service: SemanticSimilarityService | None = None
 _service_lock = threading.Lock()
 
 
+def default_cache_dir() -> Path | None:
+    """Where the real service keeps embeddings between restarts: ``cache/unixcoder``
+    next to the database (it follows PORTAL_DATA_DIR), or SEMANTIC_CACHE_DIR; set
+    that to "off" to keep everything in memory."""
+    raw = os.environ.get("SEMANTIC_CACHE_DIR")
+    if raw is not None:
+        return None if raw.strip().lower() in {"", "0", "off", "false", "no", "none"} else Path(raw)
+    from ..db import BASE_DIR  # imported here: it creates the uploads folder, which this module otherwise never needs
+
+    return BASE_DIR / "cache" / "unixcoder"
+
+
+def _cache_max_bytes() -> int:
+    try:
+        return int(float(os.environ.get("SEMANTIC_CACHE_MAX_MB", "")) * 1024 * 1024)
+    except ValueError:
+        return DEFAULT_CACHE_MAX_BYTES
+
+
 def get_semantic_service() -> SemanticSimilarityService:
     global _service
     with _service_lock:
         if _service is None:
-            _service = SemanticSimilarityService()
+            _service = SemanticSimilarityService(cache_dir=default_cache_dir(), cache_max_bytes=_cache_max_bytes())
         return _service
 
 

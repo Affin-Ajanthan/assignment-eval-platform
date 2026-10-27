@@ -738,6 +738,12 @@ export default function InstructorPage() {
                     finding of misconduct.
                   </p>
                 )}
+                {(similarityResult.common_code_removed ?? 0) > 0 && (
+                  <p className="mt-1 text-xs text-gray-600">
+                    {similarityResult.common_code_removed} code pattern(s) shared by most of the class were ignored
+                    before comparing (assignment setting &quot;Ignore code most of the class shares&quot;).
+                  </p>
+                )}
                 {similarityResult.semantic.status === "ok" && (
                   <p className="mt-1 text-xs text-gray-500">
                     Semantic model: {similarityResult.semantic.model} · {similarityResult.semantic.submissions_encoded}{" "}

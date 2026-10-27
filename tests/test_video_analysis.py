@@ -1,3 +1,5 @@
+import shutil
+
 import pytest
 
 from app.evaluator.video_analysis import (
@@ -79,7 +81,12 @@ def test_whisper_transcriber_real_model_if_network_available(tmp_path):
     """Exercises the real faster-whisper path end-to-end. Skipped (not
     failed) when the model can't be downloaded -- e.g. this sandbox's
     egress policy blocks huggingface.co. Passing here means real
-    transcription genuinely works in this environment."""
+    transcription genuinely works in this environment.
+
+    The spoken test video is made with espeak-ng, a test-only tool the
+    platform itself never uses; without it the test is skipped too."""
+    if shutil.which("espeak-ng") is None:
+        pytest.skip("espeak-ng not installed (only needed to generate this test's spoken video)")
     video_path = make_two_scene_video(tmp_path / "speech.mp4", seg_seconds=2.0, fps=5, with_speech=True)
     try:
         transcriber = WhisperTranscriber(model_size="tiny")

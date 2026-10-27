@@ -135,6 +135,7 @@ add_missing_columns("assignments", {"report_template_text": "TEXT", "report_temp
 add_missing_columns("assignments", {"code_languages": "JSON"})
 add_missing_columns("assignments", {"student_similarity_check": "BOOLEAN NOT NULL DEFAULT 1",
                                     "student_ai_check": "BOOLEAN NOT NULL DEFAULT 1"})
+add_missing_columns("assignments", {"ignore_common_code": "BOOLEAN NOT NULL DEFAULT 1"})
 
 
 # --------------------------------------------------------------------------
@@ -300,6 +301,8 @@ class AssignmentIn(BaseModel):
     # Student self-checks before the deadline; both on by default.
     student_similarity_check: bool = True
     student_ai_check: bool = True
+    # Code similarity ignores code most of the class shares (both checks).
+    ignore_common_code: bool = True
     # Optional: students see no marks or feedback before this time. None shows
     # each mark as soon as it is saved.
     marks_release_at: Optional[datetime] = None
@@ -321,6 +324,7 @@ class AssignmentUpdate(BaseModel):
     code_languages: Optional[list[CodeLanguage]] = None  # [] removes the restriction
     student_similarity_check: Optional[bool] = None  # can be changed at any time
     student_ai_check: Optional[bool] = None
+    ignore_common_code: Optional[bool] = None  # can be changed at any time
     marks_release_at: Optional[datetime] = None  # send null explicitly to release marks now
     # Replaces the whole list ([] removes every test); leave out to keep them.
     test_cases: Optional[list[TestCaseIn]] = Field(default=None, max_length=_TEST_CASES_MAX)
@@ -356,6 +360,7 @@ class AssignmentOut(BaseModel):
     code_languages: list[str] = []
     student_similarity_check: bool = True
     student_ai_check: bool = True
+    ignore_common_code: bool = True
     marks_release_at: Optional[UTCDateTime] = None
     marks_released: bool = True  # whether students can see marks and feedback now
     # Every test case, hidden ones included: this is the instructor view only.
@@ -592,6 +597,9 @@ class SimilarityCheckOut(BaseModel):
     # True when the assignment's starter code was subtracted from the
     # token fingerprints before comparing.
     starter_code_excluded: bool = False
+    # Distinct code patterns ignored because most of the class shares them
+    # (0 when the assignment's "ignore common code" option is off).
+    common_code_removed: int = 0
 
 
 class ReportPassageOut(BaseModel):
@@ -1291,6 +1299,7 @@ def _assignment_out(db: Session, a: Assignment) -> AssignmentOut:
         code_languages=a.code_languages or [],
         student_similarity_check=_on(a.student_similarity_check),
         student_ai_check=_on(a.student_ai_check),
+        ignore_common_code=_on(a.ignore_common_code),
         marks_release_at=_as_utc(a.marks_release_at),
         marks_released=a.marks_released_at(_utcnow_naive()),
         test_cases=[TestCaseOut(**t) for t in a.test_cases or []],
@@ -1436,6 +1445,7 @@ def create_assignment(payload: AssignmentIn, instructor: User = Depends(require_
         code_languages=_langs.normalise_languages(payload.code_languages),
         student_similarity_check=payload.student_similarity_check,
         student_ai_check=payload.student_ai_check,
+        ignore_common_code=payload.ignore_common_code,
         marks_release_at=_to_naive_utc(payload.marks_release_at) if payload.marks_release_at else None,
         test_cases=_clean_test_cases(payload.test_cases, types),
         test_main_file=payload.test_main_file.strip() or None,
@@ -1531,6 +1541,8 @@ def update_assignment(
         assignment.student_similarity_check = payload.student_similarity_check
     if payload.student_ai_check is not None:
         assignment.student_ai_check = payload.student_ai_check
+    if payload.ignore_common_code is not None:
+        assignment.ignore_common_code = payload.ignore_common_code
     # Like the self-check switches, the release date can change at any time;
     # an explicit null releases the marks straight away.
     if "marks_release_at" in payload.model_fields_set:
@@ -2286,6 +2298,7 @@ def check_similarity(
             review_threshold=stats.get("review_threshold"),
         ),
         starter_code_excluded=starter_fp is not None,
+        common_code_removed=run.common_removed,
     )
 
 

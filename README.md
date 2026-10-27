@@ -332,6 +332,18 @@ If it can't be loaded or inference fails, the check still returns the
 fingerprint/Jaccard/containment results with a warning. Set
 `SEMANTIC_SIMILARITY=0` to turn it off.
 
+Encoding is the slow part of a check (about 2 s per submission on a CPU;
+comparing the pairs takes well under a second). Each submission's vectors
+are therefore kept in `cache/unixcoder/` (one small file per submission,
+vectors only, no code), so a repeat check -- or the first one after a
+server restart -- needs no model inference and does not even load the
+model. A change to the code, the model or the chunking creates a new entry.
+Only one inference pass runs at a time, so students who check at the same
+moment share it instead of each re-encoding the class. `SEMANTIC_CACHE_DIR`
+moves the folder (`off` keeps everything in memory) and
+`SEMANTIC_CACHE_MAX_MB` (default 500) caps it, deleting the oldest files
+first. The folder is safe to delete: it is rebuilt on demand.
+
 Thresholds were calibrated by hand on a small sample (renamed or
 restructured copies scored 0.82-0.91; five independently written
 solutions to the same task scored up to 0.78), so check them against
