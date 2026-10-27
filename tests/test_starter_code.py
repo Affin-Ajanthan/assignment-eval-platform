@@ -161,8 +161,19 @@ def test_check_similarity_excludes_starter_code_and_restores_old_behaviour_witho
         assert r.status_code == 200, r.text
     url = f"/subjects/{subject['id']}/assignments/{a['name']}/check-similarity"
 
+    # With "ignore common code" on (the default), code every student shares is
+    # dropped by itself -- the shared starter flags nothing even without a file.
+    body = client.post(url, headers=auth_headers(instructor_tok)).json()
+    assert body["common_code_removed"] > 0
+    assert sum(p["token_flagged"] for p in body["pairs"]) == 0
+
+    # The rest of this test exercises the starter-code file on its own.
+    r = client.put(f"/assignments/{a['id']}", json={"ignore_common_code": False}, headers=auth_headers(instructor_tok))
+    assert r.status_code == 200 and r.json()["ignore_common_code"] is False
+
     # No starter code: the shared starter token-flags most pairs, as before.
     body = client.post(url, headers=auth_headers(instructor_tok)).json()
+    assert body["common_code_removed"] == 0
     assert body["starter_code_excluded"] is False
     assert len(body["pairs"]) == len(list(itertools.combinations(STARTER_SOLUTIONS, 2)))
     assert sum(p["token_flagged"] for p in body["pairs"]) >= 5

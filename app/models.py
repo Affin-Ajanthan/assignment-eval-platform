@@ -165,6 +165,10 @@ class Assignment(Base):
     # either off at any time. Enforced by the API, not just the UI.
     student_similarity_check = Column(Boolean, nullable=False, default=True, server_default="1")
     student_ai_check = Column(Boolean, nullable=False, default=True, server_default="1")
+    # Code similarity (instructor check and student self-check) ignores code
+    # most of the class shares -- menu loops, input helpers, file saving. On by
+    # default, existing assignments included.
+    ignore_common_code = Column(Boolean, nullable=False, default=True, server_default="1")
     # Optional (naive UTC): students see no marks or feedback for this
     # assignment before this time, so a whole class can be published at once.
     # NULL shows each mark as soon as it is saved. Enforced by the API.

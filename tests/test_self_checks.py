@@ -444,3 +444,51 @@ def test_status_reads_never_write_and_report_stale_checks_as_failed(tmp_path):
         assert db.get(SelfCheck, stale_id).status == "failed"
     finally:
         db.close()
+
+
+def test_code_most_of_the_class_shares_is_ignored_but_copies_still_match(tmp_path):
+    from app.similarity_runs import code_similarity_for_dirs
+
+    shared = "def read_mark(prompt):\n    value = input(prompt)\n    return int(value.strip())\n\n"
+    unique = {
+        "a": "def average(xs):\n    return sum(xs) / len(xs)\n\nprint(average([1, 2, 3]))\n",
+        "c": "class Shelf:\n    def __init__(self):\n        self.books = []\n    def add(self, b):\n        self.books.append(b)\n",
+        "d": "for i in range(10):\n    if i % 2:\n        print(i * i)\n    else:\n        print(-i)\n",
+        "e": "import json\nwith open('x.json') as f:\n    data = json.load(f)\nprint(len(data))\n",
+    }
+    unique["b"] = unique["a"]  # b copied a
+    dirs = {}
+    for sid, body in unique.items():
+        d = tmp_path / sid
+        d.mkdir()
+        (d / "main.py").write_text(shared + body, encoding="utf-8")
+        dirs[sid] = d
+
+    kept = code_similarity_for_dirs(dirs)
+    removed = code_similarity_for_dirs(dirs, remove_common=True)
+    score = lambda run, x, y: next(p.jaccard for p in run.pairs if {p.submission_a, p.submission_b} == {x, y})  # noqa: E731
+    assert removed.common_removed > 0 and kept.common_removed == 0
+    assert score(removed, "c", "d") < score(kept, "c", "d")  # honest pair: the shared helper no longer counts
+    assert score(removed, "a", "b") == 1.0  # the copy still matches fully
+
+
+def test_ignore_common_code_is_on_by_default_and_the_instructor_can_switch_it(tmp_path):
+    subject, instructor_tok, assignment, students = _setup(tmp_path, name="Common Code Setting")
+    assert assignment["ignore_common_code"] is True
+    url = f"/subjects/{subject['id']}/assignments/{assignment['name']}/check-similarity"
+    on = client.post(url, headers=auth_headers(instructor_tok)).json()
+
+    r = client.put(f"/assignments/{assignment['id']}", json={"ignore_common_code": False},
+                   headers=auth_headers(instructor_tok))
+    assert r.status_code == 200 and r.json()["ignore_common_code"] is False  # even after submissions
+    off = client.post(url, headers=auth_headers(instructor_tok)).json()
+    assert off["common_code_removed"] == 0
+    # with only 3 submissions nothing is "most of the class" (needs at least 4)
+    assert on["common_code_removed"] == 0
+    # the student self-check follows the same setting and still finds the copy
+    tok_a, sid_a = students["a"]
+    assert _run(tok_a, sid_a, "code_similarity").status_code == 202
+    assert _latest(tok_a, sid_a, "code_similarity")["result"]["band"] == "high"
+    # students never see the setting
+    seen = client.get(f"/assignments/{assignment['id']}", headers=auth_headers(tok_a)).json()
+    assert "ignore_common_code" not in seen

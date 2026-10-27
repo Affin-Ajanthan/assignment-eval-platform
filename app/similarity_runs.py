@@ -5,6 +5,7 @@ stores flags (app/main.py), a self-check stores only its own record
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -12,7 +13,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from . import self_checks as _self_checks
-from .common import ANALYZED_EXTENSIONS, norm_name
+from .common import ANALYZED_EXTENSIONS, norm_name, on_flag
 from .db import BASE_DIR
 from .evaluator.document_extraction import extract_report_text, load_extraction
 from .models import Assignment, Submission
@@ -31,6 +32,25 @@ class CodeSimilarityRun:
     starter_fp: object
     fingerprints: dict
     files_by_submission: dict  # submission id -> [self_checks.OwnFile]
+    common_removed: int = 0  # distinct fingerprints dropped as common to the class
+
+
+def remove_common_code(fingerprints: dict, files_by_submission: dict) -> int:
+    """Drop fingerprints present in more than half of the submissions, and in at
+    least COMMON_MIN_REPORTS of them -- the patterns every solution to the task
+    shares (menu loops, input helpers, file saving). Same rule as the report
+    check's remove_common_fingerprints. Returns how many distinct ones went."""
+    n = len(fingerprints)
+    if n < _report_sim.COMMON_MIN_REPORTS:
+        return 0
+    counts = Counter(h for fp in fingerprints.values() for h in fp.hashes)
+    common = {h for h, c in counts.items() if c > n * _report_sim.COMMON_SHARE and c >= _report_sim.COMMON_MIN_REPORTS}
+    for fp in fingerprints.values():
+        fp.hashes -= common
+    for files in files_by_submission.values():
+        for f in files:
+            f.hashes -= common
+    return len(common)
 
 
 def display_name(code_dir: Path, path: Path, name: str) -> str:
@@ -44,7 +64,8 @@ def code_similarity_run(db: Session, subject_id: int, assignment_name: str,
                         submissions: list) -> CodeSimilarityRun:
     """Token (Winnowing) + semantic (UniXcoder) comparison of every pair of
     code submissions. Stores nothing: the instructor's check stores flags,
-    a student self-check never does."""
+    a student self-check never does. Code most of the class shares is left
+    out when the assignment's ``ignore_common_code`` option is on (default)."""
     # Starter code every student was given is subtracted from each file's
     # fingerprint (same extension only) so shared boilerplate can't flag a
     # pair on its own. The semantic path below still sees the full files.
@@ -56,15 +77,23 @@ def code_similarity_run(db: Session, subject_id: int, assignment_name: str,
     starter_fp = None
     if assignment and assignment.starter_code and assignment.starter_code_filename:
         starter_fp = fingerprint_source("starter", assignment.starter_code_filename, assignment.starter_code)
+    remove_common = on_flag(assignment.ignore_common_code) if assignment else True
+    return code_similarity_for_dirs({str(s.id): BASE_DIR / s.code_path for s in submissions}, starter_fp,
+                                    remove_common=remove_common)
 
+
+def code_similarity_for_dirs(code_dirs: dict[str, Path], starter_fp=None,
+                             remove_common: bool = False) -> CodeSimilarityRun:
+    """The comparison itself, on code folders keyed by submission id: what
+    code_similarity_run uses, and what scripts/evaluate_self_check.py runs on
+    labelled test sets without a database."""
     # 1-4: read + normalize each submission once, fingerprint it, and
     # compare every unordered pair (A-B only, never B-A) on tokens.
     fingerprints: dict[str, "Fingerprint"] = {}
     files_by_submission: dict[str, list] = {}
     semantic_sources: dict[str, str] = {}
-    for submission in submissions:
-        code_dir = BASE_DIR / submission.code_path
-        merged = Fingerprint(submission_id=str(submission.id), filename="(all files)", token_count=0)
+    for sid, code_dir in code_dirs.items():
+        merged = Fingerprint(submission_id=sid, filename="(all files)", token_count=0)
         normalized_files: list[str] = []
         files = []
         if code_dir.is_dir():
@@ -76,17 +105,18 @@ def code_similarity_run(db: Session, subject_id: int, assignment_name: str,
         py_names = {path: names_in(source) for path, _, source in files}
         own_files = []
         for path, name, source in files:
-            fp = subtract_starter(fingerprint_source(str(submission.id), name, source), starter_fp)
+            fp = subtract_starter(fingerprint_source(sid, name, source), starter_fp)
             merged.hashes |= fp.hashes
             own_files.append(_self_checks.OwnFile(name=display_name(code_dir, path, name),
                                                   source=source, hashes=set(fp.hashes)))
             merged.token_count += fp.token_count
             external = set().union(*(names for other, names in py_names.items() if other != path))
             normalized_files.append(normalize_code(source, name, external))
-        fingerprints[str(submission.id)] = merged
-        files_by_submission[str(submission.id)] = own_files
-        semantic_sources[str(submission.id)] = "\n".join(f for f in normalized_files if f)
+        fingerprints[sid] = merged
+        files_by_submission[sid] = own_files
+        semantic_sources[sid] = "\n".join(f for f in normalized_files if f)
 
+    common_removed = remove_common_code(fingerprints, files_by_submission) if remove_common else 0
     pairs = compare_all(fingerprints)
 
     # 5-7: UniXcoder as an extra signal. The expensive step -- model
@@ -100,7 +130,8 @@ def code_similarity_run(db: Session, subject_id: int, assignment_name: str,
     )
     stats = apply_semantic_signal(pairs, batch.embeddings) if batch.status == "ok" else {}
     return CodeSimilarityRun(pairs=pairs, batch=batch, stats=stats, starter_fp=starter_fp,
-                             fingerprints=fingerprints, files_by_submission=files_by_submission)
+                             fingerprints=fingerprints, files_by_submission=files_by_submission,
+                             common_removed=common_removed)
 
 
 def report_similarity_text(submission: Submission) -> tuple[Optional[str], Optional[str]]:
@@ -109,7 +140,11 @@ def report_similarity_text(submission: Submission) -> tuple[Optional[str], Optio
     footers are dropped); DOCX reports through the MarkItDown extraction."""
     if not submission.report_path:
         return None, "No report submitted"
-    path = BASE_DIR / submission.report_path
+    return report_text_for_path(BASE_DIR / submission.report_path)
+
+
+def report_text_for_path(path: Path) -> tuple[Optional[str], Optional[str]]:
+    """report_similarity_text for a file path (no database needed)."""
     if not path.is_file():
         return None, "Report file not found"
     suffix = path.suffix.lower()
