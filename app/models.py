@@ -177,6 +177,11 @@ class Assignment(Base):
     # The file the tests run, e.g. "student_management.rb" (a name or a path
     # inside the submission). NULL: the only Python/Ruby file, or a main.* one.
     test_main_file = Column(String, nullable=True)
+    # "submission": students upload code, a report and/or a video, graded with a
+    # rubric. "code_challenge": students submit code only, and it is run against
+    # test_cases (HackerRank style). Chosen when the assignment is created and
+    # never changed. Read it through `kind`, which also covers older rows.
+    assignment_type = Column(String, nullable=False, default="submission", server_default="submission")
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
@@ -189,6 +194,12 @@ class Assignment(Base):
         if not self.submission_types:
             return list(SUBMISSION_TYPES)
         return [t for t in SUBMISSION_TYPES if t in self.submission_types]
+
+    @property
+    def kind(self) -> str:
+        """"code_challenge" or "submission". An assignment that already has test
+        cases counts as a code challenge even if it was saved before the type existed."""
+        return "code_challenge" if self.assignment_type == "code_challenge" or self.test_cases else "submission"
 
     def marks_released_at(self, now: datetime) -> bool:
         """Whether students may see marks and feedback at a naive-UTC ``now``."""

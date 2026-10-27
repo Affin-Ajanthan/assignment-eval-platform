@@ -94,7 +94,11 @@ export interface Assignment {
   test_cases: TestCase[];
   /** The file the tests run (a name or path in the submission); "" = picked automatically. */
   test_main_file: string;
+  /** "submission": students upload files; "code_challenge": code only, run against test cases. Fixed at creation. */
+  assignment_type: AssignmentKind;
 }
+
+export type AssignmentKind = "submission" | "code_challenge";
 
 /** exact: the whole output (ignoring trailing spaces); contains: the expected text appears in it. */
 export type TestMatch = "exact" | "contains";

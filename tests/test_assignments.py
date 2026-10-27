@@ -624,7 +624,9 @@ def test_test_cases_are_saved_numbered_and_named_for_the_instructor():
     assert len(client.put(f"/assignments/{a_id}", headers=H(itok), json={"description": "x"}).json()["test_cases"]) == 2
     replaced = client.put(f"/assignments/{a_id}", headers=H(itok), json={"test_cases": SORT_TESTS[:1]}).json()
     assert [t["id"] for t in replaced["test_cases"]] == [1]
-    assert client.put(f"/assignments/{a_id}", headers=H(itok), json={"test_cases": []}).json()["test_cases"] == []
+    # A code challenge can't be left without tests.
+    emptied = client.put(f"/assignments/{a_id}", headers=H(itok), json={"test_cases": []})
+    assert emptied.status_code == 400 and "at least one test case" in emptied.json()["detail"]
 
 
 def test_test_cases_are_validated():
@@ -641,10 +643,10 @@ def test_test_cases_are_validated():
     assert create("No expected", test_cases=[{"input": "1"}]).status_code == 422
     assert create("Too many", test_cases=[{"expected_output": "x"}] * 51).status_code == 422
 
-    # Code can't be turned off while the assignment still has tests.
+    # A code challenge stays code-only.
     a = create("With tests", test_cases=SORT_TESTS).json()
     r = client.put(f"/assignments/{a['id']}", headers=H(itok), json={"submission_types": ["report"]})
-    assert r.status_code == 400 and "Remove the test cases" in r.json()["detail"]
+    assert r.status_code == 400 and "accepts code submissions only" in r.json()["detail"]
 
 
 def test_students_never_receive_test_cases():
@@ -675,6 +677,59 @@ def test_students_see_the_visible_tests_as_samples_and_only_a_count_of_the_hidde
         assert secret not in student_views, secret
 
     # An assignment without tests shows none.
-    client.put(f"/assignments/{a['id']}", headers=H(itok), json={"test_cases": []})
-    plain = client.get("/assignments", headers=H(stok)).json()[0]
+    client.post("/assignments", headers=H(itok), json={
+        "subject_id": subject["id"], "name": "Plain", "available_from": _iso(timedelta(hours=-1)),
+        "deadline": _iso(timedelta(days=7))})
+    plain = next(x for x in client.get("/assignments", headers=H(stok)).json() if x["name"] == "Plain")
     assert (plain["sample_tests"], plain["hidden_test_count"]) == ([], 0)
+
+
+# --------------------------------------------------------------------------
+# Assignment type: submission or code challenge
+# --------------------------------------------------------------------------
+
+
+def _new_assignment(itok, subject, name, **extra):
+    return client.post("/assignments", headers=H(itok), json={
+        "subject_id": subject["id"], "name": name, "available_from": _iso(timedelta(hours=-1)),
+        "deadline": _iso(timedelta(days=7)), **extra})
+
+
+def test_a_code_challenge_accepts_code_only_and_needs_test_cases():
+    subject, itok, _ = setup_subject_with_users(client)
+    r = _new_assignment(itok, subject, "Challenge", assignment_type="code_challenge", test_cases=SORT_TESTS)
+    assert r.status_code == 200, r.text
+    assert (r.json()["assignment_type"], r.json()["submission_types"]) == ("code_challenge", ["code"])
+
+    no_tests = _new_assignment(itok, subject, "Empty challenge", assignment_type="code_challenge")
+    assert no_tests.status_code == 400 and "at least one test case" in no_tests.json()["detail"]
+    more = _new_assignment(itok, subject, "Too wide", assignment_type="code_challenge", test_cases=SORT_TESTS,
+                           submission_types=["code", "report"])
+    assert more.status_code == 400 and "accepts code submissions only" in more.json()["detail"]
+    # Sending ["code"] explicitly is fine.
+    ok = _new_assignment(itok, subject, "Code listed", assignment_type="code_challenge", test_cases=SORT_TESTS,
+                         submission_types=["code"])
+    assert ok.status_code == 200 and ok.json()["submission_types"] == ["code"]
+
+
+def test_a_submission_assignment_keeps_its_file_types_and_takes_no_test_cases():
+    subject, itok, _ = setup_subject_with_users(client)
+    plain = _new_assignment(itok, subject, "Plain", assignment_type="submission",
+                            submission_types=["code", "report"])
+    assert (plain.json()["assignment_type"], plain.json()["submission_types"]) == ("submission", ["code", "report"])
+    assert _new_assignment(itok, subject, "Default").json()["assignment_type"] == "submission"  # no type, no tests
+
+    with_tests = _new_assignment(itok, subject, "Wrong type", assignment_type="submission", test_cases=SORT_TESTS)
+    assert with_tests.status_code == 400 and "belong to code challenges" in with_tests.json()["detail"]
+    late = client.put(f"/assignments/{plain.json()['id']}", headers=H(itok), json={"test_cases": SORT_TESTS})
+    assert late.status_code == 400 and "belong to code challenges" in late.json()["detail"]
+    # The type itself can't be changed afterwards.
+    changed = client.put(f"/assignments/{plain.json()['id']}", headers=H(itok), json={"assignment_type": "code_challenge"})
+    assert changed.status_code == 200 and changed.json()["assignment_type"] == "submission"
+
+
+def test_test_cases_without_a_type_make_a_code_challenge():
+    subject, itok, _ = setup_subject_with_users(client)
+    r = _new_assignment(itok, subject, "Inferred", test_cases=SORT_TESTS)
+    assert r.status_code == 200 and r.json()["assignment_type"] == "code_challenge"
+    assert r.json()["submission_types"] == ["code"]

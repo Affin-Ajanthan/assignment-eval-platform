@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { apiFetch, Assignment, AssignmentStatus, Rubric, SubmissionType } from "@/lib/api";
+import { apiFetch, Assignment, AssignmentKind, AssignmentStatus, Rubric, SubmissionType } from "@/lib/api";
 import { combineLocal, formatDateTime, splitLocal } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
@@ -17,6 +17,7 @@ const STATUS_STYLE: Record<AssignmentStatus, { text: string; cls: string }> = {
 };
 
 type FormState = {
+  kind: AssignmentKind | null; // null: not chosen yet (creating): the form shows the choice first
   name: string;
   description: string;
   fromDate: string;
@@ -44,11 +45,26 @@ const TYPE_OPTIONS: { value: SubmissionType; label: string; hint: string }[] = [
 
 const typeLabel = (t: SubmissionType) => TYPE_OPTIONS.find((o) => o.value === t)?.label ?? t;
 
+const KIND_OPTIONS: { value: AssignmentKind; title: string; text: string }[] = [
+  {
+    value: "submission",
+    title: "Submission",
+    text: "Students upload their work: code, a report and/or a video. You grade it with a rubric, with the automated evaluation as a second opinion.",
+  },
+  {
+    value: "code_challenge",
+    title: "Code challenge",
+    text: "HackerRank style: students submit code only. It is run against your test cases, and the marks come from the tests passed.",
+  },
+];
+const kindTitle = (k: AssignmentKind) => KIND_OPTIONS.find((o) => o.value === k)?.title ?? k;
+
 function toggleType(current: SubmissionType[], t: SubmissionType): SubmissionType[] {
   return current.includes(t) ? current.filter((x) => x !== t) : [...current, t];
 }
 
 const EMPTY: FormState = {
+  kind: null,
   name: "",
   description: "",
   fromDate: "",
@@ -102,6 +118,7 @@ export default function AssignmentsSection({
     setEditingId(a.id);
     setMsg(null);
     setForm({
+      kind: a.assignment_type ?? "submission",
       name: a.name,
       description: a.description,
       fromDate: from.date,
@@ -122,6 +139,11 @@ export default function AssignmentsSection({
     });
   }
 
+  /** The first step of creating: a code challenge accepts code only, a submission starts with every type. */
+  function chooseKind(kind: AssignmentKind) {
+    setForm((f) => ({ ...f, kind, types: kind === "code_challenge" ? ["code"] : ["code", "report", "video"] }));
+  }
+
   function cancelEdit() {
     setEditingId(null);
     setForm(EMPTY);
@@ -131,6 +153,8 @@ export default function AssignmentsSection({
   async function handleSave(e: FormEvent) {
     e.preventDefault();
     setMsg(null);
+    if (form.kind === null) return setMsg({ text: "Choose the assignment type first.", kind: "error" });
+    const challenge = form.kind === "code_challenge";
     // Same checks the API enforces, so the instructor gets a clear message early.
     if (!form.name.trim()) return setMsg({ text: "Assignment name is required.", kind: "error" });
     const from = combineLocal(form.fromDate, form.fromTime);
@@ -156,8 +180,11 @@ export default function AssignmentsSection({
     if (releaseSet && !release) {
       return setMsg({ text: "Enter both a date and a time to release the marks, or leave both empty.", kind: "error" });
     }
-    // Tests run on submitted code: without code submissions, none are kept.
-    const testPayload = testRowsPayload(form.types.includes("code") ? form.testCases : []);
+    // Test cases belong to code challenges only, and a challenge needs at least one.
+    if (challenge && form.testCases.length === 0) {
+      return setMsg({ text: "Add at least one test case to a code challenge.", kind: "error" });
+    }
+    const testPayload = testRowsPayload(challenge ? form.testCases : []);
     if (testPayload.error !== null) return setMsg({ text: testPayload.error, kind: "error" });
     const body = {
       name: form.name.trim(),
@@ -165,7 +192,9 @@ export default function AssignmentsSection({
       available_from: from.toISOString(),
       deadline: due.toISOString(),
       rubric_id: form.rubricId ? parseInt(form.rubricId, 10) : null,
-      submission_types: form.types,
+      assignment_type: form.kind,
+      // A code challenge is code only: set when creating, left alone when editing.
+      submission_types: challenge ? (editingId === null ? ["code"] : undefined) : form.types,
       starter_code: hasStarter ? form.starterCode : "",
       starter_code_filename: hasStarter ? form.starterFilename.trim() : "",
       // Only meaningful when students submit code; otherwise no restriction.
@@ -175,7 +204,7 @@ export default function AssignmentsSection({
       // null also clears an earlier date, releasing the marks straight away.
       marks_release_at: release ? release.toISOString() : null,
       test_cases: testPayload.tests,
-      test_main_file: form.types.includes("code") && form.testCases.length > 0 ? form.testMainFile.trim() : "",
+      test_main_file: challenge ? form.testMainFile.trim() : "",
     };
     setSaving(true);
     try {
@@ -235,6 +264,40 @@ export default function AssignmentsSection({
 
       <form onSubmit={handleSave} className="mt-3" noValidate>
         <h3 className="text-sm font-bold">{editingId === null ? "Create assignment" : "Edit assignment"}</h3>
+
+        {form.kind === null ? (
+          <div className="mt-2" data-testid="assignment-type-chooser">
+            <p className="text-sm text-gray-600">What kind of assignment is this?</p>
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+              {KIND_OPTIONS.map((o) => (
+                <button
+                  key={o.value}
+                  type="button"
+                  onClick={() => chooseKind(o.value)}
+                  className="rounded-md border border-gray-300 p-4 text-left hover:border-blue-500 hover:bg-blue-50"
+                >
+                  <span className="block font-bold">{o.title}</span>
+                  <span className="mt-1 block text-sm text-gray-600">{o.text}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <>
+        <p className="mt-2 text-sm" data-testid="assignment-type">
+          <span className="font-semibold">Type:</span> {kindTitle(form.kind)}{" "}
+          {editingId === null ? (
+            <button
+              type="button"
+              onClick={() => setForm((f) => ({ ...f, kind: null }))}
+              className="ml-1 text-xs font-semibold text-blue-700 hover:underline"
+            >
+              Change
+            </button>
+          ) : (
+            <span className="text-xs text-gray-500">(fixed once created)</span>
+          )}
+        </p>
         <label className="mt-2 block text-sm font-semibold" htmlFor="assignment-name">
           Assignment name
         </label>
@@ -261,6 +324,7 @@ export default function AssignmentsSection({
           className={input}
         />
 
+        {form.kind === "submission" && (
         <fieldset className="mt-3">
           <legend className="text-sm font-semibold">Students can submit</legend>
           <div className="mt-1 flex flex-wrap gap-4">
@@ -282,6 +346,7 @@ export default function AssignmentsSection({
               : "Students can upload only the kinds you tick. Pick at least one."}
           </p>
         </fieldset>
+        )}
 
         {form.types.includes("code") && (
           <fieldset className="mt-3">
@@ -318,7 +383,7 @@ export default function AssignmentsSection({
           </fieldset>
         )}
 
-        {form.types.includes("code") && (
+        {form.kind === "code_challenge" && (
           <>
             <TestCasesEditor rows={form.testCases} onChange={(rows) => set("testCases", rows)} />
             {form.testCases.length > 0 && (
@@ -510,6 +575,8 @@ export default function AssignmentsSection({
             </button>
           )}
         </div>
+          </>
+        )}
         <Message state={msg} />
       </form>
 
@@ -523,6 +590,9 @@ export default function AssignmentsSection({
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <h4 className="font-bold">{a.name}</h4>
+                  {a.assignment_type === "code_challenge" && (
+                    <Badge tone="bg-purple-50 text-purple-800">Code challenge</Badge>
+                  )}
                   <Badge tone={STATUS_STYLE[a.status].cls}>{STATUS_STYLE[a.status].text}</Badge>
                   <p className="mt-1 text-xs text-gray-600">Accepts: {a.submission_types.map(typeLabel).join(", ")}</p>
                   {a.submission_types.includes("code") && a.code_languages?.length > 0 && (

@@ -127,6 +127,7 @@ add_missing_columns("grades", {"feedback": "TEXT"})
 add_missing_columns("assignments", {"marks_release_at": "DATETIME"})
 add_missing_columns("assignments", {"test_cases": "JSON"})
 add_missing_columns("assignments", {"test_main_file": "VARCHAR"})
+add_missing_columns("assignments", {"assignment_type": "VARCHAR NOT NULL DEFAULT 'submission'"})
 add_missing_columns("assignments", {"submission_types": "JSON"})
 add_missing_columns("assignments", {"starter_code": "TEXT", "starter_code_filename": "VARCHAR"})
 add_missing_columns("assignments", {"report_template_text": "TEXT", "report_template_filename": "VARCHAR"})
@@ -271,9 +272,15 @@ class TestCaseOut(TestCaseIn):
     id: int
 
 
+AssignmentType = Literal["submission", "code_challenge"]
+
+
 class AssignmentIn(BaseModel):
     subject_id: int
     name: str = Field(max_length=200)
+    # "submission": students upload files. "code_challenge": code only, run
+    # against test_cases. Left out: a code challenge if there are test cases.
+    assignment_type: Optional[AssignmentType] = None
     description: str = Field(default="", max_length=10_000)
     # ISO 8601. Times with an offset are converted to UTC; times without
     # one are taken as UTC (the frontend always sends UTC).
@@ -325,6 +332,7 @@ class AssignmentOut(BaseModel):
     id: int
     subject_id: int
     subject_name: str
+    assignment_type: str = "submission"  # submission | code_challenge
     name: str
     description: str
     available_from: UTCDateTime
@@ -1283,7 +1291,24 @@ def _assignment_out(db: Session, a: Assignment) -> AssignmentOut:
         marks_released=a.marks_released_at(_utcnow_naive()),
         test_cases=[TestCaseOut(**t) for t in a.test_cases or []],
         test_main_file=a.test_main_file or "",
+        assignment_type=a.kind,
     )
+
+
+def _assignment_kind(payload: AssignmentIn) -> str:
+    """The type of a new assignment, checked against its other fields. A code
+    challenge accepts code only and needs at least one test case; test cases
+    belong to code challenges only. Without an explicit type, test cases make
+    it a code challenge."""
+    kind = payload.assignment_type or ("code_challenge" if payload.test_cases else "submission")
+    if kind == "code_challenge":
+        if "submission_types" in payload.model_fields_set and list(set(payload.submission_types)) != ["code"]:
+            raise HTTPException(400, "A code challenge accepts code submissions only.")
+        if not payload.test_cases:
+            raise HTTPException(400, "A code challenge needs at least one test case.")
+    elif payload.test_cases:
+        raise HTTPException(400, "Test cases belong to code challenges: choose the code challenge type.")
+    return kind
 
 
 def _clean_test_cases(tests: list[TestCaseIn], accepted_types: list[str]) -> Optional[list[dict]]:
@@ -1394,8 +1419,10 @@ def create_assignment(payload: AssignmentIn, instructor: User = Depends(require_
     _require_unique_assignment_name(db, payload.subject_id, name)
     _check_assignment_rubric(db, payload.subject_id, payload.rubric_id)
     starter_code, starter_filename = _clean_starter_code(payload.starter_code, payload.starter_code_filename)
-    types = _normalise_submission_types(payload.submission_types)
+    kind = _assignment_kind(payload)
+    types = ["code"] if kind == "code_challenge" else _normalise_submission_types(payload.submission_types)
     assignment = Assignment(
+        assignment_type=kind,
         subject_id=payload.subject_id, name=name, description=payload.description.strip(),
         available_from=available_from, deadline=deadline, rubric_id=payload.rubric_id,
         submission_types=types, starter_code=starter_code, starter_code_filename=starter_filename,
@@ -1481,6 +1508,8 @@ def update_assignment(
         assignment.rubric_id = payload.rubric_id
     if payload.submission_types is not None:
         types = _normalise_submission_types(payload.submission_types)
+        if assignment.kind == "code_challenge" and types != ["code"]:
+            raise HTTPException(400, "A code challenge accepts code submissions only.")
         if types != assignment.accepted_types():
             has_submissions = db.query(Submission.id).filter(Submission.assignment_id == assignment.id).first()
             if has_submissions:
@@ -1503,9 +1532,12 @@ def update_assignment(
     if payload.test_main_file is not None:
         assignment.test_main_file = payload.test_main_file.strip() or None
     if payload.test_cases is not None:
-        assignment.test_cases = _clean_test_cases(payload.test_cases, assignment.accepted_types())
-    elif assignment.test_cases and "code" not in assignment.accepted_types():
-        raise HTTPException(400, "Remove the test cases before turning off code submissions.")
+        if assignment.kind == "code_challenge":
+            if not payload.test_cases:
+                raise HTTPException(400, "A code challenge needs at least one test case.")
+            assignment.test_cases = _clean_test_cases(payload.test_cases, assignment.accepted_types())
+        elif payload.test_cases:
+            raise HTTPException(400, "Test cases belong to code challenges: choose the code challenge type.")
     if payload.code_languages is not None:
         languages = _langs.normalise_languages(payload.code_languages)
         if languages != (assignment.code_languages or None):
