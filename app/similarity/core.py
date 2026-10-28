@@ -87,8 +87,9 @@ def _python_tokens(source: str) -> list[tuple[str, int]]:
 
 
 def _generic_tokens(source: str) -> list[tuple[str, int]]:
-    """Regex-based fallback tokenizer for non-Python languages (Java,
-    JS/TS, C/C++, etc). Strips comments, folds identifiers/numbers/
+    """Regex-based fallback tokenizer for languages without a tree-sitter
+    parser (TypeScript, Kotlin, ...) or when tree-sitter isn't installed.
+    Strips comments, folds identifiers/numbers/
     strings to placeholders, keeps a small shared keyword set intact.
     Each token comes with the source line it starts on."""
     tokens: list[tuple[str, int]] = []
@@ -112,6 +113,68 @@ def _generic_tokens(source: str) -> list[tuple[str, int]]:
     return tokens
 
 
+_IDENT_TEXT_RE = re.compile(r"[$@]{0,2}[A-Za-z_][A-Za-z0-9_]*[?!]?")
+# Named leaves that look like a name but are part of the language: kept as text.
+_TS_KEYWORD_LEAVES = {
+    "primitive_type", "integral_type", "floating_point_type", "boolean_type", "void_type",
+    "predefined_type", "implicit_type", "sized_type_specifier", "cast_type", "true", "false", "null",
+    "null_literal", "nil", "this", "self", "super", "undefined", "boolean", "iota",
+}
+_TS_CHAR_LITERALS = {"char_literal", "character_literal", "rune_literal"}
+
+
+def _tree_sitter_tokens(source: str, language: str) -> list[tuple[str, int]] | None:
+    """Tokens of `source` from its tree-sitter parse (the parsers ts_cleanup
+    uses), folded like the other tokenizers: names -> ID, numbers -> NUM,
+    strings -> STR, comments dropped, keywords and operators kept. Unlike
+    the regex, PHP's ``$name``, Go's and JavaScript's backtick strings, C's
+    ``#include`` and every language's own keywords are read correctly.
+    A name is recognised by its text rather than its node type, so a grammar's
+    name node this list doesn't know still folds to ID. Code with syntax
+    errors is still tokenized (tree-sitter keeps the parts it can read), so a
+    copy with one broken line still matches. None when no parser is available."""
+    from .ts_cleanup import _parser
+
+    parser = _parser(language)
+    if parser is None:
+        return None
+    root = parser.parse(source.encode("utf-8")).root_node
+    tokens: list[tuple[str, int]] = []
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        kind = node.type
+        if node.is_missing or "comment" in kind:
+            continue
+        if node.is_named and ("string" in kind or kind in _TS_CHAR_LITERALS or kind in ("heredoc", "nowdoc")):
+            tokens.append(("STR", node.start_point[0] + 1))  # the whole literal, interpolations included
+            continue
+        if node.child_count:
+            # A contextual keyword used as a name (C#'s `var file = ...`) is an
+            # identifier node wrapping a keyword token: still a name.
+            if node.is_named and ("identifier" in kind or kind == "name") and \
+                    _IDENT_TEXT_RE.fullmatch(node.text.decode("utf-8", errors="replace")):
+                tokens.append(("ID", node.start_point[0] + 1))
+                continue
+            stack.extend(reversed(node.children))
+            continue
+        text = node.text.decode("utf-8", errors="replace").strip()
+        if not text:
+            continue  # e.g. Go's newline statement terminators
+        line = node.start_point[0] + 1
+        if not node.is_named:
+            tokens.append((text, line))  # keyword or operator
+        elif text[0].isdigit() or (text[0] == "." and text[1:2].isdigit()):
+            tokens.append(("NUM", line))
+        elif kind in _TS_KEYWORD_LEAVES:
+            tokens.append((text, line))
+        elif _IDENT_TEXT_RE.fullmatch(text):
+            tokens.append(("ID", line))
+        else:
+            tokens.append((kind, line))  # e.g. PHP's inline HTML, an escape sequence
+    return tokens
+
+
 def _normalize_python(source: str) -> list[str]:
     return [t for t, _ in _python_tokens(source)]
 
@@ -127,9 +190,15 @@ _EXT_LANGUAGE = {
 
 def normalize_tokens_with_lines(source: str, filename: str = "") -> list[tuple[str, int]]:
     """normalize_tokens, with the source line each token starts on."""
+    from .ts_cleanup import LANGUAGE_BY_EXTENSION
+
     ext = Path(filename).suffix.lower()
     if _EXT_LANGUAGE.get(ext) == "python":
         return _python_tokens(source)
+    if ext in LANGUAGE_BY_EXTENSION:
+        tokens = _tree_sitter_tokens(source, LANGUAGE_BY_EXTENSION[ext])
+        if tokens is not None:
+            return tokens
     return _generic_tokens(source)
 
 

@@ -315,6 +315,8 @@ export interface ReportSimilarityResult {
   /** The assignment's template PDF, cut out of every report before comparing. */
   template_filename: string | null;
   template_words_removed: Record<string, number>;
+  /** Reference lists and cited quotations cut out of each report before comparing. */
+  cited_words_removed?: Record<string, number>;
   pairs: ReportSimilarityPair[];
   semantic: {
     status: "ok" | "unavailable" | "disabled";

@@ -163,6 +163,21 @@ def anonymize_identifiers(code: str) -> str:
     return _STRING_OR_IDENT_RE.sub(substitute, code)
 
 
+def strip_junk(source: str, filename: str = "", external_names: set[str] | None = None,
+               keep_lines: bool = False) -> str:
+    """`source` without code that does nothing: python_cleanup for Python,
+    ts_cleanup (tree-sitter) for the languages it parses, unchanged otherwise.
+    Used before both comparisons -- the embedding here and the token
+    fingerprints (similarity_runs, with `keep_lines` so matches keep their
+    line numbers) -- so padding a copy with junk lowers neither score."""
+    suffix = Path(filename).suffix.lower()
+    if suffix == ".py":
+        return strip_python_dead_code(source, external_names, keep_lines)
+    if suffix in LANGUAGE_BY_EXTENSION:
+        return strip_dead_code(source, LANGUAGE_BY_EXTENSION[suffix], external_names, keep_lines)
+    return source
+
+
 def normalize_code(source: str, filename: str = "", external_names: set[str] | None = None) -> str:
     """Prepare code for embedding: strip comments (keeping string
     literals intact), anonymize identifiers, collapse whitespace.
@@ -175,11 +190,7 @@ def normalize_code(source: str, filename: str = "", external_names: set[str] | N
     otherwise one inserted junk variable renumbers every later placeholder
     and an exact copy scores like different code. `external_names`: the
     names used by the submission's other files (see python_cleanup)."""
-    suffix = Path(filename).suffix.lower()
-    if suffix == ".py":
-        source = strip_python_dead_code(source, external_names)
-    elif suffix in LANGUAGE_BY_EXTENSION:  # Java, JavaScript (tree-sitter; see ts_cleanup)
-        source = strip_dead_code(source, LANGUAGE_BY_EXTENSION[suffix], external_names)
+    source = strip_junk(source, filename, external_names)
     pattern = _HASH_COMMENT_RE if Path(filename).suffix.lower() in _HASH_COMMENT_LANGS else _C_COMMENT_RE
     stripped = pattern.sub(lambda m: "" if m.lastgroup == "comment" else m.group(), source)
     return " ".join(anonymize_identifiers(stripped).split())

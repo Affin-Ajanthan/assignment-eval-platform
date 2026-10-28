@@ -175,8 +175,8 @@
       "why_similar": "identical class declaration, main method and Scanner setup",
       "production": 0.7392373085021973,
       "raw": 0.3553306460380554,
-      "jaccard": 0.28888888888888886,
-      "containment": 0.5416666666666666,
+      "jaccard": 0.27906976744186046,
+      "containment": 0.5217391304347826,
       "token_flag": false,
       "shared_lines": 0.7,
       "flagged_at": {
@@ -439,8 +439,8 @@
       "why_similar": "identical Express setup: require, app, middleware, listen",
       "production": 0.33901745080947876,
       "raw": 0.28127142786979675,
-      "jaccard": 0.3333333333333333,
-      "containment": 0.5,
+      "jaccard": 0.3090909090909091,
+      "containment": 0.4722222222222222,
       "token_flag": false,
       "shared_lines": 0.46153846153846156,
       "flagged_at": {

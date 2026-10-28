@@ -182,12 +182,15 @@ def _find_removals(tree: ast.Module, external: set[str]) -> list[tuple[ast.AST, 
             return result
 
 
-def strip_python_dead_code(source: str, external_names: set[str] | None = None) -> str:
+def strip_python_dead_code(source: str, external_names: set[str] | None = None,
+                           keep_lines: bool = False) -> str:
     """`source` without unused assignments/imports, dead branches and
     unreachable statements. `external_names` are the names that appear in
     the submission's other files (module-level names among them are kept).
     Code that doesn't parse is returned unchanged, except that stray Markdown
-    code fences (a file pasted from a chat window) are dropped first."""
+    code fences (a file pasted from a chat window) are dropped first.
+    `keep_lines`: removed code leaves its line breaks behind, so every remaining
+    line keeps its line number (for fingerprints, whose matches are shown by line)."""
     try:
         tree = ast.parse(source)
     except (SyntaxError, ValueError, RecursionError):
@@ -231,6 +234,8 @@ def strip_python_dead_code(source: str, external_names: set[str] | None = None) 
     out, last = [], 0
     for start, end in merged:
         out.append(data[last:start])
+        if keep_lines:
+            out.append(b"\n" * data.count(b"\n", start, end))
         last = end
     out.append(data[last:])
     return b"".join(out).decode("utf-8", errors="replace")

@@ -151,7 +151,7 @@ TC13,Python,different tasks with the same exception-handling structure,same try/
         print(""file is not text"")
         return 0
 "
-TC11,Java,different tasks sharing class/main/Scanner boilerplate,"identical class declaration, main method and Scanner setup",0.7392373085021973,0.3553306460380554,0.28888888888888886,0.5416666666666666,False,0.7,True,True,True,False,False,False,False,False,"import java.util.Scanner;
+TC11,Java,different tasks sharing class/main/Scanner boilerplate,"identical class declaration, main method and Scanner setup",0.7392373085021973,0.3553306460380554,0.27906976744186046,0.5217391304347826,False,0.7,True,True,True,False,False,False,False,False,"import java.util.Scanner;
 
 public class Main {
     public static void main(String[] args) {
@@ -340,7 +340,7 @@ def circle_report(radius):
     circumference = 2 * math.pi * radius
     return json.dumps({""area"": round(area, 2), ""circumference"": round(circumference, 2)})
 "
-TC18,JavaScript,different apps sharing Express framework boilerplate,"identical Express setup: require, app, middleware, listen",0.33901745080947876,0.28127142786979675,0.3333333333333333,0.5,False,0.46153846153846156,False,False,False,False,False,False,False,False,"const express = require('express');
+TC18,JavaScript,different apps sharing Express framework boilerplate,"identical Express setup: require, app, middleware, listen",0.33901745080947876,0.28127142786979675,0.3090909090909091,0.4722222222222222,False,0.46153846153846156,False,False,False,False,False,False,False,False,"const express = require('express');
 const app = express();
 app.use(express.json());
 
