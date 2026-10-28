@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { apiFetch, CodeSubmit, MySubmission, StudentAssignment } from "@/lib/api";
 import Message, { MessageState } from "@/components/Message";
-import { CodeRunResults, MarkBox } from "@/components/student/CodeEditorForm";
+import { MarkBox, SubmitReport } from "@/components/student/CodeEditorForm";
 
 /**
  * A submitted code challenge that has no mark yet: the test cases could not be run when the code was
@@ -47,7 +47,7 @@ export default function MarkMyCode({
   if (result) {
     return (
       <div className="mt-3" data-testid="mark-my-code-result">
-        {result.run && <CodeRunResults run={result.run} submitted />}
+        <SubmitReport questions={result.questions} />
         <MarkBox result={result} releaseAt={assignment.marks_release_at} />
       </div>
     );

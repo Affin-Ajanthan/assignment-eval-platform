@@ -238,6 +238,108 @@ def test_a_run_with_no_tests_or_no_points_scores_zero_without_dividing_by_zero()
 
 
 # --------------------------------------------------------------------------
+# A challenge with several questions
+# --------------------------------------------------------------------------
+
+QUESTIONS = [{"id": 1, "title": "One", "statement": ""}, {"id": 2, "title": "Two", "statement": ""}]
+# Question 1 has two tests (2 + 1 points) and question 2 has one (4 points); only the tests that expect "ok" pass.
+TESTS = [dict(_test(1, "ok", points=2), question=1), dict(_test(2, "no", points=1), question=1),
+         dict(_test(3, "ok", points=4), question=2)]
+
+
+class RecordingRun:
+    """Stands in for run_tests: records each call and passes the tests that expect "ok"."""
+
+    def __init__(self, error=None):
+        self.calls, self.error = [], error
+
+    def __call__(self, code_dir, tests, *, main_file="", **kwargs):
+        if self.error:
+            raise self.error
+        self.calls.append((Path(code_dir).name, main_file, [t["id"] for t in tests]))
+        results = [ct.TestResult(test_id=t["id"], name=t["name"], visible=t["visible"], points=t["points"],
+                                 match=t["match"], status="passed" if t["expected_output"] == "ok" else "failed",
+                                 passed=t["expected_output"] == "ok", expected_output=t["expected_output"],
+                                 actual_output="") for t in tests]
+        return ct.TestRun(file=main_file or "main.py", language="ruby" if main_file.endswith(".rb") else "python",
+                          results=results)
+
+
+def test_a_typed_answer_is_saved_as_main_for_one_question_and_by_number_for_several():
+    assert ct.answer_filename(1, 1, "python") == "main.py"
+    assert ct.answer_filename(1, 1, "ruby") == "main.rb"
+    assert ct.answer_filename(3, 2, "python") == "q2.py"
+    assert ct.answer_filename(3, 3, "ruby") == "q3.rb"
+
+
+def test_the_file_that_answers_a_question_is_found_by_its_number(tmp_path):
+    (tmp_path / "q1.py").write_text("print(1)")
+    (tmp_path / "q2.rb").write_text("puts 2")
+    (tmp_path / "q10.py").write_text("print(10)")
+    (tmp_path / "q3.txt").write_text("not code")
+    assert ct.answer_file(tmp_path, 1) == "q1.py"  # not q10.py
+    assert ct.answer_file(tmp_path, 2) == "q2.rb"
+    assert ct.answer_file(tmp_path, 10) == "q10.py"
+    assert ct.answer_file(tmp_path, 3) == ""  # only Python and Ruby files answer a question
+    assert ct.answer_file(tmp_path, 4) == ""
+
+
+def test_each_question_runs_its_own_file_and_its_own_tests(tmp_path, monkeypatch):
+    (tmp_path / "q1.py").write_text("print('ok')")
+    (tmp_path / "q2.rb").write_text("puts 'ok'")
+    fake = RecordingRun()
+    monkeypatch.setattr(ct, "run_tests", fake)
+
+    runs = ct.run_questions(tmp_path, QUESTIONS, TESTS)
+    assert fake.calls == [(tmp_path.name, "q1.py", [1, 2]), (tmp_path.name, "q2.rb", [3])]
+    assert [(q.question, q.title, q.answered, q.file, q.language) for q in runs] == [
+        (1, "One", True, "q1.py", "python"), (2, "Two", True, "q2.rb", "ruby")]
+    # Every result knows its question, and the points add up over both questions.
+    assert [(r.test_id, r.question, r.passed) for q in runs for r in q.results] == [(1, 1, True), (2, 1, False), (3, 2, True)]
+    score = ct.score_run([r for q in runs for r in q.results])
+    assert (score.earned, score.total, score.passed, score.count) == (6, 7, 2, 3)
+
+
+def test_a_question_without_code_is_not_run_and_earns_nothing(tmp_path, monkeypatch):
+    (tmp_path / "q2.py").write_text("print('ok')")
+    fake = RecordingRun()
+    monkeypatch.setattr(ct, "run_tests", fake)
+
+    runs = ct.run_questions(tmp_path, QUESTIONS, TESTS)
+    assert [call[1] for call in fake.calls] == ["q2.py"]  # nothing was run for question 1
+    first = runs[0]
+    assert (first.answered, first.file, first.language) == (False, "", "")
+    assert [(r.test_id, r.status, r.passed, r.points, r.question) for r in first.results] == [
+        (1, "skipped", False, 2, 1), (2, "skipped", False, 1, 1)]
+    assert "No code was submitted" in first.results[0].stderr
+    score = ct.score_run([r for q in runs for r in q.results])
+    assert (score.earned, score.total) == (4, 7)  # question 1's points are still part of the total
+
+
+def test_a_challenge_with_one_question_runs_the_main_file_or_the_only_file(tmp_path, monkeypatch):
+    (tmp_path / "main.py").write_text("print('ok')")
+    fake = RecordingRun()
+    monkeypatch.setattr(ct, "run_tests", fake)
+    one = [{"id": 1, "title": "", "statement": ""}]
+    tests = [_test(1, "ok")]  # a test saved without a question belongs to question 1
+
+    ct.run_questions(tmp_path, one, tests)
+    ct.run_questions(tmp_path, one, tests, main_file="main.py")
+    ct.run_questions(tmp_path, one, tests, main_file="student_management.rb")  # not in the submission: the only file
+    assert [call[1] for call in fake.calls] == ["", "main.py", ""]
+
+
+def test_a_failure_stops_the_run_and_a_missing_folder_is_an_error(tmp_path, monkeypatch):
+    (tmp_path / "q1.py").write_text("x")
+    (tmp_path / "q2.py").write_text("x")
+    monkeypatch.setattr(ct, "run_tests", RecordingRun(error=SandboxUnavailable("Docker is not available")))
+    with pytest.raises(SandboxUnavailable):
+        ct.run_questions(tmp_path, QUESTIONS, TESTS)
+    with pytest.raises(ct.CodeTestError, match="no code"):
+        ct.run_questions(tmp_path / "missing", QUESTIONS, TESTS)
+
+
+# --------------------------------------------------------------------------
 # The instructor endpoint
 # --------------------------------------------------------------------------
 

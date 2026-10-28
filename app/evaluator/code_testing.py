@@ -68,11 +68,12 @@ class TestResult:
     visible: bool
     points: float
     match: str
-    status: str  # passed | failed | error | timeout
+    status: str  # passed | failed | error | timeout | skipped (no code was submitted for its question)
     passed: bool
     expected_output: str
     actual_output: str  # clipped for display
     stderr: str = ""
+    question: int = 1  # the question of the code challenge the test belongs to
 
 
 @dataclass
@@ -280,3 +281,80 @@ def run_tests(code_dir: Path, tests: list, *, main_file: str = "", only_visible:
     chosen = [t for t in tests if t.get("visible")] if only_visible else list(tests)
     results = [_run_one(t, code_dir, relative_file, language, runner, timeout) for t in chosen]
     return TestRun(file=relative_file, language=language.id, results=results)
+
+
+# ---- a challenge with several questions ----------------------------------------
+
+
+@dataclass
+class QuestionRun:
+    """How one question of a code challenge was run on a submission."""
+
+    question: int
+    title: str
+    answered: bool  # False: the submission has no code for this question, so none of its tests ran
+    file: str  # the file that was run, "" when none was
+    language: str  # "" when none was
+    results: list  # a TestResult per test of the question ("skipped" ones when it was not answered)
+
+
+def answer_filename(question_count: int, question: int, language: str) -> str:
+    """The name a typed answer is saved under: main.py (or main.rb) for a challenge with one
+    question, q1.py, q2.rb, ... for one with several."""
+    stem = "main" if question_count == 1 else f"q{question}"
+    return f"{stem}{LANGUAGES[language].extensions[0]}"
+
+
+def answer_file(code_dir: Path, question: int) -> str:
+    """The file that answers `question` in a submission of a challenge with several questions
+    (q1.py, q2.rb, ...), or "" when the student wrote nothing for it."""
+    for lang in LANGUAGES.values():
+        for extension in lang.extensions:
+            if (Path(code_dir) / f"q{question}{extension}").is_file():
+                return f"q{question}{extension}"
+    return ""
+
+
+def _single_question_file(code_dir: Path, preferred: str) -> str:
+    """The file to run for a challenge with one question: the instructor's main file when the submission
+    has it, otherwise "" so run_tests picks it (a typed answer is the only file, main.py or main.rb)."""
+    if preferred.strip():
+        try:
+            return pick_main_file(code_dir, preferred)
+        except CodeTestError:
+            pass
+    return ""
+
+
+def _skipped(test: dict, question: int) -> TestResult:
+    return TestResult(
+        test_id=test["id"], name=test["name"], visible=bool(test.get("visible")), points=test.get("points", 1),
+        match=test.get("match", "exact"), status="skipped", passed=False,
+        expected_output=test.get("expected_output", ""), actual_output="",
+        stderr="No code was submitted for this question.", question=question)
+
+
+def run_questions(code_dir: Path, questions: list, tests: list, *, main_file: str = "") -> list:
+    """Run each question's tests on the code that answers it; returns a QuestionRun per question.
+
+    A challenge with one question runs `main_file` (or the only code file), as run_tests does. With
+    several, each question is answered by its own file (see answer_file): one without a file is not
+    run and its tests earn nothing. Raises what run_tests raises, and runs nothing more after that."""
+    code_dir = Path(code_dir)
+    if not code_dir.is_dir():
+        raise CodeTestError("This submission has no code.")
+    runs = []
+    for q in questions:
+        mine = [t for t in tests if t.get("question", 1) == q["id"]]
+        if len(questions) == 1:
+            file = _single_question_file(code_dir, main_file)
+        else:
+            file = answer_file(code_dir, q["id"])
+            if not file:
+                runs.append(QuestionRun(q["id"], q["title"], False, "", "", [_skipped(t, q["id"]) for t in mine]))
+                continue
+        run = run_tests(code_dir, mine, main_file=file)
+        for result in run.results:
+            result.question = q["id"]
+        runs.append(QuestionRun(q["id"], q["title"], True, run.file, run.language, run.results))
+    return runs

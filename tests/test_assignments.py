@@ -297,8 +297,9 @@ def test_student_sees_open_and_past_assignments_but_not_upcoming_ones():
     # No rubric or grading internals in the student view.
     assert set(open_one) == {"id", "subject_id", "subject_name", "name", "description", "available_from",
                              "deadline", "status", "submission_types", "code_languages",
-                                 "student_similarity_check", "student_ai_check", "marks_release_at",
-                                 "assignment_type", "my_submission"}
+                             "student_similarity_check", "student_ai_check", "marks_release_at",
+                             "assignment_type", "questions", "my_submission"}
+    assert open_one["questions"] == []  # only a code challenge has questions
 
 
 def test_backend_enforces_the_submission_window():
@@ -748,3 +749,104 @@ def test_students_are_told_which_assignments_are_code_challenges():
     _new_assignment(itok, subject, "Plain upload")
     kinds = {a["name"]: a["assignment_type"] for a in client.get("/assignments", headers=H(stok)).json()}
     assert kinds == {"Challenge for the editor": "code_challenge", "Plain upload": "submission"}
+
+
+# --------------------------------------------------------------------------
+# A code challenge with several questions
+# --------------------------------------------------------------------------
+
+
+def _tests_for(question, *names):
+    return [{"name": n, "expected_output": f"out-{n}", "question": question} for n in names]
+
+
+def test_a_challenge_can_have_several_questions_with_their_own_tests():
+    subject, itok, _ = setup_subject_with_users(client)
+    # Sent out of order, with one test unnamed: they are numbered question by question.
+    tests = _tests_for(2, "b1", "b2") + [{"input": "0", "expected_output": "x"}] + _tests_for(1, "a2")
+    r = _new_assignment(itok, subject, "Two questions", assignment_type="code_challenge", test_cases=tests,
+                        questions=[{"title": "Sum", "statement": "  Add the numbers.  "}, {"title": ""}])
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert [(q["id"], q["title"], q["statement"]) for q in body["questions"]] == [
+        (1, "Sum", "Add the numbers."), (2, "Question 2", "")]
+    assert [(t["id"], t["question"], t["name"]) for t in body["test_cases"]] == [
+        (1, 1, "Test 1"), (2, 1, "a2"), (3, 2, "b1"), (4, 2, "b2")]
+
+    # Without questions a challenge has one, as every challenge made before questions existed.
+    single = _new_assignment(itok, subject, "One question", test_cases=SORT_TESTS).json()
+    assert single["questions"] == [{"id": 1, "title": "", "statement": ""}]
+    assert {t["question"] for t in single["test_cases"]} == {1}
+    titled = _new_assignment(itok, subject, "One titled question", test_cases=SORT_TESTS,
+                             questions=[{"title": "Sorting", "statement": "Sort them."}]).json()
+    assert titled["questions"] == [{"id": 1, "title": "Sorting", "statement": "Sort them."}]
+    assert _new_assignment(itok, subject, "Plain").json()["questions"] == []  # other assignments have none
+
+
+def test_questions_and_their_tests_must_match():
+    subject, itok, _ = setup_subject_with_users(client)
+    two = [{"title": "A"}, {"title": "B"}]
+
+    no_tests = _new_assignment(itok, subject, "No tests for B", test_cases=_tests_for(1, "a"), questions=two)
+    assert no_tests.status_code == 400 and "Question 2 needs at least one test case" in no_tests.json()["detail"]
+    stray = _new_assignment(itok, subject, "A test for question 3", questions=two,
+                            test_cases=_tests_for(1, "a") + _tests_for(2, "b") + _tests_for(3, "c"))
+    assert stray.status_code == 400 and "belongs to question 3" in stray.json()["detail"]
+    unlisted = _new_assignment(itok, subject, "Question 2 not listed", test_cases=_tests_for(2, "b"))
+    assert unlisted.status_code == 400 and "only 1 question" in unlisted.json()["detail"]
+    assert _new_assignment(itok, subject, "Too many questions", test_cases=_tests_for(1, "a"),
+                           questions=[{}] * 21).status_code == 422
+    assert _new_assignment(itok, subject, "Question zero",
+                           test_cases=[{"expected_output": "x", "question": 0}]).status_code == 422
+
+    # Questions belong to code challenges, like test cases.
+    wrong = _new_assignment(itok, subject, "Wrong type", assignment_type="submission", questions=two)
+    assert wrong.status_code == 400 and "belong to code challenges" in wrong.json()["detail"]
+    plain = _new_assignment(itok, subject, "Plain one").json()
+    put = lambda body: client.put(f"/assignments/{plain['id']}", headers=H(itok), json=body)  # noqa: E731
+    assert put({"questions": two}).status_code == 400
+    assert put({"questions": []}).status_code == 200  # an empty list changes nothing
+
+
+def test_questions_can_be_edited_and_the_tests_stay_consistent_with_them():
+    subject, itok, _ = setup_subject_with_users(client)
+    a = _new_assignment(itok, subject, "Editable", test_cases=_tests_for(1, "a") + _tests_for(2, "b"),
+                        questions=[{"title": "A"}, {"title": "B"}]).json()
+    put = lambda body: client.put(f"/assignments/{a['id']}", headers=H(itok), json=body)  # noqa: E731
+
+    # New wording keeps the tests; new tests keep the questions.
+    renamed = put({"questions": [{"title": "First", "statement": "Do 1."}, {"title": "Second"}]}).json()
+    assert [q["title"] for q in renamed["questions"]] == ["First", "Second"]
+    assert [(t["question"], t["name"]) for t in renamed["test_cases"]] == [(1, "a"), (2, "b")]
+    retested = put({"test_cases": _tests_for(2, "b2") + _tests_for(1, "a2", "a3") + _tests_for(2, "b3")}).json()
+    assert [q["title"] for q in retested["questions"]] == ["First", "Second"]
+    assert [(t["id"], t["question"], t["name"]) for t in retested["test_cases"]] == [
+        (1, 1, "a2"), (2, 1, "a3"), (3, 2, "b2"), (4, 2, "b3")]
+
+    # A question can't be left without tests, and a test can't point at a question that does not exist.
+    no_tests = put({"test_cases": _tests_for(1, "a")})
+    assert no_tests.status_code == 400 and "Question 2 needs at least one test case" in no_tests.json()["detail"]
+    leftover = put({"questions": [{"title": "Only"}]})  # the tests of question 2 would be left over
+    assert leftover.status_code == 400 and "belongs to question 2" in leftover.json()["detail"]
+    assert [q["title"] for q in client.get(f"/assignments/{a['id']}", headers=H(itok)).json()["questions"]] == [
+        "First", "Second"]  # a refused change leaves everything as it was
+
+    shrunk = put({"questions": [{"title": "Only"}], "test_cases": _tests_for(1, "a")})
+    assert shrunk.status_code == 200 and [q["id"] for q in shrunk.json()["questions"]] == [1]
+    grown = put({"questions": [{"title": "X"}, {"title": "Y"}, {"title": "Z"}],
+                 "test_cases": _tests_for(1, "a") + _tests_for(2, "b") + _tests_for(3, "c")})
+    assert grown.status_code == 200 and [q["title"] for q in grown.json()["questions"]] == ["X", "Y", "Z"]
+
+
+def test_the_number_of_questions_is_locked_once_students_have_submitted():
+    subject, itok, stok = setup_subject_with_users(client)
+    a = _new_assignment(itok, subject, "Locked questions", test_cases=_tests_for(1, "a")).json()
+    assert _submit(stok, a).status_code == 200  # a challenge with one question can still be handed in as a file
+    put = lambda body: client.put(f"/assignments/{a['id']}", headers=H(itok), json=body)  # noqa: E731
+
+    two = {"questions": [{"title": "A"}, {"title": "B"}], "test_cases": _tests_for(1, "a") + _tests_for(2, "b")}
+    locked = put(two)
+    assert locked.status_code == 409 and "number of questions" in locked.json()["detail"]
+    # The wording and the tests can still be corrected.
+    fixed = put({"questions": [{"title": "Better", "statement": "Clearer."}], "test_cases": _tests_for(1, "fixed")})
+    assert fixed.status_code == 200 and fixed.json()["questions"][0]["title"] == "Better"

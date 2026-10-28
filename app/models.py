@@ -177,9 +177,16 @@ class Assignment(Base):
     # [{"id", "name", "input", "expected_output", "match": "exact" | "contains",
     #   "visible": bool, "points": float}, ...]. "input" is fed to the program's
     # standard input; hidden tests (visible=False) are never shown to students.
+    # A code challenge can have several questions, each with its own tests: a test says which
+    # one it belongs to ("question": 1, 2, ...; a test saved without it belongs to question 1).
     test_cases = Column(JSON, nullable=True)
+    # The questions of a code challenge: [{"id": 1, "title": str, "statement": str}, ...] in the
+    # order students see them. NULL: one question without a title (every challenge made before
+    # questions existed). Read it through `questions`.
+    code_questions = Column(JSON, nullable=True)
     # The file the tests run, e.g. "student_management.rb" (a name or a path
     # inside the submission). NULL: the only Python/Ruby file, or a main.* one.
+    # Only used by a challenge with a single question.
     test_main_file = Column(String, nullable=True)
     # "submission": students upload code, a report and/or a video, graded with a
     # rubric. "code_challenge": students submit code only, and it is run against
@@ -204,6 +211,19 @@ class Assignment(Base):
         """"code_challenge" or "submission". An assignment that already has test
         cases counts as a code challenge even if it was saved before the type existed."""
         return "code_challenge" if self.assignment_type == "code_challenge" or self.test_cases else "submission"
+
+    @property
+    def questions(self) -> list[dict]:
+        """The questions of a code challenge, each {"id", "title", "statement"}, ids 1, 2, ... in order.
+        A challenge saved without any has the one untitled question that all its tests belong to.
+        Empty for any other assignment."""
+        if self.kind != "code_challenge":
+            return []
+        return list(self.code_questions or [{"id": 1, "title": "", "statement": ""}])
+
+    def tests_of(self, question_id: int) -> list[dict]:
+        """The test cases of one question, in order."""
+        return [t for t in self.test_cases or [] if t.get("question", 1) == question_id]
 
     def marks_released_at(self, now: datetime) -> bool:
         """Whether students may see marks and feedback at a naive-UTC ``now``."""

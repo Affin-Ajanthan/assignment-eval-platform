@@ -1,8 +1,12 @@
 """Students run their typed code against ALL of a code challenge's test cases, and submit it.
 
-POST /assignments/{id}/run-code takes the code the student has typed (it is not
-a submission yet), runs it in the Docker sandbox against every test case of the
-challenge, visible and hidden, and tells the student only what they may know:
+A challenge has one or more QUESTIONS, each with its own test cases (app/models.py:
+Assignment.questions). The student answers each in the code editor: Run checks one
+question's code, Submit hands in all of them at once.
+
+POST /assignments/{id}/run-code takes the code the student has typed for one question
+(it is not a submission yet), runs it in the Docker sandbox against every test case of
+that question, visible and hidden, and tells the student only what they may know:
 
 - how many test cases passed out of the total;
 - a VISIBLE test failed: that test's expected output and actual output (plus the
@@ -12,17 +16,18 @@ challenge, visible and hidden, and tells the student only what they may know:
 
 It is practice: it never creates a submission or changes a mark.
 
-POST /assignments/{id}/submit-code hands the code in, and it is final. The code
-is saved as the student's submission, run against every test case (the same run
-and the same report as above), and the points of the tests passed are saved as
-the mark. A code challenge cannot be edited or deleted afterwards (app/main.py
-refuses PUT and DELETE /submissions/{id} for it). Submitting uses none of the
-student's hourly runs, and when the server is busy it waits for a free place
-instead of being refused. If the tests cannot be run at all (sandbox off or
-down, an error) the code is still submitted, unmarked. The student can then ask
-for the mark with POST /assignments/{id}/mark-my-code (it runs the same marking
-on their saved code, which cannot have changed), or the instructor can mark it
-with "Run and save as mark".
+POST /assignments/{id}/submit-code hands the code in, and it is final. The code (one
+answer per question; a question may be left blank, and then earns nothing) is saved as
+the student's submission and run against every test case (the same run and the same
+report as above, question by question). The points of the tests passed, over all the
+questions, are saved as the mark. A code challenge cannot be edited or deleted
+afterwards (app/main.py refuses PUT and DELETE /submissions/{id} for it). Submitting
+uses none of the student's hourly runs, and when the server is busy it waits for a
+free place instead of being refused. If the tests cannot be run at all (sandbox off
+or down, an error) the code is still submitted, unmarked. The student can then ask
+for the mark with POST /assignments/{id}/mark-my-code (it runs the same marking on
+their saved code, which cannot have changed), or the instructor can mark it with
+"Run and save as mark".
 
 Every rule below is enforced here, whatever the page shows.
 
@@ -63,7 +68,8 @@ log = logging.getLogger(__name__)
 
 RUNS_PER_HOUR = int(os.environ.get("CODE_SAMPLE_RUNS_PER_HOUR", "10"))
 MAX_PARALLEL_RUNS = int(os.environ.get("CODE_SAMPLE_MAX_PARALLEL", "2"))
-MAX_CODE_CHARS = 50_000
+MAX_CODE_CHARS = 50_000  # per question
+MAX_ANSWERS = 20  # must match _QUESTIONS_MAX in app/main.py
 # How long a submission waits for a free place to be marked before it is left unmarked.
 SUBMIT_WAIT_SECONDS = 120
 _HOUR = 3600
@@ -162,9 +168,22 @@ class RunLimiter:
 limiter = RunLimiter()
 
 
-class RunIn(BaseModel):
+class AnswerIn(BaseModel):
+    """The code a student typed for one question."""
+
     code: str = Field(min_length=1, max_length=MAX_CODE_CHARS)
     # Left out: the assignment's language (its first one when it allows several).
+    language: Optional[Literal["python", "ruby"]] = None
+    # The question it answers (1 is the first). Left out: the first, the only question of most challenges.
+    question: int = Field(default=1, ge=1)
+
+
+class SubmitIn(BaseModel):
+    """What a student hands in: an answer for each question they wrote code for. A challenge with a
+    single question may send just `code` (and `language`) instead."""
+
+    answers: list[AnswerIn] = Field(default_factory=list, max_length=MAX_ANSWERS)
+    code: Optional[str] = Field(default=None, min_length=1, max_length=MAX_CODE_CHARS)
     language: Optional[Literal["python", "ruby"]] = None
 
 
@@ -220,12 +239,21 @@ def _report(results: list, language: str, runs_left: int) -> RunOut:
                   hidden_failed=hidden_failed, remaining_runs=runs_left, failures=failures)
 
 
+class QuestionResultOut(BaseModel):
+    """How one question did when the submitted code was marked."""
+
+    question: int  # its number, from 1
+    title: str  # blank for the only question of a challenge made without titles
+    answered: bool  # False: the student wrote nothing for it, so none of its test cases passed
+    run: Optional[RunOut] = None  # the same report Run gives; None when it was not answered
+
+
 class SubmitOut(BaseModel):
-    """What a student gets back from handing code in: the same report Run gives, and the mark."""
+    """What a student gets back from handing code in: for each question the same report Run gives, and the mark."""
 
     submission_id: int
     marked: bool  # the tests ran and the mark is saved; False: submitted, to be marked later
-    run: Optional[RunOut] = None  # None when the tests could not be run now
+    questions: list[QuestionResultOut] = []  # one per question, in order; empty when the tests could not be run now
     # The mark: the points of the tests passed out of all the points. None before
     # the assignment's marks release date, and when the code was not marked.
     earned: Optional[float] = None
@@ -248,17 +276,21 @@ def _challenge_for(db: Session, student: User, assignment_id: int, what: str) ->
     return assignment
 
 
-def _main_filename(language: str) -> str:
-    return f"main{code_testing.LANGUAGES[language].extensions[0]}"
+def _question_of(assignment: Assignment, number: int) -> dict:
+    question = next((q for q in assignment.questions if q["id"] == number), None)
+    if question is None:
+        raise HTTPException(404, "Question not found")
+    return question
 
 
 @router.post("/assignments/{assignment_id}/run-code", response_model=RunOut)
 def run_code(
-    assignment_id: int, payload: RunIn,
+    assignment_id: int, payload: AnswerIn,
     student: User = Depends(require_student), db: Session = Depends(get_db),
 ):
-    """Run the typed code against every test case of the assignment."""
+    """Run the typed code against every test case of its question."""
     assignment = _challenge_for(db, student, assignment_id, "Running code")
+    question = _question_of(assignment, payload.question)
     language = _pick_language(payload.language, assignment)
     if not sandbox_enabled():
         raise HTTPException(503, "Running code is not available right now.")
@@ -268,10 +300,10 @@ def run_code(
     except RunLimitError as exc:
         raise HTTPException(exc.status, exc.detail)
     try:
-        filename = _main_filename(language)
+        filename = code_testing.answer_filename(len(assignment.questions), question["id"], language)
         with tempfile.TemporaryDirectory(prefix="student-run-") as folder:
             (Path(folder) / filename).write_bytes(payload.code.replace("\r\n", "\n").encode("utf-8"))
-            run = code_testing.run_tests(Path(folder), assignment.test_cases, main_file=filename)
+            run = code_testing.run_tests(Path(folder), assignment.tests_of(question["id"]), main_file=filename)
     except code_testing.CodeTestError as exc:
         raise HTTPException(400, str(exc))
     except SandboxUnavailable:
@@ -282,12 +314,30 @@ def run_code(
     return _report(run.results, language, left)
 
 
-def _save_submission(db: Session, student: User, assignment: Assignment, filename: str, code: str) -> Submission:
+def _answer_files(assignment: Assignment, answers: list[AnswerIn]) -> dict[str, str]:
+    """The files to save for the answers, file name -> code: main.py for a challenge with one
+    question, q1.py, q2.rb, ... for one with several. Refuses an answer to a question that doesn't
+    exist, a second answer to the same question, and a language the assignment doesn't accept."""
+    files: dict[str, str] = {}
+    answered: set[int] = set()
+    for answer in answers:
+        question = _question_of(assignment, answer.question)
+        if question["id"] in answered:
+            raise HTTPException(400, f"Question {question['id']} was answered twice.")
+        answered.add(question["id"])
+        language = _pick_language(answer.language, assignment)
+        name = code_testing.answer_filename(len(assignment.questions), question["id"], language)
+        files[name] = answer.code.replace("\r\n", "\n")
+    return files
+
+
+def _save_submission(db: Session, student: User, assignment: Assignment, files: dict[str, str]) -> Submission:
     """Save the typed code as the student's submission, laid out like an upload: uploads/<id>/code/<file>."""
     folder = UPLOAD_DIR / uuid.uuid4().hex[:8] / "code"
     folder.mkdir(parents=True)
     try:
-        (folder / filename).write_bytes(code.encode("utf-8"))
+        for filename, code in files.items():
+            (folder / filename).write_bytes(code.encode("utf-8"))
         submission = Submission(
             student_id=student.id, subject_id=assignment.subject_id, assignment_name=assignment.name,
             assignment_id=assignment.id, code_path=str(folder.relative_to(BASE_DIR)))
@@ -302,18 +352,20 @@ def _save_submission(db: Session, student: User, assignment: Assignment, filenam
 
 
 def _mark(db: Session, student: User, assignment: Assignment, submission: Submission, main_file: str) -> SubmitOut:
-    """Run every test case on the saved code (`main_file` is the file to run, "" to pick it) and save
-    the points of the tests passed as the mark. When the tests cannot be run now the code stays
-    submitted, without a mark: the student can ask for it again (mark_my_code) or the instructor can
-    mark it. Never raises, because the submission is already saved."""
+    """Run every test case of every question on the saved code and save the points of the tests passed
+    as the mark. `main_file` is the file to run for a challenge with one question ("" to pick it); with
+    several, each question's file is looked up by its number. A question without code earns nothing.
+    When the tests cannot be run now the code stays submitted, without a mark: the student can ask for it
+    again (mark_my_code) or the instructor can mark it. Never raises, because the submission is already saved."""
     unmarked = SubmitOut(submission_id=submission.id, marked=False)
     if not sandbox_enabled():
         log.warning("Submission %s was saved without a mark: the code sandbox is off", submission.id)
         return unmarked
     try:
         with limiter.marking():
-            run = code_testing.run_tests(BASE_DIR / submission.code_path, assignment.test_cases, main_file=main_file)
-        score = code_testing.score_run(run.results)
+            runs = code_testing.run_questions(
+                BASE_DIR / submission.code_path, assignment.questions, assignment.test_cases, main_file=main_file)
+        score = code_testing.score_run([r for q in runs for r in q.results])
         submission.test_earned, submission.test_total = score.earned, score.total
         submission.tests_run_at = utcnow_naive()
         submission.status = "graded"
@@ -327,28 +379,38 @@ def _mark(db: Session, student: User, assignment: Assignment, submission: Submis
         return unmarked
 
     released = assignment.marks_released_at(utcnow_naive())
+    runs_left = limiter.remaining(student.id)
     return SubmitOut(
-        submission_id=submission.id, marked=True, run=_report(run.results, run.language, limiter.remaining(student.id)),
+        submission_id=submission.id, marked=True,
+        questions=[QuestionResultOut(question=q.question, title=q.title, answered=q.answered,
+                                     run=_report(q.results, q.language, runs_left) if q.answered else None)
+                   for q in runs],
         earned=score.earned if released else None, total=score.total if released else None)
 
 
 @router.post("/assignments/{assignment_id}/submit-code", response_model=SubmitOut)
 def submit_code(
-    assignment_id: int, payload: RunIn,
+    assignment_id: int, payload: SubmitIn,
     student: User = Depends(require_student), db: Session = Depends(get_db),
 ):
     """Hand in the typed code. It is final: the code is saved as the student's
     submission, run against every test case, and the points of the tests passed
-    are saved as the mark. It uses none of the student's hourly runs."""
+    are saved as the mark. It uses none of the student's hourly runs. A question
+    may be left without code; it then earns nothing."""
     assignment = _challenge_for(db, student, assignment_id, "Submitting code")
-    language = _pick_language(payload.language, assignment)
+    if payload.answers and payload.code is not None:
+        raise HTTPException(400, "Send the answers or the code, not both.")
+    answers = payload.answers or (
+        [AnswerIn(code=payload.code, language=payload.language)] if payload.code is not None else [])
+    if not answers:
+        raise HTTPException(400, "Write some code before you submit.")
+    files = _answer_files(assignment, answers)
     already = db.query(Submission.id).filter(
         Submission.assignment_id == assignment.id, Submission.student_id == student.id).first()
     if already:
         raise HTTPException(409, "You have already submitted this code challenge. A submission can't be changed.")
-    filename = _main_filename(language)
-    submission = _save_submission(db, student, assignment, filename, payload.code.replace("\r\n", "\n"))
-    return _mark(db, student, assignment, submission, filename)
+    submission = _save_submission(db, student, assignment, files)
+    return _mark(db, student, assignment, submission, next(iter(files)))
 
 
 @router.post("/assignments/{assignment_id}/mark-my-code", response_model=SubmitOut)

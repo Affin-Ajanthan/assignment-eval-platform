@@ -6,7 +6,7 @@ import Badge from "@/components/Badge";
 import Message, { MessageState } from "@/components/Message";
 import SelfCheckPanel from "@/components/student/SelfCheckPanel";
 import UploadForm from "@/components/student/UploadForm";
-import CodeEditorForm, { editorLanguages } from "@/components/student/CodeEditorForm";
+import CodeEditorForm, { editorLanguages, questionName } from "@/components/student/CodeEditorForm";
 import MarkMyCode from "@/components/student/MarkMyCode";
 import { OpenForm, TYPE_LABEL } from "@/components/student/labels";
 import { languageNames } from "@/lib/codeLanguages";
@@ -69,6 +69,20 @@ export default function AssignmentCard({
         </div>
       )}
 
+      {isChallenge && a.questions?.length > 1 && (
+        <div className="mt-3" data-testid="question-list">
+          <p className="text-sm font-semibold">{a.questions.length} questions</p>
+          <ul className="text-sm text-gray-700">
+            {a.questions.map((q) => (
+              <li key={q.id}>{questionName(q)}</li>
+            ))}
+          </ul>
+          <p className="text-xs text-gray-500">
+            Write your answer to each in the code editor. One Submit hands them all in, and the mark adds up the test
+            cases you pass in every question.
+          </p>
+        </div>
+      )}
 
       <dl className="mt-3 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[max-content_1fr]">
         <dt className="font-semibold">Available from</dt>

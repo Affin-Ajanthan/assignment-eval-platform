@@ -8,7 +8,12 @@ import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import ReportTemplateControl from "@/components/instructor/ReportTemplateControl";
 import Badge from "@/components/Badge";
 import { CODE_LANGUAGES, CodeLanguageId, languageNames } from "@/lib/codeLanguages";
-import TestCasesEditor, { TestCaseRow, testRowsPayload, toTestRows } from "@/components/instructor/TestCasesEditor";
+import QuestionsEditor, {
+  emptyQuestionRow,
+  QuestionRow,
+  questionRowsPayload,
+  toQuestionRows,
+} from "@/components/instructor/QuestionsEditor";
 
 const STATUS_STYLE: Record<AssignmentStatus, { text: string; cls: string }> = {
   upcoming: { text: "Not yet open", cls: "bg-gray-100 text-gray-700" },
@@ -34,8 +39,8 @@ type FormState = {
   ignoreCommon: boolean; // code similarity ignores code most of the class shares
   releaseDate: string; // "" (with releaseTime "") = show each mark as soon as it is saved
   releaseTime: string;
-  testCases: TestCaseRow[]; // only used when the assignment accepts code
-  testMainFile: string; // the file the tests run; "" = picked automatically
+  questions: QuestionRow[]; // only used by a code challenge: at least one question, each with its test cases
+  testMainFile: string; // the file the tests run (a challenge with one question); "" = picked automatically
 };
 
 const TYPE_OPTIONS: { value: SubmissionType; label: string; hint: string }[] = [
@@ -55,7 +60,7 @@ const KIND_OPTIONS: { value: AssignmentKind; title: string; text: string }[] = [
   {
     value: "code_challenge",
     title: "Code challenge",
-    text: "HackerRank style: students submit code only. It is run against your test cases, and the marks come from the tests passed.",
+    text: "HackerRank style: students submit code only, for one question or several. It is run against your test cases, and the marks come from the tests passed.",
   },
 ];
 const kindTitle = (k: AssignmentKind) => KIND_OPTIONS.find((o) => o.value === k)?.title ?? k;
@@ -82,7 +87,7 @@ const EMPTY: FormState = {
   ignoreCommon: true,
   releaseDate: "",
   releaseTime: "",
-  testCases: [],
+  questions: [emptyQuestionRow()],
   testMainFile: "",
 };
 
@@ -137,7 +142,7 @@ export default function AssignmentsSection({
       ignoreCommon: a.ignore_common_code ?? true,
       releaseDate: release.date,
       releaseTime: release.time,
-      testCases: toTestRows(a.test_cases ?? []),
+      questions: toQuestionRows(a),
       testMainFile: a.test_main_file ?? "",
     });
   }
@@ -183,12 +188,9 @@ export default function AssignmentsSection({
     if (releaseSet && !release) {
       return setMsg({ text: "Enter both a date and a time to release the marks, or leave both empty.", kind: "error" });
     }
-    // Test cases belong to code challenges only, and a challenge needs at least one.
-    if (challenge && form.testCases.length === 0) {
-      return setMsg({ text: "Add at least one test case to a code challenge.", kind: "error" });
-    }
-    const testPayload = testRowsPayload(challenge ? form.testCases : []);
-    if (testPayload.error !== null) return setMsg({ text: testPayload.error, kind: "error" });
+    // Questions and test cases belong to code challenges only, and every question needs at least one test case.
+    const questionsPayload = challenge ? questionRowsPayload(form.questions) : { questions: [], tests: [], error: null };
+    if (questionsPayload.error !== null) return setMsg({ text: questionsPayload.error, kind: "error" });
     const body = {
       name: form.name.trim(),
       description: form.description,
@@ -208,8 +210,10 @@ export default function AssignmentsSection({
       ignore_common_code: form.ignoreCommon,
       // null also clears an earlier date, releasing the marks straight away.
       marks_release_at: release ? release.toISOString() : null,
-      test_cases: testPayload.tests,
-      test_main_file: challenge ? form.testMainFile.trim() : "",
+      test_cases: questionsPayload.tests,
+      questions: questionsPayload.questions,
+      // Only a challenge with one question runs a named file; with several, each question has its own file.
+      test_main_file: challenge && form.questions.length === 1 ? form.testMainFile.trim() : "",
     };
     setSaving(true);
     try {
@@ -390,8 +394,8 @@ export default function AssignmentsSection({
 
         {form.kind === "code_challenge" && (
           <>
-            <TestCasesEditor rows={form.testCases} onChange={(rows) => set("testCases", rows)} />
-            {form.testCases.length > 0 && (
+            <QuestionsEditor rows={form.questions} onChange={(rows) => set("questions", rows)} locked={typesLocked} />
+            {form.questions.length === 1 && form.questions[0].tests.length > 0 && (
               <div className="mt-3">
                 <label className="block text-sm font-semibold" htmlFor="test-main-file">
                   Main file to run <span className="font-normal text-gray-500">(optional)</span>
@@ -641,6 +645,7 @@ export default function AssignmentsSection({
                   </p>
                   {a.test_cases?.length > 0 && (
                     <p className="text-xs text-gray-600" data-testid="test-cases-summary">
+                      {a.questions?.length > 1 && `Questions: ${a.questions.length} · `}
                       Test cases: {a.test_cases.length} ({a.test_cases.filter((t) => t.visible).length} visible) ·{" "}
                       {a.test_cases.reduce((sum, t) => sum + t.points, 0)} points
                     </p>

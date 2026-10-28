@@ -325,6 +325,11 @@ def _get_marks(assignment, token):
     return client.post(f"/assignments/{assignment['id']}/mark-my-code", headers=auth_headers(token))
 
 
+def _run_of(body, question=0):
+    """The report of one question from a Submit / Get my marks answer (the first question by default)."""
+    return body["questions"][question]["run"]
+
+
 def _all_pass(code_dir, tests, *, main_file="", **kwargs):
     """A run_tests where every test passes (it never reads the code)."""
     results = [ct.TestResult(test_id=t["id"], name=t["name"], visible=t["visible"], points=t["points"],
@@ -343,9 +348,10 @@ def test_submitting_saves_the_points_of_the_tests_passed_as_the_mark_and_shows_t
     # Doubles (2 points) passes; the hidden test (5 points) and "Wrong on purpose" (1 point) fail: 2 of 8.
     assert (body["marked"], body["earned"], body["total"]) == (True, 2, 8)
     # The student is shown the same report as for Run: the counts, and expected vs actual of the failing visible test.
-    assert (body["run"]["passed"], body["run"]["total"], body["run"]["hidden_failed"]) == (1, 3, 1)
-    assert body["run"]["failures"] == [{"sample": 2, "name": "Wrong on purpose", "status": "failed",
-                                        "expected_output": "99", "actual_output": "42", "error": ""}]
+    run = _run_of(body)
+    assert (run["passed"], run["total"], run["hidden_failed"]) == (1, 3, 1)
+    assert run["failures"] == [{"sample": 2, "name": "Wrong on purpose", "status": "failed",
+                                "expected_output": "99", "actual_output": "42", "error": ""}]
     assert not any(secret in json.dumps(body) for secret in ("HIDDEN", "points", "test_id", "visible", '"input"'))
     # Every test case ran, the hidden one included, on the typed code (newlines unified).
     assert fake.calls == [{"file": "main.py", "code": "print(int(input()) * 2)\n",
@@ -367,8 +373,8 @@ def test_passing_every_test_case_earns_every_point(monkeypatch):
     assignment = _challenge(itok, subject, "Full marks", TESTS)
     body = _submit(assignment, stok).json()
     assert (body["marked"], body["earned"], body["total"]) == (True, 8, 8)
-    assert (body["run"]["all_passed"], body["run"]["passed"], body["run"]["total"], body["run"]["failures"]) == (
-        True, 3, 3, [])
+    run = _run_of(body)
+    assert (run["all_passed"], run["passed"], run["total"], run["failures"]) == (True, 3, 3, [])
     assert _my_submission(assignment, stok)["final_mark"] == 8
 
 
@@ -405,7 +411,7 @@ def test_submitting_uses_none_of_the_hourly_runs_and_works_when_they_are_used_up
 
     r = _submit(assignment, stok)
     assert r.status_code == 200 and r.json()["marked"] is True       # but Submit still marks the code
-    assert r.json()["run"]["remaining_runs"] == 0                    # and took no run
+    assert _run_of(r.json())["remaining_runs"] == 0                  # and took no run
     assert len(fake.calls) == 2                                      # one Run, one Submit
 
 
@@ -417,7 +423,7 @@ def test_a_marks_release_date_hides_the_mark_but_not_the_test_results(fake):
 
     body = _submit(assignment, stok).json()
     assert (body["marked"], body["earned"], body["total"]) == (True, None, None)  # the mark itself waits for the date
-    assert (body["run"]["passed"], body["run"]["total"]) == (1, 3)
+    assert (_run_of(body)["passed"], _run_of(body)["total"]) == (1, 3)
     held = _my_submission(assignment, stok)
     assert (held["status"], held["final_mark"], held["max_mark"], held["can_edit"]) == ("submitted", None, None, False)
 
@@ -440,7 +446,7 @@ def test_when_the_tests_cannot_run_the_code_is_still_submitted_unmarked_and_fina
 
     r = _submit(assignment, stok)
     assert r.status_code == 200, r.text                               # never an error: the code is saved
-    assert r.json() == {"submission_id": r.json()["submission_id"], "marked": False, "run": None,
+    assert r.json() == {"submission_id": r.json()["submission_id"], "marked": False, "questions": [],
                         "earned": None, "total": None}
     assert "Docker" not in r.text and "boom" not in r.text            # the student is not told why
     mine = _my_submission(assignment, stok)
@@ -572,8 +578,9 @@ def test_a_student_can_get_the_mark_of_code_that_was_submitted_unmarked(monkeypa
     runner = _use(monkeypatch, FakeRunTests())
     body = _get_marks(assignment, stok).json()
     assert (body["submission_id"], body["marked"], body["earned"], body["total"]) == (sub_id, True, 2, 8)
-    assert (body["run"]["passed"], body["run"]["total"], body["run"]["hidden_failed"]) == (1, 3, 1)
-    assert body["run"]["failures"][0]["name"] == "Wrong on purpose"   # the same report Submit gives
+    run = _run_of(body)
+    assert (run["passed"], run["total"], run["hidden_failed"]) == (1, 3, 1)
+    assert run["failures"][0]["name"] == "Wrong on purpose"           # the same report Submit gives
     assert runner.calls[0]["names"] == ["Doubles", "HIDDEN-NAME", "Wrong on purpose"]
     assert not any(secret in json.dumps(body) for secret in ("HIDDEN", "points", "test_id", "visible", '"input"'))
 
@@ -613,8 +620,197 @@ def test_the_mark_can_be_fetched_after_the_deadline_and_still_respects_the_relea
     monkeypatch.setenv("CODE_SANDBOX", "docker")
     body = _get_marks(assignment, stok).json()
     assert (body["marked"], body["earned"], body["total"]) == (True, None, None)  # marked, but the mark waits
-    assert (body["run"]["passed"], body["run"]["total"]) == (1, 3)
+    assert (_run_of(body)["passed"], _run_of(body)["total"]) == (1, 3)
     held = [a for a in client.get("/assignments", headers=auth_headers(stok)).json() if a["id"] == assignment["id"]]
     assert held[0]["my_submission"]["final_mark"] is None
     sub = client.get("/submissions", headers=auth_headers(itok), params={"subject_id": subject["id"]}).json()[0]
     assert (sub["status"], sub["final_mark"], sub["max_mark"]) == ("graded", 2, 8)  # the instructor sees it
+
+
+# --------------------------------------------------------------------------
+# A challenge with several questions
+# --------------------------------------------------------------------------
+
+# Question 1 is worth 5 points, question 2 is worth 5: FakeRunTests passes the tests that expect "42".
+Q1_TESTS = [
+    {"name": "Doubles", "input": "21", "expected_output": "42", "visible": True, "points": 2},
+    {"name": "HIDDEN-NAME", "input": "HIDDEN-IN", "expected_output": "HIDDEN-OUT", "points": 3},
+]
+Q2_TESTS = [
+    {"name": "Triples", "input": "14", "expected_output": "42", "visible": True, "points": 4, "question": 2},
+    {"name": "Wrong on purpose", "input": "1", "expected_output": "99", "visible": True, "points": 1, "question": 2},
+]
+QUESTIONS = [{"title": "Double it", "statement": "Print twice the number."},
+             {"title": "Triple it", "statement": "Print three times the number."}]
+
+
+def _two_questions(itok, subject, name, **extra):
+    return _challenge(itok, subject, name, Q1_TESTS + Q2_TESTS, questions=QUESTIONS, **extra)
+
+
+def _submit_answers(assignment, token, answers):
+    return client.post(f"/assignments/{assignment['id']}/submit-code", headers=auth_headers(token),
+                       json={"answers": answers})
+
+
+def test_students_see_each_questions_title_and_statement_but_never_a_test_case(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _two_questions(itok, subject, "Two questions")
+
+    mine = client.get(f"/assignments/{assignment['id']}", headers=auth_headers(itok)).json()  # the instructor's view
+    assert [(q["id"], q["title"]) for q in mine["questions"]] == [(1, "Double it"), (2, "Triple it")]
+    assert [(t["id"], t["question"], t["name"]) for t in mine["test_cases"]] == [
+        (1, 1, "Doubles"), (2, 1, "HIDDEN-NAME"), (3, 2, "Triples"), (4, 2, "Wrong on purpose")]
+
+    seen = client.get(f"/assignments/{assignment['id']}", headers=auth_headers(stok)).json()
+    assert seen["questions"] == [{"id": 1, "title": "Double it", "statement": "Print twice the number."},
+                                 {"id": 2, "title": "Triple it", "statement": "Print three times the number."}]
+    listed = json.dumps(client.get("/assignments", headers=auth_headers(stok)).json())
+    for secret in ("Doubles", "Triples", "HIDDEN", "Wrong on purpose", "test_cases", "expected_output"):
+        assert secret not in listed and secret not in json.dumps(seen), secret
+
+
+def test_run_checks_the_tests_of_the_question_it_was_sent_for(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _two_questions(itok, subject, "Run a question")
+
+    first = _run(assignment, stok, code="print(1)")                   # no question named: the first
+    assert first.status_code == 200, first.text
+    assert (first.json()["passed"], first.json()["total"], first.json()["hidden_failed"]) == (1, 2, 1)
+    second = _run(assignment, stok, code="print(2)", question=2)
+    assert (second.json()["passed"], second.json()["total"], second.json()["hidden_failed"]) == (1, 2, 0)
+    assert second.json()["failures"] == [{"sample": 2, "name": "Wrong on purpose", "status": "failed",
+                                          "expected_output": "99", "actual_output": "42", "error": ""}]
+    # Each run used only its own question's tests, and the code was saved in a file named after the question.
+    assert [(c["file"], c["names"]) for c in fake.calls] == [
+        ("q1.py", ["Doubles", "HIDDEN-NAME"]), ("q2.py", ["Triples", "Wrong on purpose"])]
+
+    missing = _run(assignment, stok, question=3)
+    assert missing.status_code == 404 and "Question not found" in missing.json()["detail"]
+    assert _run(assignment, stok, question=0).status_code == 422
+    assert len(fake.calls) == 2                                       # neither of those ran anything
+
+
+def test_submitting_several_questions_marks_each_one_and_adds_the_points_up(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _two_questions(itok, subject, "Two answers")
+    r = _submit_answers(assignment, stok, [{"question": 1, "code": "print(1)\r\n"}, {"question": 2, "code": "print(2)"}])
+    assert r.status_code == 200, r.text
+    body = r.json()
+
+    # Question 1: Doubles (2 of its 5 points) passes. Question 2: Triples (4 of its 5) passes. 6 of 10 in all.
+    assert (body["marked"], body["earned"], body["total"]) == (True, 6, 10)
+    assert [(q["question"], q["title"], q["answered"]) for q in body["questions"]] == [
+        (1, "Double it", True), (2, "Triple it", True)]
+    first, second = _run_of(body, 0), _run_of(body, 1)
+    assert (first["passed"], first["total"], first["hidden_failed"], first["failures"]) == (1, 2, 1, [])
+    assert (second["passed"], second["total"], second["hidden_failed"]) == (1, 2, 0)
+    assert second["failures"][0]["name"] == "Wrong on purpose"
+    assert not any(secret in json.dumps(body) for secret in ("HIDDEN", "points", "test_id", "visible", '"input"'))
+    # Each answer ran on its own question's tests, from its own file (newlines unified).
+    assert [(c["file"], c["code"], c["names"]) for c in fake.calls] == [
+        ("q1.py", "print(1)\n", ["Doubles", "HIDDEN-NAME"]), ("q2.py", "print(2)", ["Triples", "Wrong on purpose"])]
+
+    mine = _my_submission(assignment, stok)
+    assert (mine["status"], mine["final_mark"], mine["max_mark"], mine["can_edit"]) == ("graded", 6, 10, False)
+    saved = client.get(f"/submissions/{body['submission_id']}", headers=auth_headers(itok)).json()
+    code_dir = BASE_DIR / saved["code_path"]
+    assert sorted(p.name for p in code_dir.iterdir()) == ["q1.py", "q2.py"]
+    assert (code_dir / "q1.py").read_text(encoding="utf-8") == "print(1)\n"
+    assert _submit_answers(assignment, stok, [{"question": 1, "code": "x"}]).status_code == 409  # final, as ever
+
+
+def test_a_question_left_blank_earns_nothing_and_its_points_still_count(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _two_questions(itok, subject, "One answer")
+    body = _submit_answers(assignment, stok, [{"question": 2, "code": "print(2)"}]).json()
+
+    assert (body["marked"], body["earned"], body["total"]) == (True, 4, 10)
+    assert body["questions"][0] == {"question": 1, "title": "Double it", "answered": False, "run": None}
+    assert body["questions"][1]["answered"] is True
+    assert [c["file"] for c in fake.calls] == ["q2.py"]               # nothing was run for the blank question
+    saved = client.get(f"/submissions/{body['submission_id']}", headers=auth_headers(itok)).json()
+    assert [p.name for p in (BASE_DIR / saved["code_path"]).iterdir()] == ["q2.py"]
+    assert (_my_submission(assignment, stok)["final_mark"], _my_submission(assignment, stok)["max_mark"]) == (4, 10)
+
+
+def test_the_answers_are_checked_before_anything_is_saved(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _two_questions(itok, subject, "Answer checks")
+    post = lambda body: client.post(f"/assignments/{assignment['id']}/submit-code",  # noqa: E731
+                                    headers=auth_headers(stok), json=body)
+
+    nothing = post({})
+    assert nothing.status_code == 400 and "Write some code" in nothing.json()["detail"]
+    both = post({"answers": [{"question": 1, "code": "x"}], "code": "y"})
+    assert both.status_code == 400 and "not both" in both.json()["detail"]
+    assert post({"answers": [{"question": 3, "code": "x"}]}).status_code == 404
+    twice = post({"answers": [{"question": 1, "code": "x"}, {"question": 1, "code": "y"}]})
+    assert twice.status_code == 400 and "answered twice" in twice.json()["detail"]
+    assert post({"answers": [{"question": 1, "code": ""}]}).status_code == 422
+    assert post({"answers": [{"question": 0, "code": "x"}]}).status_code == 422
+    assert post({"answers": [{"question": 1, "code": "x", "language": "java"}]}).status_code == 422
+    assert fake.calls == [] and client.get("/submissions", headers=auth_headers(stok)).json() == []
+
+    short = post({"code": "print(1)"})                                # just `code` answers the first question
+    assert short.status_code == 200, short.text
+    assert (short.json()["earned"], short.json()["total"]) == (2, 10)
+    assert [q["answered"] for q in short.json()["questions"]] == [True, False]
+
+
+def test_each_question_can_be_answered_in_its_own_language(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _two_questions(itok, subject, "Mixed languages", code_languages=["python", "ruby"])
+    r = _submit_answers(assignment, stok, [{"question": 1, "code": "print(1)", "language": "python"},
+                                           {"question": 2, "code": "puts 2", "language": "ruby"}])
+    assert r.status_code == 200, r.text
+    assert [c["file"] for c in fake.calls] == ["q1.py", "q2.rb"]
+    wrong = _submit_answers(assignment, new_student(client, subject["id"]), [{"question": 1, "code": "x", "language": "java"}])
+    assert wrong.status_code == 422
+
+
+def test_the_instructor_sees_the_tests_question_by_question_and_can_mark_the_submission(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _two_questions(itok, subject, "Instructor view")
+    sub_id = _submit_answers(assignment, stok, [{"question": 2, "code": "print(2)"}]).json()["submission_id"]
+
+    r = client.post(f"/submissions/{sub_id}/run-tests", headers=auth_headers(itok))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert (body["file"], body["language"], body["passed"], body["total"]) == ("q2.py", "python", 1, 4)
+    assert (body["earned_points"], body["total_points"], body["saved"]) == (4, 10, False)
+    # The question that was left blank is shown as skipped, not as wrong output.
+    assert [(t["question"], t["name"], t["status"]) for t in body["results"]] == [
+        (1, "Doubles", "skipped"), (1, "HIDDEN-NAME", "skipped"),
+        (2, "Triples", "passed"), (2, "Wrong on purpose", "failed")]
+    assert [(q["question"], q["title"], q["answered"], q["passed"], q["total"], q["earned_points"], q["total_points"])
+            for q in body["questions"]] == [(1, "Double it", False, 0, 2, 0, 5), (2, "Triple it", True, 1, 2, 4, 5)]
+
+    marked = client.post(f"/submissions/{sub_id}/mark-from-tests", headers=auth_headers(itok)).json()
+    assert (marked["saved"], marked["earned_points"], marked["total_points"]) == (True, 4, 10)
+    assert (_my_submission(assignment, stok)["final_mark"], _my_submission(assignment, stok)["max_mark"]) == (4, 10)
+
+
+def test_getting_the_mark_runs_every_question(monkeypatch):
+    monkeypatch.delenv("CODE_SANDBOX", raising=False)
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _two_questions(itok, subject, "Get marks for two questions")
+    body = _submit_answers(assignment, stok, [{"question": 1, "code": "a"}, {"question": 2, "code": "b"}]).json()
+    assert (body["marked"], body["questions"]) == (False, [])         # the tests could not run: submitted unmarked
+
+    monkeypatch.setenv("CODE_SANDBOX", "docker")
+    runner = _use(monkeypatch, FakeRunTests())
+    marked = _get_marks(assignment, stok).json()
+    assert (marked["marked"], marked["earned"], marked["total"]) == (True, 6, 10)
+    assert [q["question"] for q in marked["questions"]] == [1, 2]
+    assert [c["file"] for c in runner.calls] == ["q1.py", "q2.py"]
+
+
+def test_a_challenge_with_several_questions_is_not_answered_by_uploading_a_file(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _two_questions(itok, subject, "No uploads")
+    r = client.post("/submissions", data={"subject_id": subject["id"], "assignment_id": assignment["id"]},
+                    files={"code": ("main.py", io.BytesIO(b"print(1)\n"), "text/x-python")},
+                    headers=auth_headers(stok))
+    assert r.status_code == 400 and "several questions" in r.json()["detail"]
+    assert client.get("/submissions", headers=auth_headers(stok)).json() == []

@@ -240,7 +240,7 @@ Creating an assignment starts with a choice, fixed once the assignment exists:
   refuses the rubric Grade form, the single Auto-evaluate and "Evaluate a whole
   assignment" for it (400, "A code challenge is marked from its tests").
 
-**Test cases** (1 to 50 per challenge, set in the assignment form): a name, the
+**Test cases** (1 to 50 per challenge in all, set in the assignment form): a name, the
 **input** fed to the program's standard input, the **expected output**, a
 **match** mode, **visible** or hidden, and **points**. `exact` compares the whole
 output (trailing spaces, line-ending style and surrounding blank lines are
@@ -250,15 +250,32 @@ file** to run (e.g. `student_management.rb`); left empty, the only Python/Ruby
 file in the submission is used, or one named `main`, `app`, `run`, `program` or
 `index`.
 
+**Questions.** A challenge asks **one question or several** (up to 20), all in
+the one assignment. Each question has an optional **title** and **description**
+(what the student must write, shown above the code box) and its **own test
+cases**; the mark is the points of the test cases passed **over all the
+questions**, so an instructor weights a question by the points of its tests. A
+challenge made without questions has one. In the API a test case's `question`
+(1, 2, ...) names the question it belongs to, and `questions` holds the titles
+and descriptions (`POST` / `PUT /assignments`; the tests must cover every
+question, and a question can't be left without a test). The *number* of
+questions is fixed once a student has submitted, because their code is saved
+per question; the wording and the test cases can always be fixed. A challenge
+with several questions is answered in the code editor only (a plain file upload
+is refused), and "Main file to run" is ignored for it.
+
 **Languages: Python and Ruby only, for now.** Other languages can be submitted
 to a normal assignment, but a challenge cannot run them yet.
 
 **Students** answer in a code editor on the assignment card instead of
-uploading a file (the typed code is saved as `main.py` / `main.rb`). The editor
-has three buttons:
+uploading a file (the typed code is saved as `main.py` / `main.rb`, or `q1.py`,
+`q2.rb`, ... when there are several questions). With several questions the
+editor shows a **tab for each**, with the question's description, and every
+question has its own code and language. The editor has three buttons:
 
-- **Run** (`POST /assignments/{id}/run-code`) runs the typed code against **every
-  test case, hidden ones included**, and always tells the student how many
+- **Run** (`POST /assignments/{id}/run-code`, with the `question` number) runs the
+  typed code of the open question against **every test case of that question,
+  hidden ones included**, and always tells the student how many
   passed out of the total ("3 of 3 test cases passed: all passed", or "2 of 5
   test cases passed"). For each **visible** test that failed it adds just its
   **expected output and actual output** (plus the error message if the program
@@ -267,13 +284,18 @@ has three buttons:
   no mark changes, and the result is dropped as soon as the code is edited (or
   the editor is closed).
 - **Submit** (`POST /assignments/{id}/submit-code`) hands the code in, after a
-  "Submit your code?" confirmation, because it is **final**. The server saves the
-  code as the student's submission, runs it against every test case, **saves the
-  points of the tests passed as the mark** (the instructor sets the points on
-  each test case; 8 of 10 tests worth 2 points each is 16 of 20), and the page
-  shows the result at once: "Submitted", "X of Y test cases passed" (with the
-  same expected-vs-actual for failing visible tests) and the mark. The box
-  locks and the only button left is **Close**. If the instructor set a **marks
+  "Submit your code?" confirmation, because it is **final**. The body is
+  `{"answers": [{"question": 1, "code": "...", "language": "python"}, ...]}`, one
+  answer per question the student wrote code for (for a challenge with one
+  question `{"code": ..., "language": ...}` also works). The server saves the
+  code as the student's submission, runs every question against its own test
+  cases, **saves the points of the tests passed, over all the questions, as the
+  mark** (the instructor sets the points on each test case; 8 of 10 tests worth
+  2 points each is 16 of 20), and the page shows the result at once:
+  "Submitted", "X of Y test cases passed" for each question (with the same
+  expected-vs-actual for failing visible tests) and the mark. A question left
+  empty earns nothing but its points stay in the total, and the confirmation
+  says so. The boxes lock and the only button left is **Close**. If the instructor set a **marks
   release date**, the student still sees the test results, but the mark itself
   waits for that date.
 - **Cancel** closes the editor without submitting anything.
@@ -305,7 +327,9 @@ Run in which that test fails. Limits on Run, since every run
 starts a Docker container per test case: one run at a time per student,
 `CODE_SAMPLE_RUNS_PER_HOUR` (10) per student, and `CODE_SAMPLE_MAX_PARALLEL` (2)
 at once on the server (a Submit's marking run counts towards that cap and goes
-before new practice runs). The counts are in memory and start again when the
+before new practice runs). Every Run of every question uses one of the hourly
+runs, so a challenge with several questions may need a higher
+`CODE_SAMPLE_RUNS_PER_HOUR`. The counts are in memory and start again when the
 backend restarts.
 
 **Hidden tests never leave the server.** Students receive a visible test's
@@ -321,7 +345,9 @@ test case, or for a submission that was left unmarked):
 
 - `POST /submissions/{id}/run-tests` runs every test and returns each result
   (expected vs actual output, error output, status `passed` / `failed` /
-  `error` / `timeout`) and the score. It changes nothing.
+  `error` / `timeout`, or `skipped` for a question the student left empty) and the
+  score, overall and question by question (`questions`). The panel groups the
+  results by question. It changes nothing.
 - `POST /submissions/{id}/mark-from-tests` does the same and **saves the points
   of the tests passed as the mark** (e.g. 12 of 16; 8 of 10 tests worth 2
   points each is 16 of 20) and sets the submission to graded. Running it again
