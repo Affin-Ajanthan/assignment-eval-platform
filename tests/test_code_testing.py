@@ -165,6 +165,14 @@ def test_each_test_gets_its_input_and_is_marked_by_its_outcome(tmp_path):
     assert all(timeout == 35 for _cmd, timeout, _stdin in docker.calls)  # time limit + start-up slack
 
 
+def test_docker_failing_to_start_a_container_is_not_a_failed_test(tmp_path):
+    _files(tmp_path, "main.py")
+    docker = FakeDocker({"21\n": (125, "", "Unable to find image 'python:3.12-slim' locally\n"
+                                           "docker: Error response from daemon: no such host.\n")})
+    with pytest.raises(SandboxUnavailable, match="could not start the test container.*no such host"):
+        ct.run_tests(tmp_path, [_test(1, "42", input="21")], runner=docker)  # nothing is scored
+
+
 def test_only_visible_runs_just_the_tests_students_may_see(tmp_path):
     _files(tmp_path, "main.py")
     docker = FakeDocker()

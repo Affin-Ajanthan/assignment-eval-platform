@@ -7,6 +7,7 @@ import Message, { MessageState } from "@/components/Message";
 import SelfCheckPanel from "@/components/student/SelfCheckPanel";
 import UploadForm from "@/components/student/UploadForm";
 import CodeEditorForm, { editorLanguages } from "@/components/student/CodeEditorForm";
+import MarkMyCode from "@/components/student/MarkMyCode";
 import { OpenForm, TYPE_LABEL } from "@/components/student/labels";
 import { languageNames } from "@/lib/codeLanguages";
 
@@ -16,6 +17,7 @@ export default function AssignmentCard({
   openForm,
   setOpenForm,
   onChanged,
+  onRefresh,
   askDelete,
   notice,
 }: {
@@ -23,6 +25,8 @@ export default function AssignmentCard({
   openForm: OpenForm;
   setOpenForm: (v: OpenForm) => void;
   onChanged: (assignmentId: number, text: string) => Promise<void>;
+  /** Reload the assignments quietly (no notice), e.g. right after a code challenge was marked. */
+  onRefresh: () => Promise<void>;
   askDelete: (a: StudentAssignment) => void;
   notice: MessageState;
 }) {
@@ -34,8 +38,13 @@ export default function AssignmentCard({
   const formMode = openForm?.id === a.id ? openForm.mode : null;
   // A code challenge is answered by typing code (checking it with Run, then Submit), not by uploading a file.
   // Only when the server can run its language: otherwise the usual upload form is used.
-  const useEditor = a.assignment_type === "code_challenge" && editorLanguages(a).length > 0;
-  const FormComponent = useEditor ? CodeEditorForm : UploadForm;
+  const isChallenge = a.assignment_type === "code_challenge";
+  const useEditor = isChallenge && editorLanguages(a).length > 0;
+  const closeForm = () => setOpenForm(null);
+  const finishForm = async (text: string) => {
+    setOpenForm(null);
+    await onChanged(a.id, text);
+  };
 
   return (
     <li className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm" data-testid="student-assignment">
@@ -112,6 +121,12 @@ export default function AssignmentCard({
         </div>
       )}
 
+      {/* A challenge is marked when it is submitted; if that could not happen then, the student can ask again.
+          Not while marks are held back: the student cannot tell marked from unmarked until the release date. */}
+      {isChallenge && sub && !a.marks_release_at && !formMode && (
+        <MarkMyCode assignment={a} submission={sub} onMarked={onRefresh} />
+      )}
+
       {a.status === "open" && !formMode && (
         <div className="mt-4 flex flex-wrap gap-2">
           {!sub && (
@@ -149,17 +164,12 @@ export default function AssignmentCard({
         <SelfCheckPanel assignment={a} submission={sub} />
       )}
 
-      {formMode && (
-        <FormComponent
-          assignment={a}
-          mode={formMode}
-          onCancel={() => setOpenForm(null)}
-          onDone={async (text) => {
-            setOpenForm(null);
-            await onChanged(a.id, text);
-          }}
-        />
-      )}
+      {formMode &&
+        (useEditor ? (
+          <CodeEditorForm assignment={a} mode={formMode} onCancel={closeForm} onDone={finishForm} onSaved={onRefresh} />
+        ) : (
+          <UploadForm assignment={a} mode={formMode} onCancel={closeForm} onDone={finishForm} />
+        ))}
       {notice && <Message state={notice} />}
     </li>
   );

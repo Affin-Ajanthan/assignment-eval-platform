@@ -285,10 +285,17 @@ the student's hourly runs** (so a student who practised with every run can still
 submit), and when the server is busy it **waits for a free place** (up to 2
 minutes) rather than being refused. If the tests cannot be run at all (the
 sandbox is off or down, the server stayed busy, an error) the code is **still
-submitted**, without a mark: the student is told that the instructor will mark
-it, and the instructor presses **Run and save as mark** later. The same lock
-applies to a challenge handed in as a plain file upload through `POST
-/submissions` (which does not mark it).
+submitted**, without a mark. The student sees **Get my marks** (on the result,
+and on the assignment card for as long as the code has no mark;
+`POST /assignments/{id}/mark-my-code`): it runs the same marking on the saved
+code, which cannot have changed, works after the deadline too, and refuses code
+that is already marked (409). This is also how a submission made before code
+was marked at once gets its mark. The instructor can press **Run and save as
+mark** instead. The same lock applies to a challenge handed in as a plain file
+upload through `POST /submissions` (which does not mark it).
+
+The assignment card reloads as soon as the code is submitted, so its Status and
+Marks rows show the new mark at once, not only after Close.
 
 **The student portal never lists the test cases.** The assignment card shows
 no sample input or expected output, before or after submitting (the server does
@@ -340,7 +347,10 @@ CPU, 64 processes, a read-only filesystem, all Linux capabilities dropped, an
 unprivileged user and a time limit** (`CODE_TEST_TIMEOUT`, 10 s). The code is
 mounted read-only and copied to a small in-memory scratch folder, so programs
 that save and load files still work and nothing one test writes is seen by the
-next. There is no "run it locally" fallback. Settings: `CODE_SANDBOX`,
+next. There is no "run it locally" fallback. If Docker is running but cannot
+start a test container (for example the image was never pulled and there is no
+internet), the tests count as *not run*, never as failed, so no mark of 0 is
+saved by mistake. Settings: `CODE_SANDBOX`,
 `CODE_TEST_TIMEOUT`, `CODE_SANDBOX_IMAGE`, `CODE_SANDBOX_RUBY_IMAGE`,
 `CODE_SAMPLE_RUNS_PER_HOUR`, `CODE_SAMPLE_MAX_PARALLEL` (see `.env.example`).
 

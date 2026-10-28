@@ -98,19 +98,46 @@ export function CodeRunResults({ run, submitted = false }: { run: CodeRun; submi
 }
 
 /**
- * What the student sees as soon as the code is handed in: that it is final, how many test cases
- * passed (the same report Run gives) and their mark. The mark is left out while the instructor
- * holds marks back until a release date, and when the tests could not be run just now.
+ * The box with a student's mark once their code is marked: the mark itself (points of the test
+ * cases passed out of all the points), or when it will be shown if the instructor holds marks back
+ * until a release date. Nothing while the code has no mark yet.
  */
-export function CodeSubmitResult({ result, releaseAt }: { result: CodeSubmit; releaseAt: string | null }) {
-  const mark =
-    result.earned !== null && result.total !== null
-      ? `Your mark: ${formatMark(result.earned, result.total)} (the points of the test cases you passed).`
-      : result.marked
-        ? releaseAt
-          ? `Your mark will be released on ${formatDateTime(releaseAt)}.`
-          : "Your mark is on the assignment page."
-        : null;
+export function MarkBox({ result, releaseAt }: { result: CodeSubmit; releaseAt: string | null }) {
+  let headline: string;
+  let detail: string;
+  if (result.earned !== null && result.total !== null) {
+    headline = `Your mark: ${formatMark(result.earned, result.total)}`;
+    detail = "the points of the test cases you passed";
+  } else if (result.marked) {
+    headline = releaseAt ? `Your mark will be released on ${formatDateTime(releaseAt)}` : "Your mark is saved";
+    detail = releaseAt ? "it is already saved" : "you will see it on the assignment page";
+  } else {
+    return null;
+  }
+  return (
+    <p className="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-900" data-testid="submit-mark">
+      <span className="text-base font-bold">{headline}</span>
+      <span className="ml-2 text-xs">({detail})</span>
+    </p>
+  );
+}
+
+/**
+ * What the student sees as soon as the code is handed in: that it is final, how many test cases
+ * passed (the same report Run gives) and their mark. When the tests could not be run just now the
+ * code is still submitted, and `onGetMarks` lets the student ask for the mark again.
+ */
+export function CodeSubmitResult({
+  result,
+  releaseAt,
+  onGetMarks,
+  gettingMarks = false,
+}: {
+  result: CodeSubmit;
+  releaseAt: string | null;
+  onGetMarks?: () => void;
+  gettingMarks?: boolean;
+}) {
   return (
     <div className="mt-3" data-testid="submit-result">
       <p className="rounded-md bg-green-50 px-3 py-2 text-sm font-semibold text-green-800" data-testid="submitted-banner">
@@ -119,15 +146,24 @@ export function CodeSubmitResult({ result, releaseAt }: { result: CodeSubmit; re
       {result.run ? (
         <CodeRunResults run={result.run} submitted />
       ) : (
-        <p className="mt-3 rounded-md bg-yellow-50 px-3 py-2 text-sm text-yellow-800" data-testid="not-marked">
-          The test cases could not be run just now, so your code has no mark yet. Your instructor will mark it.
-        </p>
+        <div className="mt-3 rounded-md bg-yellow-50 px-3 py-2 text-sm text-yellow-800" data-testid="not-marked">
+          <p>
+            The test cases could not be run just now, so your code has no mark yet. Try again in a moment; your
+            instructor can also mark it.
+          </p>
+          {onGetMarks && (
+            <button
+              type="button"
+              onClick={onGetMarks}
+              disabled={gettingMarks}
+              className="mt-2 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+            >
+              {gettingMarks ? "Getting your marks…" : "Get my marks"}
+            </button>
+          )}
+        </div>
       )}
-      {mark && (
-        <p className="mt-3 text-sm font-semibold" data-testid="submit-mark">
-          {mark}
-        </p>
-      )}
+      <MarkBox result={result} releaseAt={releaseAt} />
     </div>
   );
 }
@@ -144,6 +180,7 @@ export default function CodeEditorForm({
   assignment,
   onDone,
   onCancel,
+  onSaved,
 }: {
   assignment: StudentAssignment;
   // The card passes the same props to every form. A code challenge is never edited once
@@ -151,6 +188,8 @@ export default function CodeEditorForm({
   mode?: "submit" | "edit";
   onDone: (text: string) => Promise<void>;
   onCancel: () => void;
+  /** Called once the code is submitted and marked, so the card above shows the new status and mark at once. */
+  onSaved?: () => Promise<void>;
 }) {
   const languages = editorLanguages(assignment);
   const [language, setLanguage] = useState<CodeLanguageId>(languages[0].id);
@@ -161,6 +200,7 @@ export default function CodeEditorForm({
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const [running, setRunning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [gettingMarks, setGettingMarks] = useState(false);
   const escaped = useRef(false); // Esc was pressed: the next Tab leaves the box instead of indenting
   const busy = running || submitting;
   const final = result !== null;
@@ -228,10 +268,30 @@ export default function CodeEditorForm({
       setResult(
         await apiFetch<CodeSubmit>(`/assignments/${assignment.id}/submit-code`, { method: "POST", json: { code, language } }),
       );
+      onSaved?.().catch(() => {}); // the card's status and mark; the result below does not depend on it
     } catch (err) {
       setMsg({ text: `Submission failed: ${err instanceof Error ? err.message : err}`, kind: "error" });
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  /** The tests could not be run at Submit: ask the server to mark the saved code now. */
+  async function getMarks() {
+    setGettingMarks(true);
+    setMsg(null);
+    try {
+      const marked = await apiFetch<CodeSubmit>(`/assignments/${assignment.id}/mark-my-code`, { method: "POST" });
+      if (marked.marked) {
+        setResult(marked);
+        onSaved?.().catch(() => {});
+      } else {
+        setMsg({ text: "The test cases could not be run just now. Please try again in a moment.", kind: "error" });
+      }
+    } catch (err) {
+      setMsg({ text: err instanceof Error ? err.message : String(err), kind: "error" });
+    } finally {
+      setGettingMarks(false);
     }
   }
 
@@ -329,7 +389,14 @@ export default function CodeEditorForm({
       )}
       <Message state={msg} />
       {run && <CodeRunResults run={run} />}
-      {result && <CodeSubmitResult result={result} releaseAt={assignment.marks_release_at} />}
+      {result && (
+        <CodeSubmitResult
+          result={result}
+          releaseAt={assignment.marks_release_at}
+          onGetMarks={getMarks}
+          gettingMarks={gettingMarks}
+        />
+      )}
       <ConfirmDialog request={confirm} onCancel={() => setConfirm(null)} />
     </div>
   );

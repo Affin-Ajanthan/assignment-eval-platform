@@ -19,8 +19,10 @@ the mark. A code challenge cannot be edited or deleted afterwards (app/main.py
 refuses PUT and DELETE /submissions/{id} for it). Submitting uses none of the
 student's hourly runs, and when the server is busy it waits for a free place
 instead of being refused. If the tests cannot be run at all (sandbox off or
-down, an error) the code is still submitted, unmarked, and the instructor can
-mark it later with "Run and save as mark".
+down, an error) the code is still submitted, unmarked. The student can then ask
+for the mark with POST /assignments/{id}/mark-my-code (it runs the same marking
+on their saved code, which cannot have changed), or the instructor can mark it
+with "Run and save as mark".
 
 Every rule below is enforced here, whatever the page shows.
 
@@ -299,18 +301,18 @@ def _save_submission(db: Session, student: User, assignment: Assignment, filenam
     return submission
 
 
-def _mark(db: Session, student: User, assignment: Assignment, submission: Submission, language: str,
-          filename: str) -> SubmitOut:
-    """Run every test case on the saved code and save the points of the tests passed as the mark.
-    When the tests cannot be run now the code stays submitted, without a mark: the instructor
-    can mark it later. Never raises, because the submission is already saved."""
+def _mark(db: Session, student: User, assignment: Assignment, submission: Submission, main_file: str) -> SubmitOut:
+    """Run every test case on the saved code (`main_file` is the file to run, "" to pick it) and save
+    the points of the tests passed as the mark. When the tests cannot be run now the code stays
+    submitted, without a mark: the student can ask for it again (mark_my_code) or the instructor can
+    mark it. Never raises, because the submission is already saved."""
     unmarked = SubmitOut(submission_id=submission.id, marked=False)
     if not sandbox_enabled():
         log.warning("Submission %s was saved without a mark: the code sandbox is off", submission.id)
         return unmarked
     try:
         with limiter.marking():
-            run = code_testing.run_tests(BASE_DIR / submission.code_path, assignment.test_cases, main_file=filename)
+            run = code_testing.run_tests(BASE_DIR / submission.code_path, assignment.test_cases, main_file=main_file)
         score = code_testing.score_run(run.results)
         submission.test_earned, submission.test_total = score.earned, score.total
         submission.tests_run_at = utcnow_naive()
@@ -326,7 +328,7 @@ def _mark(db: Session, student: User, assignment: Assignment, submission: Submis
 
     released = assignment.marks_released_at(utcnow_naive())
     return SubmitOut(
-        submission_id=submission.id, marked=True, run=_report(run.results, language, limiter.remaining(student.id)),
+        submission_id=submission.id, marked=True, run=_report(run.results, run.language, limiter.remaining(student.id)),
         earned=score.earned if released else None, total=score.total if released else None)
 
 
@@ -346,4 +348,34 @@ def submit_code(
         raise HTTPException(409, "You have already submitted this code challenge. A submission can't be changed.")
     filename = _main_filename(language)
     submission = _save_submission(db, student, assignment, filename, payload.code.replace("\r\n", "\n"))
-    return _mark(db, student, assignment, submission, language, filename)
+    return _mark(db, student, assignment, submission, filename)
+
+
+@router.post("/assignments/{assignment_id}/mark-my-code", response_model=SubmitOut)
+def mark_my_code(
+    assignment_id: int,
+    student: User = Depends(require_student), db: Session = Depends(get_db),
+):
+    """Mark the student's own submitted code now, when it has no mark yet: the tests could not be run
+    when they submitted it (Docker was off, the server was busy), or it was submitted before code was
+    marked at once. The code cannot have changed since (a code challenge is final), so this gives the
+    mark that Submit would have. It does not matter whether the deadline has passed."""
+    assignment = db.get(Assignment, assignment_id)
+    if (not assignment or assignment.subject_id not in student_subject_ids(db, student)
+            or assignment.status_at(utcnow_naive()) == "upcoming"):
+        raise HTTPException(404, "Assignment not found")
+    if assignment.kind != "code_challenge":
+        raise HTTPException(400, "Only a code challenge is marked from its tests.")
+    if not assignment.test_cases:
+        raise HTTPException(400, "This assignment has no test cases to run.")
+    submission = (
+        db.query(Submission)
+        .filter(Submission.assignment_id == assignment.id, Submission.student_id == student.id)
+        .order_by(Submission.id.desc())
+        .first()
+    )
+    if submission is None or not submission.code_path:
+        raise HTTPException(404, "You have not submitted code for this assignment.")
+    if submission.marked_by_tests:
+        raise HTTPException(409, "Your code is already marked.")
+    return _mark(db, student, assignment, submission, assignment.test_main_file or "")

@@ -38,6 +38,12 @@ export default function StudentPage() {
     await load();
   }
 
+  /** Reload quietly, without a notice: a code challenge was just submitted or marked in its own panel. */
+  async function refresh() {
+    setHistoryVersion((v) => v + 1);
+    await load();
+  }
+
   function askDelete(a: StudentAssignment) {
     setConfirm({
       title: "Delete your submission?",
@@ -68,6 +74,7 @@ export default function StudentPage() {
       openForm={openForm}
       setOpenForm={setOpenForm}
       onChanged={changed}
+      onRefresh={refresh}
       askDelete={askDelete}
       notice={notice?.assignmentId === a.id ? notice.state : null}
     />

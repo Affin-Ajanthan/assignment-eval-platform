@@ -70,7 +70,8 @@ class FakeRunTests:
     def __call__(self, code_dir, tests, *, main_file="", only_visible=False, **kwargs):
         if self.error:
             raise self.error
-        self.calls.append({"file": main_file, "code": (Path(code_dir) / main_file).read_text(encoding="utf-8"),
+        code = (Path(code_dir) / main_file).read_text(encoding="utf-8") if main_file else ""  # "" = pick the file
+        self.calls.append({"file": main_file, "code": code,
                            "names": [t["name"] for t in tests], "only_visible": only_visible})
         results = []
         for t in tests:
@@ -320,6 +321,10 @@ def _my_submission(assignment, token):
     return next(a for a in rows if a["id"] == assignment["id"])["my_submission"]
 
 
+def _get_marks(assignment, token):
+    return client.post(f"/assignments/{assignment['id']}/mark-my-code", headers=auth_headers(token))
+
+
 def _all_pass(code_dir, tests, *, main_file="", **kwargs):
     """A run_tests where every test passes (it never reads the code)."""
     results = [ct.TestResult(test_id=t["id"], name=t["name"], visible=t["visible"], points=t["points"],
@@ -545,3 +550,71 @@ def test_a_marking_run_waits_for_a_free_place_and_gives_up_after_the_wait():
     assert gave_up.value.status == 503
     short.finish(1)
     assert short.start(2) == 9                                        # giving up left nothing behind
+
+
+# --------------------------------------------------------------------------
+# Getting the mark of code that was submitted without one
+# --------------------------------------------------------------------------
+
+
+def test_a_student_can_get_the_mark_of_code_that_was_submitted_unmarked(monkeypatch):
+    monkeypatch.delenv("CODE_SANDBOX", raising=False)                 # the tests could not run when they submitted
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _challenge(itok, subject, "Get my marks", TESTS)
+    sub_id = _submit(assignment, stok).json()["submission_id"]
+    assert _my_submission(assignment, stok)["final_mark"] is None
+
+    still_off = _get_marks(assignment, stok)                          # asking while it is still off: nothing happens
+    assert still_off.status_code == 200 and still_off.json()["marked"] is False
+    assert _my_submission(assignment, stok)["final_mark"] is None
+
+    monkeypatch.setenv("CODE_SANDBOX", "docker")
+    runner = _use(monkeypatch, FakeRunTests())
+    body = _get_marks(assignment, stok).json()
+    assert (body["submission_id"], body["marked"], body["earned"], body["total"]) == (sub_id, True, 2, 8)
+    assert (body["run"]["passed"], body["run"]["total"], body["run"]["hidden_failed"]) == (1, 3, 1)
+    assert body["run"]["failures"][0]["name"] == "Wrong on purpose"   # the same report Submit gives
+    assert runner.calls[0]["names"] == ["Doubles", "HIDDEN-NAME", "Wrong on purpose"]
+    assert not any(secret in json.dumps(body) for secret in ("HIDDEN", "points", "test_id", "visible", '"input"'))
+
+    mine = _my_submission(assignment, stok)
+    assert (mine["status"], mine["final_mark"], mine["max_mark"], mine["can_edit"]) == ("graded", 2, 8, False)
+    again = _get_marks(assignment, stok)
+    assert again.status_code == 409 and "already marked" in again.json()["detail"]
+    assert len(runner.calls) == 1                                     # a marked submission is not run again
+
+
+def test_getting_marks_checks_who_asks_and_what_was_submitted(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _challenge(itok, subject, "Mark guards", TESTS)
+    assert _get_marks(assignment, stok).status_code == 404            # nothing submitted yet
+    _, _, other_stok = setup_subject_with_users(client)
+    assert _get_marks(assignment, other_stok).status_code == 404      # not enrolled in this subject
+    assert _get_marks(assignment, itok).status_code == 403            # an instructor
+    assert client.post(f"/assignments/{assignment['id']}/mark-my-code").status_code == 401
+    assert client.post("/assignments/999999/mark-my-code", headers=auth_headers(stok)).status_code == 404
+    plain = _challenge(itok, subject, "Plain assignment")
+    assert _get_marks(plain, stok).status_code == 400
+    assert _get_marks(_challenge(itok, subject, "Not yet", TESTS, hours_open=(24, 48)), stok).status_code == 404
+    assert fake.calls == []                                           # none of those ran anything
+
+
+def test_the_mark_can_be_fetched_after_the_deadline_and_still_respects_the_release_date(monkeypatch, fake):
+    monkeypatch.delenv("CODE_SANDBOX", raising=False)
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _challenge(itok, subject, "Late marks", TESTS)
+    _submit(assignment, stok)                                         # submitted unmarked
+    now = datetime.now(timezone.utc)
+    moved = client.put(f"/assignments/{assignment['id']}", headers=auth_headers(itok), json={
+        "available_from": (now - timedelta(days=3)).isoformat(), "deadline": (now - timedelta(minutes=1)).isoformat(),
+        "marks_release_at": (now + timedelta(days=3)).isoformat()})
+    assert moved.status_code == 200, moved.text                       # closed, with the marks held back
+
+    monkeypatch.setenv("CODE_SANDBOX", "docker")
+    body = _get_marks(assignment, stok).json()
+    assert (body["marked"], body["earned"], body["total"]) == (True, None, None)  # marked, but the mark waits
+    assert (body["run"]["passed"], body["run"]["total"]) == (1, 3)
+    held = [a for a in client.get("/assignments", headers=auth_headers(stok)).json() if a["id"] == assignment["id"]]
+    assert held[0]["my_submission"]["final_mark"] is None
+    sub = client.get("/submissions", headers=auth_headers(itok), params={"subject_id": subject["id"]}).json()[0]
+    assert (sub["status"], sub["final_mark"], sub["max_mark"]) == ("graded", 2, 8)  # the instructor sees it

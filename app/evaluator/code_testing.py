@@ -246,6 +246,11 @@ def _run_one(test: dict, code_dir: Path, relative_file: str, language: Language,
                           stderr=f"No result within {timeout + 30} seconds.")
 
     out = out[:MAX_CAPTURED_CHARS]
+    if code == 125:
+        # `docker run` itself failed (the daemon refused, or the image is missing and cannot be downloaded):
+        # that says nothing about the program, so it must not become a failed test and a saved mark of 0.
+        reason = next((line for line in reversed(err.strip().splitlines()) if line.strip()), "no details")
+        raise SandboxUnavailable(f"Docker could not start the test container: {reason.strip()[:300]}")
     if code == 124:  # coreutils `timeout`: the program hit its time limit
         return TestResult(**base, status="timeout", passed=False, actual_output=_clip(out, MAX_SHOWN_CHARS),
                           stderr=f"Time limit of {timeout} seconds exceeded.")
