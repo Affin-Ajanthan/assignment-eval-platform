@@ -1,11 +1,12 @@
 "use client";
 
 import { KeyboardEvent, useRef, useState } from "react";
-import { apiFetch, CodeQuestion, CodeQuestionResult, CodeRun, CodeSubmit, StudentAssignment } from "@/lib/api";
+import { apiFetch, CodeAnswer, CodeQuestion, CodeRun, CodeWork, StudentAssignment } from "@/lib/api";
 import { formatDateTime, formatMark } from "@/lib/datetime";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import Message, { MessageState } from "@/components/Message";
 import { CodeLanguageId, languagesFor } from "@/lib/codeLanguages";
+import { taskName } from "@/lib/tasks";
 
 /** The languages the server can run tests for: must match LANGUAGES in app/evaluator/code_testing.py. */
 const RUNNABLE: CodeLanguageId[] = ["python", "ruby"];
@@ -29,28 +30,19 @@ export function sampleLabel(name: string, index: number): string {
   return !trimmed || GENERATED_NAME.test(trimmed) ? `Sample ${index + 1}` : `Sample ${index + 1}: ${trimmed}`;
 }
 
-// The server titles a question "Question 2" when the instructor gave it no title of its own.
-const GENERATED_QUESTION = /^Question \d+$/;
-
-/** "Question 2: Triple it", or just "Question 2" for a question without a title of its own. */
-export function questionName(q: Pick<CodeQuestion, "id" | "title">): string {
-  const title = q.title.trim();
-  return !title || GENERATED_QUESTION.test(title) ? `Question ${q.id}` : `Question ${q.id}: ${title}`;
-}
-
 /** The languages a code challenge can be written in on the page: its own, if the server can run them. */
 export function editorLanguages(assignment: StudentAssignment) {
   return languagesFor(assignment.code_languages).filter((l) => RUNNABLE.includes(l.id));
 }
 
 /**
- * The result of Run, and of Submit (which shows the same thing once the code is handed in): the
- * code was run against every test case, hidden ones included. Always "X of Y test cases passed";
- * then, for each VISIBLE test that failed, only what was expected and what the program printed.
- * A hidden test is only ever counted.
+ * The result of Run, and of a task that is handed in (which shows the same thing): the code was
+ * run against every test case of the task, hidden ones included. Always "X of Y test cases
+ * passed"; then, for each VISIBLE test that failed, only what was expected and what the program
+ * printed. A hidden test is only ever counted.
  */
 export function CodeRunResults({ run, submitted = false }: { run: CodeRun; submitted?: boolean }) {
-  // Runs left only matter for practice: Submit uses none.
+  // Runs left only matter for practice: handing a task in uses none.
   const left = submitted ? "" : `${run.remaining_runs} run${run.remaining_runs === 1 ? "" : "s"} left this hour.`;
   if (run.all_passed) {
     return (
@@ -107,49 +99,27 @@ export function CodeRunResults({ run, submitted = false }: { run: CodeRun; submi
 }
 
 /**
- * How each question of a marked submission did: the same report Run gives (counts, and expected vs actual
- * output of a visible test that failed). A challenge with several questions gets a heading for each, and a
- * question the student left empty says so.
+ * The student's mark so far, or their mark once every task is handed in and marked: the points of
+ * the test cases they passed out of the points of ALL the tasks. Or, when the instructor holds marks
+ * back until a release date, when it will be shown. Nothing while no answer is marked yet.
  */
-export function SubmitReport({ questions }: { questions: CodeQuestionResult[] }) {
-  const many = questions.length > 1;
-  return (
-    <>
-      {questions.map((q) => (
-        <div key={q.question} data-testid="question-report">
-          {many && <p className="mt-3 text-sm font-bold">{questionName({ id: q.question, title: q.title })}</p>}
-          {q.run ? (
-            <CodeRunResults run={q.run} submitted />
-          ) : (
-            <p className="mt-2 rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700" data-testid="question-unanswered">
-              You wrote no code for this question, so none of its test cases passed.
-            </p>
-          )}
-        </div>
-      ))}
-    </>
-  );
-}
-
-/**
- * The box with a student's mark once their code is marked: the mark itself (points of the test
- * cases passed out of all the points), or when it will be shown if the instructor holds marks back
- * until a release date. Nothing while the code has no mark yet.
- */
-export function MarkBox({ result, releaseAt }: { result: CodeSubmit; releaseAt: string | null }) {
+export function MarkBox({ work, releaseAt }: { work: CodeWork; releaseAt: string | null }) {
+  const final = work.complete && work.questions.every((q) => q.marked);
   let headline: string;
   let detail: string;
-  if (result.earned !== null && result.total !== null) {
-    headline = `Your mark: ${formatMark(result.earned, result.total)}`;
-    detail = "the points of the test cases you passed";
-  } else if (result.marked) {
+  if (work.earned !== null && work.total !== null) {
+    headline = `${final ? "Your mark" : "Your mark so far"}: ${formatMark(work.earned, work.total)}`;
+    detail = final
+      ? "the points of the test cases you passed"
+      : "it adds up as the other tasks are handed in and marked";
+  } else if (work.marked) {
     headline = releaseAt ? `Your mark will be released on ${formatDateTime(releaseAt)}` : "Your mark is saved";
     detail = releaseAt ? "it is already saved" : "you will see it on the assignment page";
   } else {
     return null;
   }
   return (
-    <p className="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-900" data-testid="submit-mark">
+    <p className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-900" data-testid="submit-mark">
       <span className="text-base font-bold">{headline}</span>
       <span className="ml-2 text-xs">({detail})</span>
     </p>
@@ -157,115 +127,137 @@ export function MarkBox({ result, releaseAt }: { result: CodeSubmit; releaseAt: 
 }
 
 /**
- * What the student sees as soon as the code is handed in: that it is final, how many test cases
- * passed (the same report Run gives) and their mark. When the tests could not be run just now the
- * code is still submitted, and `onGetMarks` lets the student ask for the mark again.
+ * What the student sees under a task they have handed in: that it is final, how it did (the same
+ * report Run gives) and the points it earned. When the tests could not be run at that moment, the
+ * answer has no result yet and `onGetMarks` asks the server to run them now.
  */
-export function CodeSubmitResult({
-  result,
-  releaseAt,
+function HandedIn({
+  answer,
+  next,
+  onNext,
   onGetMarks,
-  gettingMarks = false,
+  gettingMarks,
 }: {
-  result: CodeSubmit;
-  releaseAt: string | null;
-  onGetMarks?: () => void;
-  gettingMarks?: boolean;
+  answer: CodeAnswer;
+  /** The next task still to hand in, if there is one. */
+  next: CodeQuestion | null;
+  onNext: () => void;
+  onGetMarks: () => void;
+  gettingMarks: boolean;
 }) {
   return (
-    <div className="mt-3" data-testid="submit-result">
+    <div className="mt-3" data-testid="question-report">
       <p className="rounded-md bg-green-50 px-3 py-2 text-sm font-semibold text-green-800" data-testid="submitted-banner">
-        ✓ Submitted. Your code is final: it cannot be changed now.
+        ✓ Submitted. Your answer is final: it cannot be changed now.
       </p>
-      {result.marked ? (
-        <SubmitReport questions={result.questions} />
+      {answer.marked ? (
+        <>
+          {answer.run ? (
+            <CodeRunResults run={answer.run} submitted />
+          ) : (
+            <p className="mt-2 rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">This answer is marked.</p>
+          )}
+          {answer.earned !== null && answer.total !== null && (
+            <p className="mt-2 text-sm font-semibold" data-testid="question-points">
+              Points for this answer: {formatMark(answer.earned, answer.total)}
+            </p>
+          )}
+        </>
       ) : (
         <div className="mt-3 rounded-md bg-yellow-50 px-3 py-2 text-sm text-yellow-800" data-testid="not-marked">
           <p>
-            The test cases could not be run just now, so your code has no mark yet. Try again in a moment; your
+            The test cases could not be run just now, so this answer has no mark yet. Try again in a moment; your
             instructor can also mark it.
           </p>
-          {onGetMarks && (
-            <button
-              type="button"
-              onClick={onGetMarks}
-              disabled={gettingMarks}
-              className="mt-2 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-            >
-              {gettingMarks ? "Getting your marks…" : "Get my marks"}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={onGetMarks}
+            disabled={gettingMarks}
+            className="mt-2 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+          >
+            {gettingMarks ? "Getting your marks…" : "Get my marks"}
+          </button>
         </div>
       )}
-      <MarkBox result={result} releaseAt={releaseAt} />
+      {next && (
+        <button
+          type="button"
+          onClick={onNext}
+          className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+          data-testid="next-question"
+        >
+          Go to {taskName(next)} →
+        </button>
+      )}
     </div>
   );
 }
 
-/** What a student has typed for one question. */
+/** What a student has typed for one task that is not handed in yet. */
 type Answer = { code: string; language: CodeLanguageId };
 
 /**
- * A code challenge is answered here, not by uploading a file: the student types their code and
- * has three buttons. A challenge has one or more questions; with several, they are tabs, each with
- * its own description, language and code. Run checks the code of the question that is open against
- * all of that question's test cases and shows how many passed (practice: nothing is submitted or
- * marked). Submit asks for confirmation, then saves the code of every question, runs every test
- * case, saves the points of the tests passed as the mark and shows the result at once. That is
- * final: the boxes lock and the only button left is Close. The typed code is saved on the server
- * as main.py / main.rb for one question, or q1.py, q2.rb, ... for several, which also refuses any
- * later change.
+ * The code editor of a code challenge, on the challenge's own page (app/student/code/[id]), which the
+ * student reaches with "Do assignment": the questions are shown here and nowhere before. The student does
+ * the tasks one at a time: with several, they are tabs, each with its own question, language and code,
+ * and they can be done in any order. Run checks the code of the task that is open against all of that
+ * task's test cases and shows how many passed (practice: nothing is handed in or marked). Submit asks for
+ * confirmation, then hands that task in: the server runs every test case of the task, saves the points
+ * as the mark and the page shows the result at once. A task handed in is final: its box locks and shows
+ * the code that was handed in, and the student moves on to the next one. `work` is what the server holds
+ * so far (also after a reload); every Submit and "Get my marks" gives back a newer one, passed to `onWork`.
  */
 export default function CodeEditorForm({
   assignment,
-  onDone,
-  onCancel,
-  onSaved,
+  work,
+  onWork,
 }: {
   assignment: StudentAssignment;
-  // The card passes the same props to every form. A code challenge is never edited once
-  // submitted (the server refuses it), so only "submit" is ever used here.
-  mode?: "submit" | "edit";
-  onDone: (text: string) => Promise<void>;
-  onCancel: () => void;
-  /** Called once the code is submitted and marked, so the card above shows the new status and mark at once. */
-  onSaved?: () => Promise<void>;
+  work: CodeWork;
+  onWork: (work: CodeWork) => void;
 }) {
   const languages = editorLanguages(assignment);
   const questions: CodeQuestion[] = assignment.questions?.length
     ? assignment.questions
-    : [{ id: 1, title: "", statement: "" }]; // a challenge made before questions existed has the one
+    : [{ id: 1, title: "", statement: "" }]; // a challenge made before tasks existed has the one
   const many = questions.length > 1;
+  const open = assignment.status === "open";
   const blankAnswer: Answer = { code: "", language: languages[0].id };
+  /** The answer the student handed in for a task, or null while it is not handed in. */
+  const handedIn = (id: number): CodeAnswer | null => work.questions.find((q) => q.question === id && q.submitted) ?? null;
 
   const [answers, setAnswers] = useState<Record<number, Answer>>({});
-  const [runs, setRuns] = useState<Record<number, CodeRun | null>>({}); // the last Run of each question
-  const [current, setCurrent] = useState(questions[0].id); // the question that is open
+  const [runs, setRuns] = useState<Record<number, CodeRun | null>>({}); // the last Run of each task
+  const [current, setCurrent] = useState(() => (questions.find((q) => handedIn(q.id) === null) ?? questions[0]).id);
   const [msg, setMsg] = useState<MessageState>(null);
-  const [result, setResult] = useState<CodeSubmit | null>(null); // set once the code is handed in
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const [running, setRunning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [gettingMarks, setGettingMarks] = useState(false);
   const escaped = useRef(false); // Esc was pressed: the next Tab leaves the box instead of indenting
   const busy = running || submitting;
-  const final = result !== null;
   const editorId = `code-editor-${assignment.id}`;
 
   const answerOf = (id: number): Answer => answers[id] ?? blankAnswer;
-  const written = (id: number) => answerOf(id).code.trim() !== "";
   const question = questions.find((q) => q.id === current) ?? questions[0];
-  const { code, language } = answerOf(question.id);
+  const saved = handedIn(question.id);
+  const locked = saved !== null || !open; // handed in (final), or the deadline has passed
+  const typed = answerOf(question.id);
+  const code = saved ? (saved.code ?? "") : typed.code;
+  const language = (saved?.language ?? typed.language) as CodeLanguageId;
   const run = runs[question.id] ?? null;
+  const handedInCount = questions.filter((q) => handedIn(q.id) !== null).length;
+  const todo = questions.filter((q) => q.id !== question.id && handedIn(q.id) === null);
+  const next = open ? (todo.find((q) => q.id > question.id) ?? todo[0] ?? null) : null;
 
-  /** A change to a question's code or language makes its last Run's result stale: drop it. */
+  /** A change to a task's code or language makes its last Run's result stale: drop it. */
   function change(id: number, patch: Partial<Answer>) {
     setAnswers((all) => ({ ...all, [id]: { ...(all[id] ?? blankAnswer), ...patch } }));
     setRuns((all) => ({ ...all, [id]: null }));
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (busy || final) return; // the box is read-only while code is being run or after it is handed in
+    if (busy || locked) return; // the box is read-only while code is being run, and once a task is handed in
     if (e.key === "Escape") {
       escaped.current = true;
       return;
@@ -305,52 +297,64 @@ export default function CodeEditorForm({
 
   /** Submit asks first: it cannot be undone. */
   function askToSubmit() {
-    const blank = questions.filter((q) => !written(q.id));
-    if (blank.length === questions.length) return setMsg({ text: "Write some code first.", kind: "error" });
+    if (!code.trim()) return setMsg({ text: "Write some code first.", kind: "error" });
     setMsg(null);
     const lines = [
       many
-        ? `Your code for ${questions.length - blank.length} of ${questions.length} questions will be run against every test case and marked at once.`
+        ? `Your code for ${taskName(question)} will be run against every test case of this task and marked at once.`
         : "Your code will be run against every test case and marked at once.",
     ];
-    if (blank.length > 0) {
+    if (todo.length > 0) {
       lines.push(
-        `${blank.map((q) => questionName(q)).join(", ")} ${blank.length === 1 ? "has" : "have"} no code and will earn no points.`,
+        `You can still hand in ${todo.length === 1 ? "the other task" : `the other ${todo.length} tasks`} afterwards, one at a time.`,
       );
     }
     lines.push("A submission is final: you cannot change or withdraw it afterwards.");
-    setConfirm({ title: "Submit your code?", message: lines.join("\n"), confirmLabel: "Submit", onConfirm: submit });
+    setConfirm({
+      title: many ? `Submit ${taskName(question)}?` : "Submit your code?",
+      message: lines.join("\n"),
+      confirmLabel: "Submit",
+      onConfirm: submit,
+    });
+  }
+
+  /** What the server holds now: after a Submit that failed it may still have gone through (the answer got lost). */
+  async function reload() {
+    try {
+      onWork(await apiFetch<CodeWork>(`/assignments/${assignment.id}/my-code`));
+    } catch {
+      /* keep what is on the screen */
+    }
   }
 
   async function submit() {
+    const id = question.id;
     setConfirm(null);
     setMsg(null);
-    setRuns({});
     setSubmitting(true);
     try {
-      // A question left empty is simply not sent: it earns nothing.
-      const answered = questions.filter((q) => written(q.id)).map((q) => ({ question: q.id, ...answerOf(q.id) }));
-      setResult(
-        await apiFetch<CodeSubmit>(`/assignments/${assignment.id}/submit-code`, { method: "POST", json: { answers: answered } }),
-      );
-      onSaved?.().catch(() => {}); // the card's status and mark; the result below does not depend on it
+      const updated = await apiFetch<CodeWork>(`/assignments/${assignment.id}/submit-code`, {
+        method: "POST",
+        json: { question: id, code, language },
+      });
+      setRuns((all) => ({ ...all, [id]: null }));
+      onWork(updated);
     } catch (err) {
       setMsg({ text: `Submission failed: ${err instanceof Error ? err.message : err}`, kind: "error" });
+      await reload();
     } finally {
       setSubmitting(false);
     }
   }
 
-  /** The tests could not be run at Submit: ask the server to mark the saved code now. */
+  /** Some answers were handed in but their tests could not be run: ask the server to run them now. */
   async function getMarks() {
     setGettingMarks(true);
     setMsg(null);
     try {
-      const marked = await apiFetch<CodeSubmit>(`/assignments/${assignment.id}/mark-my-code`, { method: "POST" });
-      if (marked.marked) {
-        setResult(marked);
-        onSaved?.().catch(() => {});
-      } else {
+      const marked = await apiFetch<CodeWork>(`/assignments/${assignment.id}/mark-my-code`, { method: "POST" });
+      onWork(marked);
+      if (marked.questions.some((q) => q.submitted && !q.marked)) {
         setMsg({ text: "The test cases could not be run just now. Please try again in a moment.", kind: "error" });
       }
     } catch (err) {
@@ -360,42 +364,54 @@ export default function CodeEditorForm({
     }
   }
 
-  const heading = many ? questionName(question) : question.title.trim();
+  // Every task is named, a single one too ("Task 1"), so the student always sees what they are working on.
+  const heading = taskName(question);
+  const hasQuestion = question.statement.trim() !== "";
+  // A challenge made before tasks existed keeps its question in the description, which the page shows above.
+  const noQuestion = !hasQuestion && assignment.description.trim() === "";
+  const languageName = languages.find((l) => l.id === language)?.name ?? language;
   return (
     <div className="mt-4 rounded-md border border-gray-200 p-4" data-testid="code-editor">
+      <MarkBox work={work} releaseAt={assignment.marks_release_at} />
       {many && (
-        <div
-          role="tablist"
-          aria-label="Questions"
-          className="mb-3 flex flex-wrap gap-1 border-b border-gray-200"
-          data-testid="question-tabs"
-        >
-          {questions.map((q) => {
-            const selected = q.id === question.id;
-            // A tick once a Run passed every test case of the question, a dot once some code is typed.
-            // Nothing after Submit: the report below says how each question did.
-            const mark = final ? "" : runs[q.id]?.all_passed ? "✓ " : written(q.id) ? "• " : "";
-            return (
-              <button
-                key={q.id}
-                type="button"
-                role="tab"
-                id={`${editorId}-tab-${q.id}`}
-                aria-selected={selected}
-                aria-controls={`${editorId}-panel`}
-                onClick={() => setCurrent(q.id)}
-                className={`-mb-px max-w-[16rem] truncate rounded-t-md border px-3 py-1.5 text-sm font-semibold ${
-                  selected
-                    ? "border-gray-200 border-b-white bg-white text-blue-700"
-                    : "border-transparent text-gray-600 hover:text-gray-900"
-                }`}
-              >
-                {mark}
-                {questionName(q)}
-              </button>
-            );
-          })}
-        </div>
+        <>
+          <p className="mb-2 text-sm text-gray-700" data-testid="progress">
+            {work.complete
+              ? `All ${questions.length} tasks are handed in.`
+              : `${handedInCount} of ${questions.length} tasks handed in.${open ? " Hand them in one at a time, in any order." : ""}`}
+          </p>
+          <div
+            role="tablist"
+            aria-label="Tasks"
+            className="mb-3 flex flex-wrap gap-1 border-b border-gray-200"
+            data-testid="question-tabs"
+          >
+            {questions.map((q) => {
+              const selected = q.id === question.id;
+              // A tick once the task is handed in, a dot while some code is typed for it.
+              const mark = handedIn(q.id) ? "✓ " : (answers[q.id]?.code.trim() ?? "") !== "" ? "• " : "";
+              return (
+                <button
+                  key={q.id}
+                  type="button"
+                  role="tab"
+                  id={`${editorId}-tab-${q.id}`}
+                  aria-selected={selected}
+                  aria-controls={`${editorId}-panel`}
+                  onClick={() => setCurrent(q.id)}
+                  className={`-mb-px max-w-[16rem] truncate rounded-t-md border px-3 py-1.5 text-sm font-semibold ${
+                    selected
+                      ? "border-gray-200 border-b-white bg-white text-blue-700"
+                      : "border-transparent text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  {mark}
+                  {taskName(q)}
+                </button>
+              );
+            })}
+          </div>
+        </>
       )}
 
       <div
@@ -403,22 +419,30 @@ export default function CodeEditorForm({
         role={many ? "tabpanel" : undefined}
         aria-labelledby={many ? `${editorId}-tab-${question.id}` : undefined}
       >
-        {(heading || question.statement.trim()) && (
-          <div className="mb-3 rounded-md bg-gray-50 p-3" data-testid="question-statement">
-            {heading && <p className="text-sm font-bold">{heading}</p>}
-            {question.statement.trim() && <p className="whitespace-pre-wrap text-sm text-gray-800">{question.statement}</p>}
-          </div>
-        )}
+        <div className="mb-3 rounded-md bg-gray-50 p-3" data-testid="question-statement">
+          <p className="text-sm font-bold">{heading}</p>
+          {hasQuestion && (
+            <>
+              <p className="mt-2 text-xs font-semibold text-gray-600">Question</p>
+              <p className="whitespace-pre-wrap text-sm text-gray-800">{question.statement}</p>
+            </>
+          )}
+          {noQuestion && (
+            <p className="mt-1 text-sm text-gray-600" data-testid="no-question">
+              Your instructor has not written the question for this task yet.
+            </p>
+          )}
+        </div>
 
         <div className="flex flex-wrap items-end justify-between gap-2">
           <label className="text-sm font-semibold" htmlFor={editorId}>
-            Your code
+            {saved ? "The code you handed in" : "Your code"}
           </label>
-          {languages.length > 1 ? (
+          {!locked && languages.length > 1 ? (
             <select
               aria-label="Language"
               value={language}
-              disabled={busy || final}
+              disabled={busy}
               onChange={(e) => change(question.id, { language: e.target.value as CodeLanguageId })}
               className="rounded-md border border-gray-300 px-2 py-1 text-sm"
             >
@@ -429,7 +453,7 @@ export default function CodeEditorForm({
               ))}
             </select>
           ) : (
-            <span className="text-xs text-gray-600">{languages[0].name}</span>
+            (saved || !locked) && <span className="text-xs text-gray-600">{languageName}</span>
           )}
         </div>
         <textarea
@@ -444,27 +468,27 @@ export default function CodeEditorForm({
           autoCapitalize="off"
           autoCorrect="off"
           wrap="off"
-          readOnly={busy || final}
-          placeholder={PLACEHOLDER[language]}
+          readOnly={busy || locked}
+          placeholder={locked ? undefined : PLACEHOLDER[language]}
           className="mt-1 block w-full overflow-auto rounded-md border border-gray-300 bg-white p-3 font-mono text-sm leading-5 read-only:bg-gray-50"
         />
-        {!final && (
+        {!locked && (
           <p className="mt-1 text-xs text-gray-500">
             Tab indents; press Esc then Tab to move to the next control. {code.length} / {MAX_CODE_CHARS} characters.
           </p>
         )}
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-2">
-        {!final && (
-          <>
+      {!locked && (
+        <>
+          <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
               onClick={runCode}
               disabled={busy}
               className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700 disabled:opacity-60"
             >
-              {running ? "Running…" : many ? "Run this question" : "Run"}
+              {running ? "Running…" : many ? "Run this task" : "Run"}
             </button>
             <button
               type="button"
@@ -472,26 +496,20 @@ export default function CodeEditorForm({
               disabled={busy}
               className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
             >
-              {submitting ? "Submitting…" : many ? "Submit all" : "Submit"}
+              {submitting ? "Submitting…" : many ? "Submit this task" : "Submit"}
             </button>
-          </>
-        )}
-        <button
-          type="button"
-          onClick={() => (result ? onDone(`Submitted! Your submission id is ${result.submission_id}.`) : onCancel())}
-          disabled={submitting}
-          className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700 disabled:opacity-60"
-        >
-          {final ? "Close" : "Cancel"}
-        </button>
-      </div>
-      {!final && (
-        <p className="mt-2 text-xs text-gray-500">
-          {many
-            ? "Run checks the question that is open against all of its test cases without submitting anything. "
-            : "Run checks your code against all the test cases without submitting it. "}
-          Submit is final: your code{many ? " for every question" : ""} is run against every test case, marked at once,
-          and cannot be changed afterwards.
+          </div>
+          <p className="mt-2 text-xs text-gray-500">
+            Run checks your code against all the test cases of {many ? "this task" : "the challenge"} without
+            handing it in. Submit is final: {many ? "this task is" : "your code is"} run against every test case,
+            marked at once, and cannot be changed afterwards.
+            {many && " The other tasks stay open until you hand them in."}
+          </p>
+        </>
+      )}
+      {!saved && !open && (
+        <p className="mt-3 rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700" data-testid="not-handed-in">
+          The deadline has passed. This task was not handed in, so it earns no points.
         </p>
       )}
       {running && (
@@ -503,11 +521,12 @@ export default function CodeEditorForm({
         </p>
       )}
       <Message state={msg} />
-      {run && <CodeRunResults run={run} />}
-      {result && (
-        <CodeSubmitResult
-          result={result}
-          releaseAt={assignment.marks_release_at}
+      {!saved && run && <CodeRunResults run={run} />}
+      {saved && (
+        <HandedIn
+          answer={saved}
+          next={next}
+          onNext={() => next && setCurrent(next.id)}
           onGetMarks={getMarks}
           gettingMarks={gettingMarks}
         />

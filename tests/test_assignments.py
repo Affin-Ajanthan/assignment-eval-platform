@@ -752,7 +752,7 @@ def test_students_are_told_which_assignments_are_code_challenges():
 
 
 # --------------------------------------------------------------------------
-# A code challenge with several questions
+# A code challenge with several tasks
 # --------------------------------------------------------------------------
 
 
@@ -769,7 +769,7 @@ def test_a_challenge_can_have_several_questions_with_their_own_tests():
     assert r.status_code == 200, r.text
     body = r.json()
     assert [(q["id"], q["title"], q["statement"]) for q in body["questions"]] == [
-        (1, "Sum", "Add the numbers."), (2, "Question 2", "")]
+        (1, "Sum", "Add the numbers."), (2, "Task 2", "")]
     assert [(t["id"], t["question"], t["name"]) for t in body["test_cases"]] == [
         (1, 1, "Test 1"), (2, 1, "a2"), (3, 2, "b1"), (4, 2, "b2")]
 
@@ -788,18 +788,18 @@ def test_questions_and_their_tests_must_match():
     two = [{"title": "A"}, {"title": "B"}]
 
     no_tests = _new_assignment(itok, subject, "No tests for B", test_cases=_tests_for(1, "a"), questions=two)
-    assert no_tests.status_code == 400 and "Question 2 needs at least one test case" in no_tests.json()["detail"]
+    assert no_tests.status_code == 400 and "Task 2 needs at least one test case" in no_tests.json()["detail"]
     stray = _new_assignment(itok, subject, "A test for question 3", questions=two,
                             test_cases=_tests_for(1, "a") + _tests_for(2, "b") + _tests_for(3, "c"))
-    assert stray.status_code == 400 and "belongs to question 3" in stray.json()["detail"]
-    unlisted = _new_assignment(itok, subject, "Question 2 not listed", test_cases=_tests_for(2, "b"))
-    assert unlisted.status_code == 400 and "only 1 question" in unlisted.json()["detail"]
+    assert stray.status_code == 400 and "belongs to task 3" in stray.json()["detail"]
+    unlisted = _new_assignment(itok, subject, "Task 2 not listed", test_cases=_tests_for(2, "b"))
+    assert unlisted.status_code == 400 and "only 1 task" in unlisted.json()["detail"]
     assert _new_assignment(itok, subject, "Too many questions", test_cases=_tests_for(1, "a"),
                            questions=[{}] * 21).status_code == 422
     assert _new_assignment(itok, subject, "Question zero",
                            test_cases=[{"expected_output": "x", "question": 0}]).status_code == 422
 
-    # Questions belong to code challenges, like test cases.
+    # Tasks belong to code challenges, like test cases.
     wrong = _new_assignment(itok, subject, "Wrong type", assignment_type="submission", questions=two)
     assert wrong.status_code == 400 and "belong to code challenges" in wrong.json()["detail"]
     plain = _new_assignment(itok, subject, "Plain one").json()
@@ -825,9 +825,9 @@ def test_questions_can_be_edited_and_the_tests_stay_consistent_with_them():
 
     # A question can't be left without tests, and a test can't point at a question that does not exist.
     no_tests = put({"test_cases": _tests_for(1, "a")})
-    assert no_tests.status_code == 400 and "Question 2 needs at least one test case" in no_tests.json()["detail"]
+    assert no_tests.status_code == 400 and "Task 2 needs at least one test case" in no_tests.json()["detail"]
     leftover = put({"questions": [{"title": "Only"}]})  # the tests of question 2 would be left over
-    assert leftover.status_code == 400 and "belongs to question 2" in leftover.json()["detail"]
+    assert leftover.status_code == 400 and "belongs to task 2" in leftover.json()["detail"]
     assert [q["title"] for q in client.get(f"/assignments/{a['id']}", headers=H(itok)).json()["questions"]] == [
         "First", "Second"]  # a refused change leaves everything as it was
 
@@ -846,7 +846,7 @@ def test_the_number_of_questions_is_locked_once_students_have_submitted():
 
     two = {"questions": [{"title": "A"}, {"title": "B"}], "test_cases": _tests_for(1, "a") + _tests_for(2, "b")}
     locked = put(two)
-    assert locked.status_code == 409 and "number of questions" in locked.json()["detail"]
+    assert locked.status_code == 409 and "number of tasks" in locked.json()["detail"]
     # The wording and the tests can still be corrected.
     fixed = put({"questions": [{"title": "Better", "statement": "Clearer."}], "test_cases": _tests_for(1, "fixed")})
     assert fixed.status_code == 200 and fixed.json()["questions"][0]["title"] == "Better"

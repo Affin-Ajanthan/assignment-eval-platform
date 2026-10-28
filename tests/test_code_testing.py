@@ -238,7 +238,7 @@ def test_a_run_with_no_tests_or_no_points_scores_zero_without_dividing_by_zero()
 
 
 # --------------------------------------------------------------------------
-# A challenge with several questions
+# A challenge with several tasks
 # --------------------------------------------------------------------------
 
 QUESTIONS = [{"id": 1, "title": "One", "statement": ""}, {"id": 2, "title": "Two", "statement": ""}]
@@ -298,6 +298,20 @@ def test_each_question_runs_its_own_file_and_its_own_tests(tmp_path, monkeypatch
     assert [(r.test_id, r.question, r.passed) for q in runs for r in q.results] == [(1, 1, True), (2, 1, False), (3, 2, True)]
     score = ct.score_run([r for q in runs for r in q.results])
     assert (score.earned, score.total, score.passed, score.count) == (6, 7, 2, 3)
+
+
+def test_one_question_is_run_on_the_file_it_is_given_with_only_its_own_tests(tmp_path, monkeypatch):
+    (tmp_path / "q2.rb").write_text("puts 'ok'")
+    fake = RecordingRun()
+    monkeypatch.setattr(ct, "run_tests", fake)
+
+    run = ct.run_question(tmp_path, QUESTIONS[1], TESTS, file="q2.rb")
+    assert fake.calls == [(tmp_path.name, "q2.rb", [3])]
+    assert (run.question, run.title, run.answered, run.file, run.language) == (2, "Two", True, "q2.rb", "ruby")
+    assert [(r.test_id, r.question, r.passed) for r in run.results] == [(3, 2, True)]
+
+    ct.run_question(tmp_path, {"id": 1, "title": "", "statement": ""}, [_test(1, "ok")])  # no file given: run_tests picks it
+    assert fake.calls[-1][1:] == ("", [1])
 
 
 def test_a_question_without_code_is_not_run_and_earns_nothing(tmp_path, monkeypatch):

@@ -38,12 +38,6 @@ export default function StudentPage() {
     await load();
   }
 
-  /** Reload quietly, without a notice: a code challenge was just submitted or marked in its own panel. */
-  async function refresh() {
-    setHistoryVersion((v) => v + 1);
-    await load();
-  }
-
   function askDelete(a: StudentAssignment) {
     setConfirm({
       title: "Delete your submission?",
@@ -74,7 +68,6 @@ export default function StudentPage() {
       openForm={openForm}
       setOpenForm={setOpenForm}
       onChanged={changed}
-      onRefresh={refresh}
       askDelete={askDelete}
       notice={notice?.assignmentId === a.id ? notice.state : null}
     />
@@ -88,7 +81,8 @@ export default function StudentPage() {
       <p className="mt-1 text-sm text-gray-600">
         Open an assignment, upload your code, report and presentation video, and submit before the deadline. You can
         edit or delete your submission until the deadline or until it has been graded. A code challenge is the
-        exception: it is marked as soon as you submit, and cannot be changed afterwards.
+        exception: press Do assignment and it opens on its own page, where you see the questions and do the tasks one
+        at a time. Each task is marked as soon as you submit it, and cannot be changed afterwards.
       </p>
 
       {user.subjects.length === 0 && (

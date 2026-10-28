@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { apiFetch, TestResult, TestRun } from "@/lib/api";
+import { taskName } from "@/lib/tasks";
 import Badge from "@/components/Badge";
 import Message, { MessageState } from "@/components/Message";
 
@@ -149,8 +150,7 @@ export default function TestRunPanel({
             run.questions.map((q) => (
               <section key={q.question} className="mt-3" data-testid="test-run-question">
                 <h4 className="text-sm font-semibold">
-                  Question {q.question}
-                  {q.title && `: ${q.title}`}
+                  {taskName({ id: q.question, title: q.title })}
                   <span className="ml-2 text-xs font-normal text-gray-500">
                     {q.answered
                       ? `${q.passed} / ${q.total} tests · ${num(q.earned_points)} / ${num(q.total_points)} points · ran ${q.file} (${q.language})`

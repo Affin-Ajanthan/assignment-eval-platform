@@ -39,8 +39,8 @@ type FormState = {
   ignoreCommon: boolean; // code similarity ignores code most of the class shares
   releaseDate: string; // "" (with releaseTime "") = show each mark as soon as it is saved
   releaseTime: string;
-  questions: QuestionRow[]; // only used by a code challenge: at least one question, each with its test cases
-  testMainFile: string; // the file the tests run (a challenge with one question); "" = picked automatically
+  questions: QuestionRow[]; // only used by a code challenge: at least one task, each with its question and test cases
+  testMainFile: string; // the file the tests run (a challenge with one task); "" = picked automatically
 };
 
 const TYPE_OPTIONS: { value: SubmissionType; label: string; hint: string }[] = [
@@ -60,7 +60,7 @@ const KIND_OPTIONS: { value: AssignmentKind; title: string; text: string }[] = [
   {
     value: "code_challenge",
     title: "Code challenge",
-    text: "HackerRank style: students submit code only, for one question or several. It is run against your test cases, and the marks come from the tests passed.",
+    text: "HackerRank style: students submit code only, for one task or several, each with its own question and test cases. It is run against your test cases, and the marks come from the tests passed.",
   },
 ];
 const kindTitle = (k: AssignmentKind) => KIND_OPTIONS.find((o) => o.value === k)?.title ?? k;
@@ -188,7 +188,7 @@ export default function AssignmentsSection({
     if (releaseSet && !release) {
       return setMsg({ text: "Enter both a date and a time to release the marks, or leave both empty.", kind: "error" });
     }
-    // Questions and test cases belong to code challenges only, and every question needs at least one test case.
+    // Tasks and test cases belong to code challenges only, and every task needs at least one test case.
     const questionsPayload = challenge ? questionRowsPayload(form.questions) : { questions: [], tests: [], error: null };
     if (questionsPayload.error !== null) return setMsg({ text: questionsPayload.error, kind: "error" });
     const body = {
@@ -212,18 +212,27 @@ export default function AssignmentsSection({
       marks_release_at: release ? release.toISOString() : null,
       test_cases: questionsPayload.tests,
       questions: questionsPayload.questions,
-      // Only a challenge with one question runs a named file; with several, each question has its own file.
+      // Only a challenge with one task runs a named file; with several, each task has its own file.
       test_main_file: challenge && form.questions.length === 1 ? form.testMainFile.trim() : "",
     };
     setSaving(true);
     try {
-      if (editingId === null) {
-        await apiFetch("/assignments", { method: "POST", json: { ...body, subject_id: subjectId } });
-        setMsg({ text: "Assignment saved.", kind: "success" });
-      } else {
-        await apiFetch(`/assignments/${editingId}`, { method: "PUT", json: body });
-        setMsg({ text: "Assignment updated.", kind: "success" });
+      const creating = editingId === null;
+      const saved = creating
+        ? await apiFetch<Assignment | null>("/assignments", { method: "POST", json: { ...body, subject_id: subjectId } })
+        : await apiFetch<Assignment | null>(`/assignments/${editingId}`, { method: "PUT", json: body });
+      // A server running an older version of the code saves the assignment but silently drops the tasks it does
+      // not know about: say so, and keep the form as typed (an assignment that now exists is saved over, not twice).
+      if (challenge && !Array.isArray(saved?.questions)) {
+        if (creating && typeof saved?.id === "number") setEditingId(saved.id);
+        setMsg({
+          text: "Saved, but the server did not keep the tasks and their questions: it is running an older version of the code. Restart the backend, then press Save again to store them.",
+          kind: "error",
+        });
+        await onChanged();
+        return;
       }
+      setMsg({ text: creating ? "Assignment saved." : "Assignment updated.", kind: "success" });
       setEditingId(null);
       setForm(EMPTY);
       await onChanged();
@@ -645,7 +654,7 @@ export default function AssignmentsSection({
                   </p>
                   {a.test_cases?.length > 0 && (
                     <p className="text-xs text-gray-600" data-testid="test-cases-summary">
-                      {a.questions?.length > 1 && `Questions: ${a.questions.length} · `}
+                      {a.questions?.length > 1 && `Tasks: ${a.questions.length} · `}
                       Test cases: {a.test_cases.length} ({a.test_cases.filter((t) => t.visible).length} visible) ·{" "}
                       {a.test_cases.reduce((sum, t) => sum + t.points, 0)} points
                     </p>

@@ -92,11 +92,11 @@ export interface Assignment {
   marks_release_at: string | null;
   /** Whether students can see marks and feedback now. */
   marks_released: boolean;
-  /** Test cases for submitted code (instructor view: hidden ones included), every question's together. */
+  /** Test cases for submitted code (instructor view: hidden ones included), every task's together. */
   test_cases: TestCase[];
-  /** The questions of a code challenge, each with the test cases that name it; empty for other assignments. */
+  /** The tasks of a code challenge, each with the test cases that name it; empty for other assignments. */
   questions: CodeQuestion[];
-  /** The file the tests run (a name or path in the submission); "" = picked automatically. Single-question challenges only. */
+  /** The file the tests run (a name or path in the submission); "" = picked automatically. Single-task challenges only. */
   test_main_file: string;
   /** "submission": students upload files; "code_challenge": code only, run against test cases. Fixed at creation. */
   assignment_type: AssignmentKind;
@@ -107,19 +107,23 @@ export type AssignmentKind = "submission" | "code_challenge";
 /** exact: the whole output (ignoring trailing spaces); contains: the expected text appears in it. */
 export type TestMatch = "exact" | "contains";
 
-/** One question of a code challenge: what students are asked to write (a challenge has one or more). */
+/**
+ * One task of a code challenge: a question for students to answer in code, with its own test cases (a challenge
+ * has one or more). The pages say "task"; the API and the database call it a question.
+ */
 export interface CodeQuestion {
   /** 1, 2, ... in the order students see them. */
   id: number;
-  /** Blank for the only question of a challenge made without titles. */
+  /** Blank for the only task of a challenge made without titles. */
   title: string;
+  /** The question text: what the student must write. */
   statement: string;
 }
 
 /** One test for submitted code: `input` goes to standard input, the output is compared with `expected_output`. */
 export interface TestCase {
   id: number;
-  /** The question the test belongs to (1 is the first). */
+  /** The task the test belongs to (1 is the first). */
   question: number;
   name: string;
   input: string;
@@ -146,6 +150,8 @@ export interface MySubmission {
   feedback: string | null;
   /** Open and not graded yet; never true for a code challenge, which is final once submitted. */
   can_edit: boolean;
+  /** A code challenge is handed in one task at a time: how many tasks have been (0 for other assignments). */
+  questions_submitted: number;
 }
 
 /** Student view of an assignment (never includes rubric details). */
@@ -168,7 +174,7 @@ export interface StudentAssignment {
   marks_release_at: string | null;
   /** A code challenge is answered in the code editor instead of by uploading files. */
   assignment_type: AssignmentKind;
-  /** What a code challenge asks, question by question (never any test case); empty for other assignments. */
+  /** What a code challenge asks, task by task (never any test case); empty for other assignments. */
   questions: CodeQuestion[];
   my_submission: MySubmission | null;
 }
@@ -202,28 +208,41 @@ export interface CodeRun {
   failures: CodeRunFailure[];
 }
 
-/** How one question did when a student's code was marked. */
-export interface CodeQuestionResult {
-  /** The question's number, from 1. */
+/** A student's answer to one task of a code challenge, and how it did. */
+export interface CodeAnswer {
+  /** The task's number, from 1. */
   question: number;
   title: string;
-  /** False: the student wrote nothing for it, so none of its test cases passed. */
-  answered: boolean;
-  /** The same report Run gives; null when the question was not answered. */
+  /** False: not handed in (yet), so none of its test cases pass. */
+  submitted: boolean;
+  /** Its test cases ran and the result is saved. False: handed in, to be marked later. */
+  marked: boolean;
+  /** The language and the code that were handed in (a submitted answer only). */
+  language: string | null;
+  code: string | null;
+  /** The same report Run gives; null when the answer is not marked (or was marked before reports were kept). */
   run: CodeRun | null;
+  /** What the answer earned: points of its test cases passed out of all its points. Null before the marks release date, or when not marked. */
+  earned: number | null;
+  total: number | null;
 }
 
 /**
- * What a student gets after pressing Submit on a code challenge (POST /assignments/{id}/submit-code):
- * the code is saved, run against every test case and marked at once, and it cannot be changed afterwards.
+ * What a student has handed in for a code challenge so far, task by task (GET
+ * /assignments/{id}/my-code). Each task is handed in on its own (POST /assignments/{id}/submit-code):
+ * it is run against its test cases and marked at once, and cannot be changed afterwards. Submit and
+ * "Get my marks" (POST /assignments/{id}/mark-my-code) answer with the same thing.
  */
-export interface CodeSubmit {
-  submission_id: number;
-  /** The tests ran and the mark is saved. False: the code is submitted but will be marked later. */
+export interface CodeWork {
+  /** Null until the first task is handed in. */
+  submission_id: number | null;
+  /** At least one answer is marked, so there is a mark. */
   marked: boolean;
-  /** One report per question, in order; empty when the tests could not be run just now. */
-  questions: CodeQuestionResult[];
-  /** The mark: points of the tests passed out of all the points. Null before the marks release date, or when not marked. */
+  /** Every task is handed in. */
+  complete: boolean;
+  /** One per task, in order. */
+  questions: CodeAnswer[];
+  /** The mark so far: points of the test cases passed out of the points of ALL the tasks. Null before the marks release date, or when nothing is marked. */
   earned: number | null;
   total: number | null;
 }
@@ -231,13 +250,13 @@ export interface CodeSubmit {
 /** One test's outcome from POST /submissions/{id}/run-tests (instructor view). */
 export interface TestResult {
   test_id: number;
-  /** The question the test belongs to. */
+  /** The task the test belongs to. */
   question: number;
   name: string;
   visible: boolean;
   points: number;
   match: TestMatch;
-  /** "skipped": the student wrote no code for the test's question. */
+  /** "skipped": the student wrote no code for the test's task. */
   status: "passed" | "failed" | "error" | "timeout" | "skipped";
   passed: boolean;
   expected_output: string;
@@ -245,11 +264,11 @@ export interface TestResult {
   stderr: string;
 }
 
-/** How one question did on a submission (instructor view). */
+/** How one task did on a submission (instructor view). */
 export interface TestRunQuestion {
   question: number;
   title: string;
-  /** False: the student wrote no code for this question, so its tests earn nothing. */
+  /** False: the student wrote no code for this task, so its tests earn nothing. */
   answered: boolean;
   file: string;
   language: string;
@@ -261,7 +280,7 @@ export interface TestRunQuestion {
 
 export interface TestRun {
   submission_id: number;
-  /** The file that was run, relative to the submission's code folder (one per answered question, comma separated). */
+  /** The file that was run, relative to the submission's code folder (one per answered task, comma separated). */
   file: string;
   language: string;
   passed: number;
@@ -270,9 +289,9 @@ export interface TestRun {
   saved: boolean;
   earned_points: number;
   total_points: number;
-  /** Every question's tests, in order. */
+  /** Every task's tests, in order. */
   results: TestResult[];
-  /** The same, question by question. */
+  /** The same, task by task. */
   questions: TestRunQuestion[];
 }
 

@@ -283,16 +283,16 @@ def run_tests(code_dir: Path, tests: list, *, main_file: str = "", only_visible:
     return TestRun(file=relative_file, language=language.id, results=results)
 
 
-# ---- a challenge with several questions ----------------------------------------
+# ---- a challenge with several tasks ----------------------------------------
 
 
 @dataclass
 class QuestionRun:
-    """How one question of a code challenge was run on a submission."""
+    """How one task of a code challenge was run on a submission."""
 
     question: int
     title: str
-    answered: bool  # False: the submission has no code for this question, so none of its tests ran
+    answered: bool  # False: the submission has no code for this task, so none of its tests ran
     file: str  # the file that was run, "" when none was
     language: str  # "" when none was
     results: list  # a TestResult per test of the question ("skipped" ones when it was not answered)
@@ -331,7 +331,17 @@ def _skipped(test: dict, question: int) -> TestResult:
         test_id=test["id"], name=test["name"], visible=bool(test.get("visible")), points=test.get("points", 1),
         match=test.get("match", "exact"), status="skipped", passed=False,
         expected_output=test.get("expected_output", ""), actual_output="",
-        stderr="No code was submitted for this question.", question=question)
+        stderr="No code was submitted for this task.", question=question)
+
+
+def run_question(code_dir: Path, question: dict, tests: list, *, file: str = "") -> QuestionRun:
+    """Run one question's tests (those of `tests` that name it) on `file`, relative to code_dir ("" picks
+    it, as run_tests does). Raises what run_tests raises."""
+    mine = [t for t in tests if t.get("question", 1) == question["id"]]
+    run = run_tests(Path(code_dir), mine, main_file=file)
+    for result in run.results:
+        result.question = question["id"]
+    return QuestionRun(question["id"], question["title"], True, run.file, run.language, run.results)
 
 
 def run_questions(code_dir: Path, questions: list, tests: list, *, main_file: str = "") -> list:
@@ -345,16 +355,13 @@ def run_questions(code_dir: Path, questions: list, tests: list, *, main_file: st
         raise CodeTestError("This submission has no code.")
     runs = []
     for q in questions:
-        mine = [t for t in tests if t.get("question", 1) == q["id"]]
         if len(questions) == 1:
             file = _single_question_file(code_dir, main_file)
         else:
             file = answer_file(code_dir, q["id"])
             if not file:
+                mine = [t for t in tests if t.get("question", 1) == q["id"]]
                 runs.append(QuestionRun(q["id"], q["title"], False, "", "", [_skipped(t, q["id"]) for t in mine]))
                 continue
-        run = run_tests(code_dir, mine, main_file=file)
-        for result in run.results:
-            result.question = q["id"]
-        runs.append(QuestionRun(q["id"], q["title"], True, run.file, run.language, run.results))
+        runs.append(run_question(code_dir, q, tests, file=file))
     return runs

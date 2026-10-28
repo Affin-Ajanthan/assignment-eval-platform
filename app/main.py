@@ -78,6 +78,7 @@ from .evaluator.pipeline import evaluate_submission as _run_pipeline
 from .evaluator.semantic_consistency import get_consistency_service
 from .evaluator.ai_text_detection import get_ai_text_detector, model_name as ai_text_model_name
 from .evaluator.rubric_grading import Criterion as _EvalCriterion, HeuristicRubricGrader
+from . import code_answers as _code_answers
 from .evaluator import code_testing as _code_testing
 from .evaluator.code_execution import SandboxUnavailable, sandbox_enabled as _sandbox_enabled
 from .models import (
@@ -126,6 +127,7 @@ add_missing_columns("submissions", {"assignment_id": "INTEGER REFERENCES assignm
 add_missing_columns("grades", {"feedback": "TEXT"})
 add_missing_columns("assignments", {"marks_release_at": "DATETIME"})
 add_missing_columns("submissions", {"test_earned": "FLOAT", "test_total": "FLOAT", "tests_run_at": "DATETIME"})
+add_missing_columns("submissions", {"question_results": "JSON"})
 add_missing_columns("assignments", {"test_cases": "JSON"})
 add_missing_columns("assignments", {"test_main_file": "VARCHAR"})
 add_missing_columns("assignments", {"code_questions": "JSON"})
@@ -260,11 +262,12 @@ _TEST_TEXT_MAX = 10_000
 
 
 class QuestionIn(BaseModel):
-    """One question of a code challenge: what students are asked to write. Its test cases are
-    the ones whose ``question`` is its number (its place in the list, from 1)."""
+    """One task of a code challenge: the question students are asked to answer in code. Its test cases are
+    the ones whose ``question`` is its number (its place in the list, from 1). The pages call it a task;
+    the API and the database call it a question."""
 
-    title: str = Field(default="", max_length=200)  # blank: "Question 1", "Question 2", ... (when there are several)
-    statement: str = Field(default="", max_length=_STATEMENT_MAX)  # the problem, shown above the code box
+    title: str = Field(default="", max_length=200)  # blank: "Task 1", "Task 2", ... (when there are several)
+    statement: str = Field(default="", max_length=_STATEMENT_MAX)  # the question text, shown above the code box
 
 
 class QuestionOut(QuestionIn):
@@ -325,11 +328,12 @@ class AssignmentIn(BaseModel):
     marks_release_at: Optional[datetime] = None
     # Optional test cases for submitted code; needs "code" in submission_types.
     test_cases: list[TestCaseIn] = Field(default_factory=list, max_length=_TEST_CASES_MAX)
-    # The questions of a code challenge, each with its own test cases (a test's ``question`` is the
-    # place of its question here, from 1). Left out: one question, which all the test cases belong to.
+    # The tasks of a code challenge (called questions here), each with its own question text and test
+    # cases (a test's ``question`` is the place of its task in this list, from 1). Left out: one task,
+    # which all the test cases belong to.
     questions: list[QuestionIn] = Field(default_factory=list, max_length=_QUESTIONS_MAX)
     # The file the tests run (a name or a path in the submission); blank picks it automatically.
-    # Only used by a challenge with a single question.
+    # Only used by a challenge with a single task.
     test_main_file: str = Field(default="", max_length=200)
 
 
@@ -349,8 +353,8 @@ class AssignmentUpdate(BaseModel):
     marks_release_at: Optional[datetime] = None  # send null explicitly to release marks now
     # Replaces the whole list ([] removes every test); leave out to keep them.
     test_cases: Optional[list[TestCaseIn]] = Field(default=None, max_length=_TEST_CASES_MAX)
-    # Replaces the whole list of questions; leave out to keep them. Their number can't change once
-    # students have submitted (their code is saved per question).
+    # Replaces the whole list of tasks; leave out to keep them. Their number can't change once
+    # students have submitted (their code is saved per task).
     questions: Optional[list[QuestionIn]] = Field(default=None, max_length=_QUESTIONS_MAX)
     test_main_file: Optional[str] = Field(default=None, max_length=200)  # "" picks it automatically
 
@@ -389,7 +393,7 @@ class AssignmentOut(BaseModel):
     marks_released: bool = True  # whether students can see marks and feedback now
     # Every test case, hidden ones included: this is the instructor view only.
     test_cases: list[TestCaseOut] = []
-    questions: list[QuestionOut] = []  # a code challenge's questions; empty for other assignments
+    questions: list[QuestionOut] = []  # a code challenge's tasks; empty for other assignments
     test_main_file: str = ""
 
 
@@ -416,6 +420,8 @@ class MySubmissionOut(BaseModel):
     criterion_marks: list[CriterionMarkOut] = []
     feedback: Optional[str] = None
     can_edit: bool  # assignment open, not yet graded, and not a code challenge (those are final once submitted)
+    # A code challenge is handed in one task at a time: how many tasks have been (0 for other assignments).
+    questions_submitted: int = 0
 
 
 class StudentAssignmentOut(BaseModel):
@@ -435,7 +441,7 @@ class StudentAssignmentOut(BaseModel):
     student_ai_check: bool = True
     # Set only while marks are still held back: when they will be released.
     marks_release_at: Optional[UTCDateTime] = None
-    # What a code challenge asks, question by question (title and statement only). No test case is
+    # What a code challenge asks, task by task (title and question text only). No test case is
     # ever part of this: a student meets the tests only through the result of "Run"
     # (POST /assignments/{id}/run-code), where a visible test that fails shows its expected and
     # actual output and everything else is only counted.
@@ -1339,17 +1345,17 @@ def _assignment_kind(payload: AssignmentIn) -> str:
         if not payload.test_cases:
             raise HTTPException(400, "A code challenge needs at least one test case.")
     elif payload.test_cases or payload.questions:
-        raise HTTPException(400, "Test cases and questions belong to code challenges: choose the code challenge type.")
+        raise HTTPException(400, "Test cases and tasks belong to code challenges: choose the code challenge type.")
     return kind
 
 
 def _clean_questions(questions: list[QuestionIn]) -> Optional[list[dict]]:
-    """Number the questions 1, 2, ... and title blank ones "Question N" (a lone question keeps a
-    blank title, as a challenge made without questions has). None when there are no questions."""
+    """Number the tasks 1, 2, ... and title blank ones "Task N" (a lone task keeps a blank title, as a
+    challenge made without tasks has). None when there are no tasks."""
     if not questions:
         return None
     return [
-        {"id": n, "title": q.title.strip() or (f"Question {n}" if len(questions) > 1 else ""),
+        {"id": n, "title": q.title.strip() or (f"Task {n}" if len(questions) > 1 else ""),
          "statement": q.statement.strip()}
         for n, q in enumerate(questions, start=1)
     ]
@@ -1367,15 +1373,15 @@ def _number_tests(tests: list[TestCaseIn]) -> list[dict]:
 
 
 def _check_question_tests(tests: list[dict], question_count: int) -> None:
-    """Every test belongs to a question that exists, and every question has a test."""
+    """Every test belongs to a task that exists, and every task has a test."""
     for t in tests:
         if t.get("question", 1) > question_count:
             raise HTTPException(
-                400, f"The test case '{t['name']}' belongs to question {t['question']}, but this assignment "
-                     f"has only {question_count} question{'' if question_count == 1 else 's'}.")
+                400, f"The test case '{t['name']}' belongs to task {t['question']}, but this assignment "
+                     f"has only {question_count} task{'' if question_count == 1 else 's'}.")
     for q in range(1, question_count + 1):
         if not any(t.get("question", 1) == q for t in tests):
-            raise HTTPException(400, f"Question {q} needs at least one test case.")
+            raise HTTPException(400, f"Task {q} needs at least one test case.")
 
 
 def _clean_test_cases(tests: list[TestCaseIn], accepted_types: list[str], question_count: int = 1) -> Optional[list[dict]]:
@@ -1399,10 +1405,10 @@ def _update_questions_and_tests(db: Session, assignment: Assignment, payload: As
     questions = _clean_questions(payload.questions) if payload.questions is not None else assignment.code_questions
     count = len(questions or [1])
     if count != len(assignment.questions):
-        # A submission keeps one file per question, so the questions can't be added or removed afterwards.
+        # A submission keeps one file per task, so tasks can't be added or removed afterwards.
         if db.query(Submission.id).filter(Submission.assignment_id == assignment.id).first():
             raise HTTPException(
-                409, "The number of questions can't be changed after students have submitted to this assignment.")
+                409, "The number of tasks can't be changed after students have submitted to this assignment.")
     if payload.test_cases is not None:
         tests = _clean_test_cases(payload.test_cases, assignment.accepted_types(), count)
     else:
@@ -1457,6 +1463,8 @@ def _my_submission_out(submission: Submission, assignment_open: bool, now: datet
         id=submission.id, submitted_at=_as_utc(submission.submitted_at),
         has_code=bool(submission.code_path), has_report=bool(submission.report_path),
         has_video=bool(submission.video_path), can_edit=can_edit,
+        questions_submitted=_code_answers.answer_count(submission.assignment, submission)
+        if _is_code_challenge(submission) else 0,
     )
     if not _marks_released(submission, now):
         return MySubmissionOut(**common, status="submitted", final_mark=None, max_mark=None)
@@ -1633,7 +1641,7 @@ def update_assignment(
         if assignment.kind == "code_challenge":
             _update_questions_and_tests(db, assignment, payload)
         elif payload.test_cases or payload.questions:
-            raise HTTPException(400, "Test cases and questions belong to code challenges: choose the code challenge type.")
+            raise HTTPException(400, "Test cases and tasks belong to code challenges: choose the code challenge type.")
     if payload.code_languages is not None:
         languages = _langs.normalise_languages(payload.code_languages)
         if languages != (assignment.code_languages or None):
@@ -1927,9 +1935,9 @@ def create_submission(
     assignment = _resolve_assignment_for_submission(db, subject_id, assignment_id, assignment_name)
     _require_open(assignment)
     if len(assignment.questions) > 1:
-        # Each question is answered by its own file, which only the code editor on the assignment page makes.
+        # Each task is answered by its own file, which only the challenge's own code page makes.
         raise HTTPException(
-            400, "This code challenge has several questions: answer them in the code editor on the assignment page.")
+            400, "This code challenge has several tasks: answer them on its code page, one at a time.")
     code, report, video = (f if f is not None and f.filename else None for f in (code, report, video))
     if not (code or report or video):
         raise HTTPException(400, f"Upload at least one file: {_accepted_label(assignment)}.")
@@ -2979,16 +2987,16 @@ class TestResultOut(BaseModel):
     visible: bool
     points: float
     match: str
-    status: str  # passed | failed | error | timeout | skipped (no code was submitted for its question)
+    status: str  # passed | failed | error | timeout | skipped (no code was submitted for its task)
     passed: bool
     expected_output: str
     actual_output: str
     stderr: str = ""
-    question: int = 1  # the question the test belongs to
+    question: int = 1  # the task the test belongs to
 
 
 class TestRunQuestionOut(BaseModel):
-    """How one question of a code challenge did on a submission."""
+    """How one task of a code challenge did on a submission."""
 
     question: int
     title: str
@@ -3079,9 +3087,8 @@ def mark_submission_from_tests(
     replaces the mark. The student sees it like any other mark, once the
     assignment's marks are released."""
     submission, runs, score = _run_tests_for(db, instructor, submission_id, challenge_only=True)
-    submission.test_earned, submission.test_total = score.earned, score.total
-    submission.tests_run_at = _utcnow_naive()
-    submission.status = "graded"
+    # Every answered question's result is replaced, so what the student sees per question follows the mark.
+    _code_answers.record_runs(submission.assignment, submission, runs, now=_utcnow_naive())
     db.commit()
     return _test_run_out(submission, runs, score, saved=True)
 
