@@ -254,37 +254,63 @@ file in the submission is used, or one named `main`, `app`, `run`, `program` or
 to a normal assignment, but a challenge cannot run them yet.
 
 **Students** answer in a code editor on the assignment card instead of
-uploading a file (the typed code is saved as `main.py` / `main.rb`, through the
-same `/submissions` endpoints). The editor has three buttons:
+uploading a file (the typed code is saved as `main.py` / `main.rb`). The editor
+has three buttons:
 
 - **Run** (`POST /assignments/{id}/run-code`) runs the typed code against **every
-  test case, hidden ones included**, and tells the student only this: if all
-  passed, that all test cases passed; otherwise how many passed, and for each
-  **visible** test that failed just its **expected output and actual output**
-  (plus the error message if the program crashed or ran out of time). A failing
-  **hidden** test is only counted ("2 hidden test cases did not pass"). Run is
-  practice: no submission is made and no mark changes, and the result is dropped
-  as soon as the code is edited.
-- **Submit** hands the code in (a new submission, or an update of the existing
-  one while the assignment is open and not yet marked).
-- **Cancel** closes the editor.
+  test case, hidden ones included**, and always tells the student how many
+  passed out of the total ("3 of 3 test cases passed: all passed", or "2 of 5
+  test cases passed"). For each **visible** test that failed it adds just its
+  **expected output and actual output** (plus the error message if the program
+  crashed or ran out of time). A failing **hidden** test is only counted ("2
+  hidden test cases did not pass"). Run is practice: no submission is made and
+  no mark changes, and the result is dropped as soon as the code is edited (or
+  the editor is closed).
+- **Submit** (`POST /assignments/{id}/submit-code`) hands the code in, after a
+  "Submit your code?" confirmation, because it is **final**. The server saves the
+  code as the student's submission, runs it against every test case, **saves the
+  points of the tests passed as the mark** (the instructor sets the points on
+  each test case; 8 of 10 tests worth 2 points each is 16 of 20), and the page
+  shows the result at once: "Submitted", "X of Y test cases passed" (with the
+  same expected-vs-actual for failing visible tests) and the mark. The box
+  locks and the only button left is **Close**. If the instructor set a **marks
+  release date**, the student still sees the test results, but the mark itself
+  waits for that date.
+- **Cancel** closes the editor without submitting anything.
 
-Before a student has submitted, the assignment shows **no** sample input or
-expected output (the server sends none; the instructor's description is what
-students read up front); the visible tests appear on the assignment, above the
-editor when they edit, once they have submitted. Limits, since every run
+**A submitted code challenge cannot be changed.** There is no Edit or Delete for
+it: `PUT` and `DELETE /submissions/{id}` are refused (409) for a challenge, and
+`can_edit` is always false. A second Submit is refused too. Submit uses **none of
+the student's hourly runs** (so a student who practised with every run can still
+submit), and when the server is busy it **waits for a free place** (up to 2
+minutes) rather than being refused. If the tests cannot be run at all (the
+sandbox is off or down, the server stayed busy, an error) the code is **still
+submitted**, without a mark: the student is told that the instructor will mark
+it, and the instructor presses **Run and save as mark** later. The same lock
+applies to a challenge handed in as a plain file upload through `POST
+/submissions` (which does not mark it).
+
+**The student portal never lists the test cases.** The assignment card shows
+no sample input or expected output, before or after submitting (the server does
+not send them; the instructor's description is what students read up front).
+The only way a student sees a visible test's expected output is the result of a
+Run in which that test fails. Limits on Run, since every run
 starts a Docker container per test case: one run at a time per student,
 `CODE_SAMPLE_RUNS_PER_HOUR` (10) per student, and `CODE_SAMPLE_MAX_PARALLEL` (2)
-at once on the server. The counts are in memory and start again when the
+at once on the server (a Submit's marking run counts towards that cap and goes
+before new practice runs). The counts are in memory and start again when the
 backend restarts.
 
-**Hidden tests never leave the server.** Students receive the visible tests
-(after submitting, or when one fails in a run), and only how *many* hidden
-tests there are or failed; a run returns no test ids, points or inputs that
-could hint at them, and a hidden test's error output is never shown. The
+**Hidden tests never leave the server.** Students receive a visible test's
+expected and actual output only when it fails in a Run, and only how *many*
+hidden tests failed; a run returns no test ids, points or inputs that could
+hint at them, and a hidden test's error output is never shown. The
 instructor's view shows every test.
 
-**Instructors** open **Tests** on a submission:
+**Instructors**: a student's code is already marked when they press Submit (see
+above), so nothing has to be done for a normal submission. Open **Tests** on a
+submission to look at every result, or to mark again (for example after fixing a
+test case, or for a submission that was left unmarked):
 
 - `POST /submissions/{id}/run-tests` runs every test and returns each result
   (expected vs actual output, error output, status `passed` / `failed` /
@@ -292,9 +318,11 @@ instructor's view shows every test.
 - `POST /submissions/{id}/mark-from-tests` does the same and **saves the points
   of the tests passed as the mark** (e.g. 12 of 16; 8 of 10 tests worth 2
   points each is 16 of 20) and sets the submission to graded. Running it again
-  replaces the mark. The student sees it like any mark, including the
-  assignment's marks release date; there is no per-criterion breakdown. It is
-  stored on the submission (`test_earned`, `test_total`, `tests_run_at`).
+  replaces the mark (this is also what Submit does for the student). The student
+  sees it like any mark, including the assignment's marks release date; there is
+  no per-criterion breakdown. It is stored on the submission (`test_earned`,
+  `test_total`, `tests_run_at`). Changing the points of a test case later does
+  not change marks already saved: mark again to apply it.
 
 **The sandbox.** Running student code is **off by default**: set
 `CODE_SANDBOX=docker` in `.env`, start Docker Desktop (Docker is needed only on
@@ -649,10 +677,14 @@ rejection), covering the same flow the automated backend tests cover.
 - Code challenges run **Python and Ruby only**; each test starts its own
   Docker container (about 1-3 seconds), so a long test list takes a while;
   `exact` matching is strict about inner spaces and wording; and the mark
-  measures only what the tests check, not code quality, style or a report. Each
-  mark is saved one submission at a time ("Mark all" for a class is not built).
-  The Run limits reset when the backend restarts. The editor is a plain code
-  box, without syntax colouring.
+  measures only what the tests check, not code quality, style or a report. A
+  student's mark is saved when they submit; marking again after a test case
+  changes is done one submission at a time ("Mark all" for a class is not
+  built). A submitted challenge is final, and an instructor cannot reopen it
+  for a student (not built). Marking a Submit waits at most 2 minutes for a free
+  place when many students submit at once; after that the code is kept
+  unmarked. The Run limits reset when the backend restarts. The editor is a
+  plain code box, without syntax colouring.
 - `HeuristicRubricGrader` and the AI-content heuristics are keyword/style
   signals, not semantic understanding or validated classifiers. Treat
   every score and flag as a starting point for human review.

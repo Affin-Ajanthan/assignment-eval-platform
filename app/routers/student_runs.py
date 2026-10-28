@@ -1,31 +1,47 @@
-"""Students run their typed code against ALL of a code challenge's test cases.
+"""Students run their typed code against ALL of a code challenge's test cases, and submit it.
 
 POST /assignments/{id}/run-code takes the code the student has typed (it is not
 a submission yet), runs it in the Docker sandbox against every test case of the
 challenge, visible and hidden, and tells the student only what they may know:
 
-- every test passed: ``all_passed`` and the counts;
+- how many test cases passed out of the total;
 - a VISIBLE test failed: that test's expected output and actual output (plus the
   error message when the program crashed or ran out of time);
 - a HIDDEN test failed: only how many did. Hidden tests' names, inputs and
   expected outputs never leave the server.
 
-It is practice: it never creates a submission or changes a mark. Every rule
-below is enforced here, whatever the page shows.
+It is practice: it never creates a submission or changes a mark.
 
-Each run starts Docker containers (one per test), so runs are limited: one at a
-time per student, a number per hour per student, and a cap on runs at once
-across the server.
+POST /assignments/{id}/submit-code hands the code in, and it is final. The code
+is saved as the student's submission, run against every test case (the same run
+and the same report as above), and the points of the tests passed are saved as
+the mark. A code challenge cannot be edited or deleted afterwards (app/main.py
+refuses PUT and DELETE /submissions/{id} for it). Submitting uses none of the
+student's hourly runs, and when the server is busy it waits for a free place
+instead of being refused. If the tests cannot be run at all (sandbox off or
+down, an error) the code is still submitted, unmarked, and the instructor can
+mark it later with "Run and save as mark".
+
+Every rule below is enforced here, whatever the page shows.
+
+Each run starts Docker containers (one per test), so practice runs are limited:
+one at a time per student, a number per hour per student, and a cap on runs at
+once across the server. A submission's marking run counts towards that cap too,
+and goes before new practice runs.
 """
 
 from __future__ import annotations
 
+import logging
 import math
 import os
+import shutil
 import tempfile
 import threading
 import time
+import uuid
 from collections import deque
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable, Literal, Optional
 
@@ -35,16 +51,19 @@ from sqlalchemy.orm import Session
 
 from ..auth import require_student, student_subject_ids
 from ..common import utcnow_naive
-from ..db import get_db
+from ..db import BASE_DIR, UPLOAD_DIR, get_db
 from ..evaluator import code_testing
 from ..evaluator.code_execution import SandboxUnavailable, sandbox_enabled
-from ..models import Assignment, User
+from ..models import Assignment, Submission, User
 
 router = APIRouter()
+log = logging.getLogger(__name__)
 
 RUNS_PER_HOUR = int(os.environ.get("CODE_SAMPLE_RUNS_PER_HOUR", "10"))
 MAX_PARALLEL_RUNS = int(os.environ.get("CODE_SAMPLE_MAX_PARALLEL", "2"))
 MAX_CODE_CHARS = 50_000
+# How long a submission waits for a free place to be marked before it is left unmarked.
+SUBMIT_WAIT_SECONDS = 120
 _HOUR = 3600
 
 
@@ -58,14 +77,21 @@ class RunLimitError(Exception):
 
 class RunLimiter:
     """Keeps runs from overloading the server. In memory, so the counts start
-    again when the server restarts (the limits are about load, not marks)."""
+    again when the server restarts (the limits are about load, not marks).
+
+    A practice run is refused when a limit is reached. A submission's marking
+    run (`marking`) is not: it uses none of the student's hourly runs and waits
+    for a free place, because it happens once and the student cannot redo it."""
 
     def __init__(self, per_hour: int = RUNS_PER_HOUR, max_parallel: int = MAX_PARALLEL_RUNS,
-                 clock: Callable[[], float] = time.monotonic):
+                 clock: Callable[[], float] = time.monotonic, marking_wait: float = SUBMIT_WAIT_SECONDS):
         self.per_hour, self.max_parallel, self._clock = per_hour, max_parallel, clock
-        self._lock = threading.Lock()
+        self.marking_wait = marking_wait
+        self._lock = threading.Condition()  # a lock that can also wake the submissions waiting for a place
         self._starts: dict[int, deque] = {}  # student id -> start times within the last hour
-        self._active: set[int] = set()  # students with a run going
+        self._active: set[int] = set()  # students with a practice run going
+        self._marking = 0  # submissions being marked now
+        self._waiting = 0  # submissions waiting for a place: they go before new practice runs
 
     def _recent(self, student_id: int) -> deque:
         starts = self._starts.setdefault(student_id, deque())
@@ -85,7 +111,7 @@ class RunLimiter:
                 minutes = max(1, math.ceil((_HOUR - (self._clock() - starts[0])) / 60))
                 raise RunLimitError(
                     429, f"You can run your code {self.per_hour} times per hour. Try again in {minutes} minute(s).")
-            if len(self._active) >= self.max_parallel:
+            if len(self._active) + self._marking + self._waiting >= self.max_parallel:
                 raise RunLimitError(503, "The server is busy running other students' code. Try again in a moment.")
             starts.append(self._clock())
             self._active.add(student_id)
@@ -94,6 +120,30 @@ class RunLimiter:
     def finish(self, student_id: int) -> None:
         with self._lock:
             self._active.discard(student_id)
+            self._lock.notify_all()
+
+    @contextmanager
+    def marking(self):
+        """A place for a submission's marking run. Waits up to `marking_wait`
+        seconds for one and raises RunLimitError if none frees up. Uses none of
+        the student's hourly runs, and the one-run-at-a-time rule per student
+        does not apply to it (the server-wide cap does)."""
+        with self._lock:
+            self._waiting += 1
+            try:
+                got_place = self._lock.wait_for(
+                    lambda: len(self._active) + self._marking < self.max_parallel, timeout=self.marking_wait)
+            finally:
+                self._waiting = max(0, self._waiting - 1)
+            if not got_place:
+                raise RunLimitError(503, "The server is busy running other students' code. Try again in a moment.")
+            self._marking += 1
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._marking = max(0, self._marking - 1)
+                self._lock.notify_all()
 
     def remaining(self, student_id: int) -> int:
         with self._lock:
@@ -103,6 +153,8 @@ class RunLimiter:
         with self._lock:
             self._starts.clear()
             self._active.clear()
+            self._marking = self._waiting = 0
+            self._lock.notify_all()
 
 
 limiter = RunLimiter()
@@ -166,24 +218,45 @@ def _report(results: list, language: str, runs_left: int) -> RunOut:
                   hidden_failed=hidden_failed, remaining_runs=runs_left, failures=failures)
 
 
-@router.post("/assignments/{assignment_id}/run-code", response_model=RunOut)
-def run_code(
-    assignment_id: int, payload: RunIn,
-    student: User = Depends(require_student), db: Session = Depends(get_db),
-):
-    """Run the typed code against every test case of the assignment."""
+class SubmitOut(BaseModel):
+    """What a student gets back from handing code in: the same report Run gives, and the mark."""
+
+    submission_id: int
+    marked: bool  # the tests ran and the mark is saved; False: submitted, to be marked later
+    run: Optional[RunOut] = None  # None when the tests could not be run now
+    # The mark: the points of the tests passed out of all the points. None before
+    # the assignment's marks release date, and when the code was not marked.
+    earned: Optional[float] = None
+    total: Optional[float] = None
+
+
+def _challenge_for(db: Session, student: User, assignment_id: int, what: str) -> Assignment:
+    """The open code challenge this student may run or submit code to, or the HTTP error saying why not."""
     assignment = db.get(Assignment, assignment_id)
     now = utcnow_naive()
     if (not assignment or assignment.subject_id not in student_subject_ids(db, student)
             or assignment.status_at(now) == "upcoming"):
         raise HTTPException(404, "Assignment not found")
     if assignment.kind != "code_challenge":
-        raise HTTPException(400, "Running code is only for code challenges.")
+        raise HTTPException(400, f"{what} is only for code challenges.")
     if assignment.status_at(now) != "open":
         raise HTTPException(400, "This assignment is closed.")
-    tests = assignment.test_cases or []
-    if not tests:
+    if not assignment.test_cases:
         raise HTTPException(400, "This assignment has no test cases to run.")
+    return assignment
+
+
+def _main_filename(language: str) -> str:
+    return f"main{code_testing.LANGUAGES[language].extensions[0]}"
+
+
+@router.post("/assignments/{assignment_id}/run-code", response_model=RunOut)
+def run_code(
+    assignment_id: int, payload: RunIn,
+    student: User = Depends(require_student), db: Session = Depends(get_db),
+):
+    """Run the typed code against every test case of the assignment."""
+    assignment = _challenge_for(db, student, assignment_id, "Running code")
     language = _pick_language(payload.language, assignment)
     if not sandbox_enabled():
         raise HTTPException(503, "Running code is not available right now.")
@@ -193,10 +266,10 @@ def run_code(
     except RunLimitError as exc:
         raise HTTPException(exc.status, exc.detail)
     try:
-        filename = f"main{code_testing.LANGUAGES[language].extensions[0]}"
+        filename = _main_filename(language)
         with tempfile.TemporaryDirectory(prefix="student-run-") as folder:
             (Path(folder) / filename).write_bytes(payload.code.replace("\r\n", "\n").encode("utf-8"))
-            run = code_testing.run_tests(Path(folder), tests, main_file=filename)
+            run = code_testing.run_tests(Path(folder), assignment.test_cases, main_file=filename)
     except code_testing.CodeTestError as exc:
         raise HTTPException(400, str(exc))
     except SandboxUnavailable:
@@ -205,3 +278,72 @@ def run_code(
         limiter.finish(student.id)
 
     return _report(run.results, language, left)
+
+
+def _save_submission(db: Session, student: User, assignment: Assignment, filename: str, code: str) -> Submission:
+    """Save the typed code as the student's submission, laid out like an upload: uploads/<id>/code/<file>."""
+    folder = UPLOAD_DIR / uuid.uuid4().hex[:8] / "code"
+    folder.mkdir(parents=True)
+    try:
+        (folder / filename).write_bytes(code.encode("utf-8"))
+        submission = Submission(
+            student_id=student.id, subject_id=assignment.subject_id, assignment_name=assignment.name,
+            assignment_id=assignment.id, code_path=str(folder.relative_to(BASE_DIR)))
+        db.add(submission)
+        db.commit()
+    except Exception:
+        db.rollback()
+        shutil.rmtree(folder.parent, ignore_errors=True)
+        raise
+    db.refresh(submission)
+    return submission
+
+
+def _mark(db: Session, student: User, assignment: Assignment, submission: Submission, language: str,
+          filename: str) -> SubmitOut:
+    """Run every test case on the saved code and save the points of the tests passed as the mark.
+    When the tests cannot be run now the code stays submitted, without a mark: the instructor
+    can mark it later. Never raises, because the submission is already saved."""
+    unmarked = SubmitOut(submission_id=submission.id, marked=False)
+    if not sandbox_enabled():
+        log.warning("Submission %s was saved without a mark: the code sandbox is off", submission.id)
+        return unmarked
+    try:
+        with limiter.marking():
+            run = code_testing.run_tests(BASE_DIR / submission.code_path, assignment.test_cases, main_file=filename)
+        score = code_testing.score_run(run.results)
+        submission.test_earned, submission.test_total = score.earned, score.total
+        submission.tests_run_at = utcnow_naive()
+        submission.status = "graded"
+        db.commit()
+    except (RunLimitError, SandboxUnavailable, code_testing.CodeTestError) as exc:
+        log.warning("Submission %s was saved without a mark: %s", submission.id, exc)
+        return unmarked
+    except Exception:
+        db.rollback()
+        log.exception("Submission %s was saved without a mark: the tests failed unexpectedly", submission.id)
+        return unmarked
+
+    released = assignment.marks_released_at(utcnow_naive())
+    return SubmitOut(
+        submission_id=submission.id, marked=True, run=_report(run.results, language, limiter.remaining(student.id)),
+        earned=score.earned if released else None, total=score.total if released else None)
+
+
+@router.post("/assignments/{assignment_id}/submit-code", response_model=SubmitOut)
+def submit_code(
+    assignment_id: int, payload: RunIn,
+    student: User = Depends(require_student), db: Session = Depends(get_db),
+):
+    """Hand in the typed code. It is final: the code is saved as the student's
+    submission, run against every test case, and the points of the tests passed
+    are saved as the mark. It uses none of the student's hourly runs."""
+    assignment = _challenge_for(db, student, assignment_id, "Submitting code")
+    language = _pick_language(payload.language, assignment)
+    already = db.query(Submission.id).filter(
+        Submission.assignment_id == assignment.id, Submission.student_id == student.id).first()
+    if already:
+        raise HTTPException(409, "You have already submitted this code challenge. A submission can't be changed.")
+    filename = _main_filename(language)
+    submission = _save_submission(db, student, assignment, filename, payload.code.replace("\r\n", "\n"))
+    return _mark(db, student, assignment, submission, language, filename)

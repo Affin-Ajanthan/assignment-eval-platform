@@ -131,6 +131,7 @@ export interface MySubmission {
   criterion_marks: { name: string; score: number; max_points: number }[];
   /** The instructor's feedback for the student (never the internal comments). */
   feedback: string | null;
+  /** Open and not graded yet; never true for a code challenge, which is final once submitted. */
   can_edit: boolean;
 }
 
@@ -152,9 +153,6 @@ export interface StudentAssignment {
   student_ai_check: boolean;
   /** Set only while marks are held back: when they will be released. */
   marks_release_at: string | null;
-  /** The visible tests, as examples, once the student has submitted (empty before); hidden tests are never sent, only counted. */
-  sample_tests: SampleTest[];
-  hidden_test_count: number;
   /** A code challenge is answered in the code editor instead of by uploading files. */
   assignment_type: AssignmentKind;
   my_submission: MySubmission | null;
@@ -189,13 +187,19 @@ export interface CodeRun {
   failures: CodeRunFailure[];
 }
 
-/** A visible test as a student sees it. */
-export interface SampleTest {
-  name: string;
-  input: string;
-  expected_output: string;
-  match: TestMatch;
-  points: number;
+/**
+ * What a student gets after pressing Submit on a code challenge (POST /assignments/{id}/submit-code):
+ * the code is saved, run against every test case and marked at once, and it cannot be changed afterwards.
+ */
+export interface CodeSubmit {
+  submission_id: number;
+  /** The tests ran and the mark is saved. False: the code is submitted but will be marked later. */
+  marked: boolean;
+  /** The same report Run gives; null when the tests could not be run just now. */
+  run: CodeRun | null;
+  /** The mark: points of the tests passed out of all the points. Null before the marks release date, or when not marked. */
+  earned: number | null;
+  total: number | null;
 }
 
 /** One test's outcome from POST /submissions/{id}/run-tests (instructor view). */

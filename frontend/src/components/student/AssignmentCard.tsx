@@ -7,7 +7,6 @@ import Message, { MessageState } from "@/components/Message";
 import SelfCheckPanel from "@/components/student/SelfCheckPanel";
 import UploadForm from "@/components/student/UploadForm";
 import CodeEditorForm, { editorLanguages } from "@/components/student/CodeEditorForm";
-import SampleTests from "@/components/student/SampleTests";
 import { OpenForm, TYPE_LABEL } from "@/components/student/labels";
 import { languageNames } from "@/lib/codeLanguages";
 
@@ -61,9 +60,6 @@ export default function AssignmentCard({
         </div>
       )}
 
-      {/* The samples are shown only after the student has submitted (the server sends none before).
-          While the code editor is open it shows them itself, right above the code box. */}
-      {sub && !(formMode && useEditor) && <SampleTests samples={a.sample_tests} hiddenCount={a.hidden_test_count} />}
 
       <dl className="mt-3 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[max-content_1fr]">
         <dt className="font-semibold">Available from</dt>

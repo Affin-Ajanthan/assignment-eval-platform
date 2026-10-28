@@ -390,17 +390,7 @@ class MySubmissionOut(BaseModel):
     # Empty when graded with "Final mark only" (no per-criterion marks) or not graded.
     criterion_marks: list[CriterionMarkOut] = []
     feedback: Optional[str] = None
-    can_edit: bool  # assignment open and not yet graded
-
-
-class SampleTestOut(BaseModel):
-    """A visible test as a student sees it."""
-
-    name: str
-    input: str
-    expected_output: str
-    match: str
-    points: float
+    can_edit: bool  # assignment open, not yet graded, and not a code challenge (those are final once submitted)
 
 
 class StudentAssignmentOut(BaseModel):
@@ -420,10 +410,9 @@ class StudentAssignmentOut(BaseModel):
     student_ai_check: bool = True
     # Set only while marks are still held back: when they will be released.
     marks_release_at: Optional[UTCDateTime] = None
-    # The tests marked visible, as examples for the student, but only once they have
-    # submitted (empty before); hidden tests are never sent, only how many there are.
-    sample_tests: list[SampleTestOut] = []
-    hidden_test_count: int = 0
+    # No test case is ever part of this: a student meets the tests only through the result of
+    # "Run" (POST /assignments/{id}/run-code), where a visible test that fails shows its
+    # expected and actual output and everything else is only counted.
     my_submission: Optional[MySubmissionOut]
 
 
@@ -1374,8 +1363,14 @@ def _marks_released(submission: Submission, now: datetime) -> bool:
     return submission.assignment is None or submission.assignment.marks_released_at(now)
 
 
+def _is_code_challenge(submission: Submission) -> bool:
+    return submission.assignment is not None and submission.assignment.kind == "code_challenge"
+
+
 def _my_submission_out(submission: Submission, assignment_open: bool, now: datetime) -> MySubmissionOut:
-    can_edit = assignment_open and submission.status != "graded"
+    # A code challenge is final once it is handed in (it is marked from its tests at once);
+    # other work can be changed until the deadline or until it is graded.
+    can_edit = assignment_open and submission.status != "graded" and not _is_code_challenge(submission)
     common = dict(
         id=submission.id, submitted_at=_as_utc(submission.submitted_at),
         has_code=bool(submission.code_path), has_report=bool(submission.report_path),
@@ -1418,12 +1413,6 @@ def _student_assignment_out(db: Session, student: User, a: Assignment, now: date
         student_similarity_check=_on(a.student_similarity_check),
         student_ai_check=_on(a.student_ai_check),
         marks_release_at=None if a.marks_released_at(now) else _as_utc(a.marks_release_at),
-        # The samples (a visible test's input and expected output) are sent only once the
-        # student has submitted. Before that they meet the visible tests by running their
-        # code ("Run"), where a failing visible test shows its expected and actual output.
-        sample_tests=[SampleTestOut(**{k: t[k] for k in SampleTestOut.model_fields})
-                      for t in a.test_cases or [] if t.get("visible") and mine is not None],
-        hidden_test_count=sum(1 for t in a.test_cases or [] if not t.get("visible")),
         my_submission=_my_submission_out(mine, status == "open", now) if mine else None,
     )
 
@@ -1927,6 +1916,8 @@ def _own_changeable_submission(db: Session, student: User, submission_id: int) -
         raise HTTPException(404, "Submission not found")  # never confirm other students' submissions exist
     if submission.assignment is None:
         raise HTTPException(409, "This submission isn't linked to an open assignment, so it can't be changed.")
+    if submission.assignment.kind == "code_challenge":
+        raise HTTPException(409, "A code challenge can't be changed or withdrawn once it is submitted.")
     if submission.status == "graded":
         raise HTTPException(409, "This submission has already been graded and can no longer be changed.")
     _require_open(submission.assignment)
@@ -1970,7 +1961,8 @@ def update_submission(
     db: Session = Depends(get_db),
 ):
     """Replace one or more files of the student's own submission while the
-    assignment is open and before it's graded. Files not sent are kept."""
+    assignment is open and before it's graded. Files not sent are kept.
+    Not for a code challenge: that is final once it is submitted."""
     submission = _own_changeable_submission(db, student, submission_id)
     code, report, video = (f if f is not None and f.filename else None for f in (code, report, video))
     if not (code or report or video):
@@ -2010,7 +2002,8 @@ def update_submission(
 @app.delete("/submissions/{submission_id}")
 def delete_submission(submission_id: int, student: User = Depends(require_student), db: Session = Depends(get_db)):
     """Withdraw the student's own submission while the assignment is open
-    and before it's graded (a graded submission is an academic record)."""
+    and before it's graded (a graded submission is an academic record).
+    Not for a code challenge: that is final once it is submitted."""
     submission = _own_changeable_submission(db, student, submission_id)
     parts = [(submission.code_path, "code"), (submission.report_path, "report"), (submission.video_path, "video")]
     _discard_derived_results(db, submission.id)

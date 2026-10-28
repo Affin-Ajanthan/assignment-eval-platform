@@ -80,7 +80,8 @@ export default function StudentPage() {
       <h1 className="text-2xl font-bold">Student portal</h1>
       <p className="mt-1 text-sm text-gray-600">
         Open an assignment, upload your code, report and presentation video, and submit before the deadline. You can
-        edit or delete your submission until the deadline or until it has been graded.
+        edit or delete your submission until the deadline or until it has been graded. A code challenge is the
+        exception: it is marked as soon as you submit, and cannot be changed afterwards.
       </p>
 
       {user.subjects.length === 0 && (

@@ -298,7 +298,7 @@ def test_student_sees_open_and_past_assignments_but_not_upcoming_ones():
     assert set(open_one) == {"id", "subject_id", "subject_name", "name", "description", "available_from",
                              "deadline", "status", "submission_types", "code_languages",
                                  "student_similarity_check", "student_ai_check", "marks_release_at",
-                                 "sample_tests", "hidden_test_count", "assignment_type", "my_submission"}
+                                 "assignment_type", "my_submission"}
 
 
 def test_backend_enforces_the_submission_window():
@@ -649,54 +649,26 @@ def test_test_cases_are_validated():
     assert r.status_code == 400 and "accepts code submissions only" in r.json()["detail"]
 
 
-def test_students_never_receive_test_cases():
-    subject, itok, stok = setup_subject_with_users(client)
-    a = client.post("/assignments", headers=H(itok), json={
-        "subject_id": subject["id"], "name": "Hidden tests", "available_from": _iso(timedelta(hours=-1)),
-        "deadline": _iso(timedelta(days=7)), "test_cases": SORT_TESTS}).json()
-    student_views = json.dumps([client.get("/assignments", headers=H(stok)).json(),
-                                client.get(f"/assignments/{a['id']}", headers=H(stok)).json()])
-    assert "SECRET-EMPTY-LIST" not in student_views and "test_cases" not in student_views
-
-
-def test_students_see_the_visible_tests_only_after_submitting_and_never_the_hidden_ones():
+def test_students_never_receive_any_test_case_in_the_assignment_views():
     subject, itok, stok = setup_subject_with_users(client)
     tests = SORT_TESTS + [{"input": "HIDDEN-INPUT", "expected_output": "HIDDEN-EXPECTED", "points": 4}]
     a = client.post("/assignments", headers=H(itok), json={
-        "subject_id": subject["id"], "name": "Samples", "available_from": _iso(timedelta(hours=-1)),
+        "subject_id": subject["id"], "name": "No tests in the portal", "available_from": _iso(timedelta(hours=-1)),
         "deadline": _iso(timedelta(days=7)), "test_cases": tests}).json()
     views = lambda: json.dumps([client.get("/assignments", headers=H(stok)).json(),  # noqa: E731
                                 client.get(f"/assignments/{a['id']}", headers=H(stok)).json()])
 
-    # Before submitting: no sample input or expected output reaches the student at all.
-    before = client.get("/assignments", headers=H(stok)).json()[0]
-    assert before["sample_tests"] == [] and before["hidden_test_count"] == 2
-    assert before["my_submission"] is None
-    for visible in ("Sorts three numbers", "2 3 1", "1 2 3"):
-        assert visible not in views(), visible
+    # Visible and hidden alike: no name, input or expected output, and no test fields, before submitting...
+    def assert_no_tests():
+        for content in ("Sorts three numbers", "2 3 1", "1 2 3", "SECRET-EMPTY-LIST", "HIDDEN-INPUT", "HIDDEN-EXPECTED",
+                        "test_cases", "sample_tests", "hidden_test_count", "expected_output"):
+            assert content not in views(), content
 
-    # After submitting: the visible test appears as a sample.
+    assert_no_tests()
+    # ...and after: a student meets the tests only through the result of Run.
     assert _submit(stok, a).status_code == 200
-    mine = client.get("/assignments", headers=H(stok)).json()[0]
-    assert mine["sample_tests"] == [{"name": "Sorts three numbers", "input": "3\n2 3 1\n",
-                                     "expected_output": "1 2 3", "match": "exact", "points": 2}]
-    assert mine["hidden_test_count"] == 2
-    assert client.get(f"/assignments/{a['id']}", headers=H(stok)).json()["sample_tests"] == mine["sample_tests"]
-
-    # Hidden tests: nothing but the count, before and after.
-    for secret in ("SECRET-EMPTY-LIST", "HIDDEN-INPUT", "HIDDEN-EXPECTED"):
-        assert secret not in views(), secret
-
-    # Deleting the submission takes the samples away again.
-    assert client.delete(f"/submissions/{mine['my_submission']['id']}", headers=H(stok)).status_code == 200
-    assert client.get("/assignments", headers=H(stok)).json()[0]["sample_tests"] == []
-
-    # An assignment without tests shows none.
-    client.post("/assignments", headers=H(itok), json={
-        "subject_id": subject["id"], "name": "Plain", "available_from": _iso(timedelta(hours=-1)),
-        "deadline": _iso(timedelta(days=7))})
-    plain = next(x for x in client.get("/assignments", headers=H(stok)).json() if x["name"] == "Plain")
-    assert (plain["sample_tests"], plain["hidden_test_count"]) == ([], 0)
+    assert client.get("/assignments", headers=H(stok)).json()[0]["my_submission"] is not None
+    assert_no_tests()
 
 
 # --------------------------------------------------------------------------

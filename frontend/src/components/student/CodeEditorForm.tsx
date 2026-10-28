@@ -1,17 +1,10 @@
 "use client";
 
-import { KeyboardEvent, useEffect, useRef, useState } from "react";
-import {
-  apiFetch,
-  apiFetchBlob,
-  CodeRun,
-  StudentAssignment,
-  Submission,
-  SubmissionFile,
-  submissionFileUrl,
-} from "@/lib/api";
+import { KeyboardEvent, useRef, useState } from "react";
+import { apiFetch, CodeRun, CodeSubmit, StudentAssignment } from "@/lib/api";
+import { formatDateTime, formatMark } from "@/lib/datetime";
+import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import Message, { MessageState } from "@/components/Message";
-import SampleTests, { sampleLabel } from "@/components/student/SampleTests";
 import { CodeLanguageId, languagesFor } from "@/lib/codeLanguages";
 
 /** The languages the server can run tests for: must match LANGUAGES in app/evaluator/code_testing.py. */
@@ -26,7 +19,15 @@ const PLACEHOLDER: Partial<Record<CodeLanguageId, string>> = {
 const pre =
   "mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded border border-gray-200 bg-white p-2 font-mono text-xs";
 
-const extOf = (name: string) => (name.includes(".") ? name.slice(name.lastIndexOf(".")).toLowerCase() : "");
+// A test the instructor did not name is stored as "Test 2" (its place among ALL the tests,
+// hidden ones included), which means little to a student: show "Sample 1" instead.
+const GENERATED_NAME = /^Test \d+$/;
+
+/** "Sample 2: Palindrome with punctuation", or just "Sample 2" for a test without a real name. */
+export function sampleLabel(name: string, index: number): string {
+  const trimmed = name.trim();
+  return !trimmed || GENERATED_NAME.test(trimmed) ? `Sample ${index + 1}` : `Sample ${index + 1}: ${trimmed}`;
+}
 
 /** The languages a code challenge can be written in on the page: its own, if the server can run them. */
 export function editorLanguages(assignment: StudentAssignment) {
@@ -34,26 +35,32 @@ export function editorLanguages(assignment: StudentAssignment) {
 }
 
 /**
- * The result of Run: the code was run against every test case, hidden ones included.
- * All passed: just that. Otherwise the count, and for each VISIBLE test that failed only
- * what was expected and what the program printed. A hidden test is only ever counted.
+ * The result of Run, and of Submit (which shows the same thing once the code is handed in): the
+ * code was run against every test case, hidden ones included. Always "X of Y test cases passed";
+ * then, for each VISIBLE test that failed, only what was expected and what the program printed.
+ * A hidden test is only ever counted.
  */
-export function CodeRunResults({ run }: { run: CodeRun }) {
-  const left = `${run.remaining_runs} run${run.remaining_runs === 1 ? "" : "s"} left this hour.`;
+export function CodeRunResults({ run, submitted = false }: { run: CodeRun; submitted?: boolean }) {
+  // Runs left only matter for practice: Submit uses none.
+  const left = submitted ? "" : `${run.remaining_runs} run${run.remaining_runs === 1 ? "" : "s"} left this hour.`;
   if (run.all_passed) {
     return (
       <div className="mt-3 rounded-md border border-green-200 bg-green-50 px-3 py-2" data-testid="run-result">
         <p className="text-sm font-semibold text-green-800" data-testid="run-summary">
-          ✓ All {run.total} test case{run.total === 1 ? "" : "s"} passed.
+          ✓ {run.passed} of {run.total} test case{run.total === 1 ? "" : "s"} passed: all passed.
         </p>
-        <p className="mt-1 text-xs text-green-800">Press Submit to hand in your code. {left}</p>
+        {!submitted && (
+          <p className="mt-1 text-xs text-green-800">
+            Press Submit to hand in your code: it is final, you cannot change it afterwards. {left}
+          </p>
+        )}
       </div>
     );
   }
   return (
     <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3" data-testid="run-result">
       <p className="text-sm font-semibold text-red-800" data-testid="run-summary">
-        {run.passed} of {run.total} test cases passed.
+        {run.passed} of {run.total} test case{run.total === 1 ? "" : "s"} passed.
       </p>
       {run.failures.map((f) => (
         <div key={f.sample} className="mt-2 rounded-md border border-red-100 bg-white p-3" data-testid="run-failure">
@@ -85,77 +92,79 @@ export function CodeRunResults({ run }: { run: CodeRun }) {
           not shown.
         </p>
       )}
-      <p className="mt-2 text-xs text-gray-600">{left}</p>
+      {left && <p className="mt-2 text-xs text-gray-600">{left}</p>}
     </div>
   );
 }
 
 /**
- * A code challenge is answered here, not by uploading a file: the student types
- * their code and has three buttons. Run checks it against every test case
- * (nothing is submitted or marked), Submit hands it in, Cancel closes the editor.
- * The typed code is saved as one file (main.py, main.rb) through the same
- * endpoints as an upload.
+ * What the student sees as soon as the code is handed in: that it is final, how many test cases
+ * passed (the same report Run gives) and their mark. The mark is left out while the instructor
+ * holds marks back until a release date, and when the tests could not be run just now.
+ */
+export function CodeSubmitResult({ result, releaseAt }: { result: CodeSubmit; releaseAt: string | null }) {
+  const mark =
+    result.earned !== null && result.total !== null
+      ? `Your mark: ${formatMark(result.earned, result.total)} (the points of the test cases you passed).`
+      : result.marked
+        ? releaseAt
+          ? `Your mark will be released on ${formatDateTime(releaseAt)}.`
+          : "Your mark is on the assignment page."
+        : null;
+  return (
+    <div className="mt-3" data-testid="submit-result">
+      <p className="rounded-md bg-green-50 px-3 py-2 text-sm font-semibold text-green-800" data-testid="submitted-banner">
+        ✓ Submitted. Your code is final: it cannot be changed now.
+      </p>
+      {result.run ? (
+        <CodeRunResults run={result.run} submitted />
+      ) : (
+        <p className="mt-3 rounded-md bg-yellow-50 px-3 py-2 text-sm text-yellow-800" data-testid="not-marked">
+          The test cases could not be run just now, so your code has no mark yet. Your instructor will mark it.
+        </p>
+      )}
+      {mark && (
+        <p className="mt-3 text-sm font-semibold" data-testid="submit-mark">
+          {mark}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A code challenge is answered here, not by uploading a file: the student types their code and
+ * has three buttons. Run checks it against every test case and shows how many passed (practice:
+ * nothing is submitted or marked). Submit asks for confirmation, then saves the code, runs every
+ * test case, saves the points of the tests passed as the mark and shows the result at once. That is
+ * final: the box locks and the only button left is Close. The typed code is saved as one file
+ * (main.py, main.rb) on the server, which also refuses any later change.
  */
 export default function CodeEditorForm({
   assignment,
-  mode,
   onDone,
   onCancel,
 }: {
   assignment: StudentAssignment;
-  mode: "submit" | "edit";
+  // The card passes the same props to every form. A code challenge is never edited once
+  // submitted (the server refuses it), so only "submit" is ever used here.
+  mode?: "submit" | "edit";
   onDone: (text: string) => Promise<void>;
   onCancel: () => void;
 }) {
   const languages = editorLanguages(assignment);
   const [language, setLanguage] = useState<CodeLanguageId>(languages[0].id);
   const [code, setCode] = useState("");
-  const [loading, setLoading] = useState(mode === "edit");
   const [msg, setMsg] = useState<MessageState>(null);
   const [run, setRun] = useState<CodeRun | null>(null);
+  const [result, setResult] = useState<CodeSubmit | null>(null); // set once the code is handed in
+  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const [running, setRunning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const escaped = useRef(false); // Esc was pressed: the next Tab leaves the box instead of indenting
-  const busy = loading || running || submitting;
+  const busy = running || submitting;
+  const final = result !== null;
   const editorId = `code-editor-${assignment.id}`;
-
-  // Editing: start from the code that was submitted, when it is one Python or Ruby file.
-  useEffect(() => {
-    if (mode !== "edit" || !assignment.my_submission) return;
-    const submissionId = assignment.my_submission.id;
-    let cancelled = false;
-    (async () => {
-      try {
-        const files = (await apiFetch<SubmissionFile[]>(`/submissions/${submissionId}/files`)).filter(
-          (f) => f.kind === "code",
-        );
-        const lang = files.length === 1 ? languages.find((l) => l.extensions[0] === extOf(files[0].name)) : undefined;
-        if (!lang) {
-          if (!cancelled) {
-            setMsg({
-              text: "Your current submission isn't a single Python or Ruby file, so it can't be shown here. Saving replaces it with the code below.",
-              kind: "error",
-            });
-          }
-          return;
-        }
-        const text = await (await apiFetchBlob(submissionFileUrl(submissionId, files[0]))).text();
-        if (!cancelled) {
-          setCode(text);
-          setLanguage(lang.id);
-        }
-      } catch (err) {
-        if (!cancelled) setMsg({ text: `Could not load your code: ${err instanceof Error ? err.message : err}`, kind: "error" });
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, assignment.my_submission?.id]);
 
   /** A change to the code or the language makes the last Run's result stale: drop it. */
   function edit(next: string) {
@@ -164,6 +173,7 @@ export default function CodeEditorForm({
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (busy || final) return; // the box is read-only while code is being run or after it is handed in
     if (e.key === "Escape") {
       escaped.current = true;
       return;
@@ -196,23 +206,28 @@ export default function CodeEditorForm({
     }
   }
 
-  async function submit() {
+  /** Submit asks first: it cannot be undone. */
+  function askToSubmit() {
     if (!code.trim()) return setMsg({ text: "Write some code first.", kind: "error" });
     setMsg(null);
+    setConfirm({
+      title: "Submit your code?",
+      message:
+        "Your code will be run against every test case and marked at once.\nA submission is final: you cannot change or withdraw it afterwards.",
+      confirmLabel: "Submit",
+      onConfirm: submit,
+    });
+  }
+
+  async function submit() {
+    setConfirm(null);
+    setMsg(null);
+    setRun(null);
     setSubmitting(true);
     try {
-      const lang = languages.find((l) => l.id === language) ?? languages[0];
-      const form = new FormData();
-      form.append("code", new File([code], `main${lang.extensions[0]}`, { type: "text/plain" }));
-      if (mode === "submit") {
-        form.append("subject_id", String(assignment.subject_id));
-        form.append("assignment_id", String(assignment.id));
-        const submission = await apiFetch<Submission>("/submissions", { method: "POST", body: form });
-        await onDone(`Submitted! Your submission id is ${submission.id}.`);
-      } else {
-        await apiFetch(`/submissions/${assignment.my_submission!.id}`, { method: "PUT", body: form });
-        await onDone("Submission updated.");
-      }
+      setResult(
+        await apiFetch<CodeSubmit>(`/assignments/${assignment.id}/submit-code`, { method: "POST", json: { code, language } }),
+      );
     } catch (err) {
       setMsg({ text: `Submission failed: ${err instanceof Error ? err.message : err}`, kind: "error" });
     } finally {
@@ -222,13 +237,6 @@ export default function CodeEditorForm({
 
   return (
     <div className="mt-4 rounded-md border border-gray-200 p-4" data-testid="code-editor">
-      {/* Not before the first submission: until then the student meets the visible tests only through
-          what Run reports. Editing a submission means one exists, so show them then. */}
-      {mode === "edit" && (
-        <div className="mb-3 border-b border-gray-200 pb-3 empty:hidden">
-          <SampleTests samples={assignment.sample_tests} hiddenCount={assignment.hidden_test_count} />
-        </div>
-      )}
       <div className="flex flex-wrap items-end justify-between gap-2">
         <label className="text-sm font-semibold" htmlFor={editorId}>
           Your code
@@ -237,7 +245,7 @@ export default function CodeEditorForm({
           <select
             aria-label="Language"
             value={language}
-            disabled={busy}
+            disabled={busy || final}
             onChange={(e) => {
               setLanguage(e.target.value as CodeLanguageId);
               setRun(null);
@@ -265,49 +273,64 @@ export default function CodeEditorForm({
         autoCapitalize="off"
         autoCorrect="off"
         wrap="off"
-        disabled={loading}
-        placeholder={loading ? "Loading your code…" : PLACEHOLDER[language]}
-        className="mt-1 block w-full overflow-auto rounded-md border border-gray-300 bg-white p-3 font-mono text-sm leading-5 disabled:bg-gray-50"
+        readOnly={busy || final}
+        placeholder={PLACEHOLDER[language]}
+        className="mt-1 block w-full overflow-auto rounded-md border border-gray-300 bg-white p-3 font-mono text-sm leading-5 read-only:bg-gray-50"
       />
-      <p className="mt-1 text-xs text-gray-500">
-        Tab indents; press Esc then Tab to move to the next control. {code.length} / {MAX_CODE_CHARS} characters.
-      </p>
+      {!final && (
+        <p className="mt-1 text-xs text-gray-500">
+          Tab indents; press Esc then Tab to move to the next control. {code.length} / {MAX_CODE_CHARS} characters.
+        </p>
+      )}
 
       <div className="mt-3 flex flex-wrap gap-2">
+        {!final && (
+          <>
+            <button
+              type="button"
+              onClick={runCode}
+              disabled={busy}
+              className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700 disabled:opacity-60"
+            >
+              {running ? "Running…" : "Run"}
+            </button>
+            <button
+              type="button"
+              onClick={askToSubmit}
+              disabled={busy}
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+            >
+              {submitting ? "Submitting…" : "Submit"}
+            </button>
+          </>
+        )}
         <button
           type="button"
-          onClick={runCode}
-          disabled={busy}
-          className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700 disabled:opacity-60"
-        >
-          {running ? "Running…" : "Run"}
-        </button>
-        <button
-          type="button"
-          onClick={submit}
-          disabled={busy}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-        >
-          {submitting ? "Submitting…" : "Submit"}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
+          onClick={() => (result ? onDone(`Submitted! Your submission id is ${result.submission_id}.`) : onCancel())}
           disabled={submitting}
           className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700 disabled:opacity-60"
         >
-          Cancel
+          {final ? "Close" : "Cancel"}
         </button>
       </div>
-      <p className="mt-2 text-xs text-gray-500">
-        Run checks your code against all the test cases. It submits nothing and changes no mark: press Submit when you
-        are happy with your code.
-      </p>
+      {!final && (
+        <p className="mt-2 text-xs text-gray-500">
+          Run checks your code against all the test cases without submitting it. Submit is final: your code is run
+          against every test case, marked at once, and cannot be changed afterwards.
+        </p>
+      )}
       {running && (
         <p className="mt-2 text-xs text-gray-600">Running every test case in a safe sandbox: a few seconds each.</p>
       )}
+      {submitting && (
+        <p className="mt-2 text-xs text-gray-600">
+          Saving your code and running every test case in a safe sandbox: a few seconds each. Please wait.
+        </p>
+      )}
       <Message state={msg} />
       {run && <CodeRunResults run={run} />}
+      {result && <CodeSubmitResult result={result} releaseAt={assignment.marks_release_at} />}
+      <ConfirmDialog request={confirm} onCancel={() => setConfirm(null)} />
     </div>
   );
 }

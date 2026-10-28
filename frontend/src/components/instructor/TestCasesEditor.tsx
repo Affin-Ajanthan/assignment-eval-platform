@@ -72,10 +72,11 @@ export default function TestCasesEditor({
       <p className="text-xs text-gray-500">
         Each test runs the student&apos;s program with the input below (as if typed on the keyboard) and compares
         its output. Use &ldquo;Output contains&rdquo; for menu-driven programs that print prompts. Hidden tests are
-        never shown to students. When a student presses Run, every test case runs: they are told if all passed, and
-        for a visible test that fails they see its expected and actual output; a hidden test that fails is only
-        counted. A visible test&apos;s input and expected output are also shown on the assignment once the student
-        has submitted, so put anything students need to know up front in the description.
+        never shown to students. The assignment page shows no test case at all, so put what students need to know up
+        front in the description. When a student presses Run, every test case runs: they see how many passed out of
+        the total, and for a visible test that fails its expected and actual output; a hidden test that fails is only
+        counted. Submit is final: it runs every test case the same way and saves the points of the tests passed as the
+        student&apos;s mark at once, and the student cannot change the code afterwards.
       </p>
 
       <div className="mt-2 space-y-3">

@@ -113,7 +113,7 @@ export default function TestRunPanel({
             type="button"
             onClick={() => start(true)}
             disabled={running}
-            title="Runs every test and saves the points of the tests passed as the mark, replacing any earlier mark"
+            title="Runs every test again and saves the points of the tests passed as the mark, replacing any earlier mark (a student's code is already marked when they press Submit)"
             className={`${button} bg-blue-600 hover:bg-blue-700`}
           >
             {running ? "Running…" : `Run ${testCount} test${testCount === 1 ? "" : "s"} and save as mark`}

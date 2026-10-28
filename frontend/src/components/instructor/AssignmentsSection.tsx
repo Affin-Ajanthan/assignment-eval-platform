@@ -406,11 +406,14 @@ export default function AssignmentsSection({
                 />
                 <p className="mt-1 text-xs text-gray-500">
                   The file name (or path) the tests run: Python (.py) and Ruby (.rb) only. Empty: the only Python or
-                  Ruby file in the submission, or one named main, app, run, program or index.
+                  Ruby file in the submission, or one named main, app, run, program or index. Code that students type
+                  in the editor is always saved and run as main.py or main.rb, so leave this empty for it.
                 </p>
               </div>
             )}
           </>
+        )}
+
         {form.types.includes("code") && (
           <fieldset className="mt-3">
             <legend className="text-sm font-semibold">Code similarity</legend>
@@ -640,6 +643,8 @@ export default function AssignmentsSection({
                     <p className="text-xs text-gray-600" data-testid="test-cases-summary">
                       Test cases: {a.test_cases.length} ({a.test_cases.filter((t) => t.visible).length} visible) ·{" "}
                       {a.test_cases.reduce((sum, t) => sum + t.points, 0)} points
+                    </p>
+                  )}
                   {a.submission_types.includes("code") && (
                     <p className="text-xs text-gray-600">
                       Code similarity: {a.ignore_common_code ? "ignores code most of the class shares" : "compares all code"}
