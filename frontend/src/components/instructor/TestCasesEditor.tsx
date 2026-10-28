@@ -32,11 +32,14 @@ export function toTestRows(tests: TestCase[]): TestCaseRow[] {
   }));
 }
 
+/** A test as sent to the API: the question it belongs to is added by whoever knows the question's place. */
+export type TestCasePayload = Omit<TestCase, "id" | "question">;
+
 /** The rows as the API expects them, or the first problem to show the instructor. */
 export function testRowsPayload(
   rows: TestCaseRow[],
-): { tests: Omit<TestCase, "id">[]; error: null } | { tests: null; error: string } {
-  const tests: Omit<TestCase, "id">[] = [];
+): { tests: TestCasePayload[]; error: null } | { tests: null; error: string } {
+  const tests: TestCasePayload[] = [];
   for (const [i, row] of rows.entries()) {
     const label = row.name.trim() || `Test ${i + 1}`;
     const points = Number(row.points);
@@ -50,15 +53,22 @@ export function testRowsPayload(
 }
 
 const field = "mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm";
-const MAX_TESTS = 50; // must match the backend's _TEST_CASES_MAX
+/** The most test cases an assignment can have in all, whatever the number of questions: must match the backend's _TEST_CASES_MAX. */
+export const MAX_TESTS = 50;
 
-/** Test cases for submitted code: input fed to the program, expected output, match mode, visibility, points. */
+/** The test cases of one question: input fed to the program, expected output, match mode, visibility, points. */
 export default function TestCasesEditor({
   rows,
   onChange,
+  idPrefix = "",
+  canAdd = true,
 }: {
   rows: TestCaseRow[];
   onChange: (rows: TestCaseRow[]) => void;
+  /** Keeps the field ids apart when several editors are on the page (one per question). */
+  idPrefix?: string;
+  /** False when the assignment already has as many test cases as it can have. */
+  canAdd?: boolean;
 }) {
   const update = (i: number, patch: Partial<TestCaseRow>) => onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const total = rows.reduce((sum, r) => sum + (Number(r.points) || 0), 0);
@@ -67,13 +77,8 @@ export default function TestCasesEditor({
   return (
     <fieldset className="mt-3" data-testid="test-cases-editor">
       <legend className="text-sm font-semibold">
-        Test cases <span className="font-normal text-gray-500">(optional)</span>
+        Test cases <span className="font-normal text-gray-500">(at least one)</span>
       </legend>
-      <p className="text-xs text-gray-500">
-        Each test runs the student&apos;s program with the input below (as if typed on the keyboard) and compares
-        its output. Use &ldquo;Output contains&rdquo; for menu-driven programs that print prompts. Hidden tests are
-        never shown to students.
-      </p>
 
       <div className="mt-2 space-y-3">
         {rows.map((row, i) => (
@@ -88,11 +93,11 @@ export default function TestCasesEditor({
                 Remove
               </button>
             </div>
-            <label className="mt-2 block text-xs font-semibold" htmlFor={`test-${i}-name`}>
+            <label className="mt-2 block text-xs font-semibold" htmlFor={`${idPrefix}test-${i}-name`}>
               Name
             </label>
             <input
-              id={`test-${i}-name`}
+              id={`${idPrefix}test-${i}-name`}
               value={row.name}
               maxLength={200}
               placeholder={`Test ${i + 1}`}
@@ -101,11 +106,11 @@ export default function TestCasesEditor({
             />
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               <div>
-                <label className="block text-xs font-semibold" htmlFor={`test-${i}-input`}>
+                <label className="block text-xs font-semibold" htmlFor={`${idPrefix}test-${i}-input`}>
                   Input
                 </label>
                 <textarea
-                  id={`test-${i}-input`}
+                  id={`${idPrefix}test-${i}-input`}
                   value={row.input}
                   rows={4}
                   maxLength={10000}
@@ -115,11 +120,11 @@ export default function TestCasesEditor({
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold" htmlFor={`test-${i}-expected`}>
+                <label className="block text-xs font-semibold" htmlFor={`${idPrefix}test-${i}-expected`}>
                   Expected output
                 </label>
                 <textarea
-                  id={`test-${i}-expected`}
+                  id={`${idPrefix}test-${i}-expected`}
                   value={row.expected_output}
                   rows={4}
                   maxLength={10000}
@@ -131,11 +136,11 @@ export default function TestCasesEditor({
             </div>
             <div className="mt-2 flex flex-wrap items-end gap-4">
               <div>
-                <label className="block text-xs font-semibold" htmlFor={`test-${i}-match`}>
+                <label className="block text-xs font-semibold" htmlFor={`${idPrefix}test-${i}-match`}>
                   Match
                 </label>
                 <select
-                  id={`test-${i}-match`}
+                  id={`${idPrefix}test-${i}-match`}
                   value={row.match}
                   onChange={(e) => update(i, { match: e.target.value as TestMatch })}
                   className={field}
@@ -145,11 +150,11 @@ export default function TestCasesEditor({
                 </select>
               </div>
               <div className="w-24">
-                <label className="block text-xs font-semibold" htmlFor={`test-${i}-points`}>
+                <label className="block text-xs font-semibold" htmlFor={`${idPrefix}test-${i}-points`}>
                   Points
                 </label>
                 <input
-                  id={`test-${i}-points`}
+                  id={`${idPrefix}test-${i}-points`}
                   type="text"
                   inputMode="decimal"
                   value={row.points}
@@ -170,7 +175,7 @@ export default function TestCasesEditor({
         <button
           type="button"
           onClick={() => onChange([...rows, emptyTestRow()])}
-          disabled={rows.length >= MAX_TESTS}
+          disabled={!canAdd}
           className="rounded-md bg-gray-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-700 disabled:opacity-60"
         >
           + Add test case

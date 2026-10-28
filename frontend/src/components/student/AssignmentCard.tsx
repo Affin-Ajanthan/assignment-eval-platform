@@ -1,12 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { StudentAssignment } from "@/lib/api";
 import { formatDateTime, formatMark } from "@/lib/datetime";
 import Badge from "@/components/Badge";
 import Message, { MessageState } from "@/components/Message";
 import SelfCheckPanel from "@/components/student/SelfCheckPanel";
 import UploadForm from "@/components/student/UploadForm";
-import CodeEditorForm, { editorLanguages } from "@/components/student/CodeEditorForm";
+import { editorLanguages } from "@/components/student/CodeEditorForm";
 import { OpenForm, TYPE_LABEL } from "@/components/student/labels";
 import { languageNames } from "@/lib/codeLanguages";
 
@@ -27,15 +28,42 @@ export default function AssignmentCard({
   notice: MessageState;
 }) {
   const sub = a.my_submission;
-  const submissionStatus = !sub ? "Not submitted" : sub.status === "graded" ? "Graded" : "Submitted";
+  // A code challenge is answered by typing code on the challenge's own page (checking it with Run, then handing
+  // in one task at a time), not by uploading a file. Only when the server can run its language: otherwise
+  // the usual upload form is used.
+  const isChallenge = a.assignment_type === "code_challenge";
+  const useEditor = isChallenge && editorLanguages(a).length > 0;
+  const taskCount = a.questions?.length ?? 0;
+  const manyTasks = isChallenge && taskCount > 1;
+  const submissionStatus = !sub
+    ? "Not submitted"
+    : manyTasks
+      ? `${sub.questions_submitted} of ${taskCount} tasks submitted`
+      : sub.status === "graded"
+        ? "Graded"
+        : "Submitted";
   const files = sub
     ? [sub.has_code && "code", sub.has_report && "report", sub.has_video && "video"].filter(Boolean).join(", ")
     : "";
   const formMode = openForm?.id === a.id ? openForm.mode : null;
-  // A code challenge is answered by typing code (and practising on the sample tests), not by uploading a file.
-  // Only when the server can run its language: otherwise the usual upload form is used.
-  const useEditor = a.assignment_type === "code_challenge" && editorLanguages(a).length > 0;
-  const FormComponent = useEditor ? CodeEditorForm : UploadForm;
+  const closeForm = () => setOpenForm(null);
+  const finishForm = async (text: string) => {
+    setOpenForm(null);
+    await onChanged(a.id, text);
+  };
+  // The way into the challenge's page: while it is open, to do the assignment or to carry on with the tasks
+  // still to hand in; and afterwards, to see the code and the result.
+  const moreToHandIn = a.status === "open" && !!sub && sub.questions_submitted < Math.max(1, taskCount);
+  const codeLink =
+    useEditor && (a.status === "open" || sub) ? (
+      <Link
+        href={`/student/code/${a.id}`}
+        className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+        data-testid="open-code-page"
+      >
+        {!sub ? "Do assignment" : moreToHandIn ? "Continue assignment" : "See your code and result"}
+      </Link>
+    ) : null;
 
   return (
     <li className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm" data-testid="student-assignment">
@@ -53,45 +81,23 @@ export default function AssignmentCard({
         </Badge>
       </div>
 
-      {a.description && (
+      {/* A code challenge is done on its own page: its description and its questions are shown there, after the
+          student presses Do assignment, and not on the card. */}
+      {a.description && !useEditor && (
         <div className="mt-3">
           <p className="text-sm font-semibold">Description</p>
           <p className="whitespace-pre-wrap text-sm text-gray-700">{a.description}</p>
         </div>
       )}
 
-      {(a.sample_tests.length > 0 || a.hidden_test_count > 0) && (
-        <div className="mt-3" data-testid="sample-tests">
-          <p className="text-sm font-semibold">Tests for your code</p>
+      {useEditor && a.status === "open" && (
+        <div className="mt-3" data-testid="questions-hidden-note">
+          {manyTasks && <p className="text-sm font-semibold">{taskCount} tasks</p>}
           <p className="text-xs text-gray-500">
-            Your code is run with each test&apos;s input and its output is compared with the expected output.
-            {a.hidden_test_count > 0 &&
-              ` ${a.hidden_test_count} more test${a.hidden_test_count === 1 ? " is" : "s are"} hidden and used only for marking.`}
+            {manyTasks
+              ? "The questions are shown when you press Do assignment, and you hand the tasks in one at a time. Each task is marked as soon as you submit it and cannot be changed afterwards; the mark adds up the test cases you pass in every task."
+              : "The question is shown when you press Do assignment. Your code is marked as soon as you submit it, and cannot be changed afterwards."}
           </p>
-          {a.sample_tests.map((t, i) => (
-            <details key={i} className="mt-2 rounded-md border border-gray-200 bg-gray-50">
-              <summary className="cursor-pointer px-3 py-1.5 text-sm">
-                <span className="font-semibold">{t.name}</span>{" "}
-                <span className="text-xs text-gray-500">
-                  {t.points} point{t.points === 1 ? "" : "s"} · {t.match === "contains" ? "output contains" : "exact output"}
-                </span>
-              </summary>
-              <div className="grid gap-2 px-3 pb-2 sm:grid-cols-2">
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-gray-600">Input</p>
-                  <pre className="mt-1 overflow-auto whitespace-pre-wrap rounded border border-gray-200 bg-white p-2 font-mono text-xs">
-                    {t.input === "" ? "(none)" : t.input}
-                  </pre>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-gray-600">Expected output</p>
-                  <pre className="mt-1 overflow-auto whitespace-pre-wrap rounded border border-gray-200 bg-white p-2 font-mono text-xs">
-                    {t.expected_output}
-                  </pre>
-                </div>
-              </div>
-            </details>
-          ))}
         </div>
       )}
 
@@ -103,7 +109,7 @@ export default function AssignmentCard({
         <dt className="font-semibold">Status</dt>
         <dd>
           {submissionStatus}
-          {sub && ` (${formatDateTime(sub.submitted_at)}${files ? ` — ${files}` : ""})`}
+          {sub && !manyTasks && ` (${formatDateTime(sub.submitted_at)}${files ? ` — ${files}` : ""})`}
         </dd>
         {sub && (
           <>
@@ -146,18 +152,28 @@ export default function AssignmentCard({
         </div>
       )}
 
-      {a.status === "open" && !formMode && (
+      {/* A challenge is marked when it is submitted; if that could not happen then, the student can ask again on
+          the challenge's page. Not while marks are held back: the student cannot tell marked from unmarked until
+          the release date. */}
+      {isChallenge && sub && sub.final_mark === null && !a.marks_release_at && (
+        <p className="mt-3 rounded-md bg-yellow-50 px-3 py-2 text-sm text-yellow-900" data-testid="not-marked-note">
+          Your code is submitted, but it has no mark yet. Open the assignment and press Get my marks.
+        </p>
+      )}
+
+      {(a.status === "open" || codeLink) && !formMode && (
         <div className="mt-4 flex flex-wrap gap-2">
-          {!sub && (
+          {codeLink}
+          {a.status === "open" && !sub && !useEditor && (
             <button
               type="button"
               onClick={() => setOpenForm({ id: a.id, mode: "submit" })}
               className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
             >
-              {useEditor ? "Write your code" : "Submit assignment"}
+              Submit assignment
             </button>
           )}
-          {sub?.can_edit && (
+          {a.status === "open" && sub?.can_edit && (
             <>
               <button
                 type="button"
@@ -183,17 +199,7 @@ export default function AssignmentCard({
         <SelfCheckPanel assignment={a} submission={sub} />
       )}
 
-      {formMode && (
-        <FormComponent
-          assignment={a}
-          mode={formMode}
-          onCancel={() => setOpenForm(null)}
-          onDone={async (text) => {
-            setOpenForm(null);
-            await onChanged(a.id, text);
-          }}
-        />
-      )}
+      {formMode && <UploadForm assignment={a} mode={formMode} onCancel={closeForm} onDone={finishForm} />}
       {notice && <Message state={notice} />}
     </li>
   );

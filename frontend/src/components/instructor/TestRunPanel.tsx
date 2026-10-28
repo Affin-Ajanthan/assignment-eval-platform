@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { apiFetch, TestResult, TestRun } from "@/lib/api";
+import { taskName } from "@/lib/tasks";
 import Badge from "@/components/Badge";
 import Message, { MessageState } from "@/components/Message";
 
@@ -10,6 +11,7 @@ const STATUS: Record<TestResult["status"], { label: string; tone: string }> = {
   failed: { label: "Wrong output", tone: "bg-red-50 text-red-700" },
   error: { label: "Crashed", tone: "bg-red-50 text-red-700" },
   timeout: { label: "Timed out", tone: "bg-yellow-50 text-yellow-800" },
+  skipped: { label: "No answer", tone: "bg-gray-100 text-gray-700" },
 };
 
 const MATCH_LABEL = { exact: "exact output", contains: "output contains" } as const;
@@ -113,7 +115,7 @@ export default function TestRunPanel({
             type="button"
             onClick={() => start(true)}
             disabled={running}
-            title="Runs every test and saves the points of the tests passed as the mark, replacing any earlier mark"
+            title="Runs every test again and saves the points of the tests passed as the mark, replacing any earlier mark (a student's code is already marked when they press Submit)"
             className={`${button} bg-blue-600 hover:bg-blue-700`}
           >
             {running ? "Running…" : `Run ${testCount} test${testCount === 1 ? "" : "s"} and save as mark`}
@@ -138,15 +140,41 @@ export default function TestRunPanel({
         <div className="mt-3">
           <p className="text-sm font-semibold" data-testid="test-run-summary">
             {run.passed} / {run.total} tests passed · {num(run.earned_points)} / {num(run.total_points)} points
-            <span className="ml-2 text-xs font-normal text-gray-500">
-              ran {run.file} ({run.language})
-            </span>
+            {run.questions.length <= 1 && (
+              <span className="ml-2 text-xs font-normal text-gray-500">
+                ran {run.file} ({run.language})
+              </span>
+            )}
           </p>
-          <ul className="mt-2 space-y-2">
-            {run.results.map((r) => (
-              <TestRow key={r.test_id} r={r} />
-            ))}
-          </ul>
+          {run.questions.length > 1 ? (
+            run.questions.map((q) => (
+              <section key={q.question} className="mt-3" data-testid="test-run-question">
+                <h4 className="text-sm font-semibold">
+                  {taskName({ id: q.question, title: q.title })}
+                  <span className="ml-2 text-xs font-normal text-gray-500">
+                    {q.answered
+                      ? `${q.passed} / ${q.total} tests · ${num(q.earned_points)} / ${num(q.total_points)} points · ran ${q.file} (${q.language})`
+                      : `no code was submitted · 0 / ${num(q.total_points)} points`}
+                  </span>
+                </h4>
+                {q.answered && (
+                  <ul className="mt-2 space-y-2">
+                    {run.results
+                      .filter((r) => r.question === q.question)
+                      .map((r) => (
+                        <TestRow key={r.test_id} r={r} />
+                      ))}
+                  </ul>
+                )}
+              </section>
+            ))
+          ) : (
+            <ul className="mt-2 space-y-2">
+              {run.results.map((r) => (
+                <TestRow key={r.test_id} r={r} />
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </div>

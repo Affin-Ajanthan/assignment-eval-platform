@@ -64,6 +64,13 @@ uvicorn app.main:app --reload --port 8000 --env-file .env
 its own. A setting that is already set on the computer (for example with
 `setx`) wins over the same setting in `.env`.
 
+If a change to a Python file seems to have no effect (a page says *Not Found*
+for a route that should exist, or a new field is ignored when you save), the
+backend is still running old code: stop it with Ctrl+C and start it again.
+`--reload` can stop noticing changes without saying so; adding `--reload-dir app`
+makes it watch only the code folder. A new database column is added by itself
+when the backend starts.
+
 ### Concurrent auto-evaluation
 
 "Evaluate a whole assignment" grades every **submission** (student) of
@@ -240,7 +247,7 @@ Creating an assignment starts with a choice, fixed once the assignment exists:
   refuses the rubric Grade form, the single Auto-evaluate and "Evaluate a whole
   assignment" for it (400, "A code challenge is marked from its tests").
 
-**Test cases** (1 to 50 per challenge, set in the assignment form): a name, the
+**Test cases** (1 to 50 per challenge in all, set in the assignment form): a name, the
 **input** fed to the program's standard input, the **expected output**, a
 **match** mode, **visible** or hidden, and **points**. `exact` compares the whole
 output (trailing spaces, line-ending style and surrounding blank lines are
@@ -250,35 +257,134 @@ file** to run (e.g. `student_management.rb`); left empty, the only Python/Ruby
 file in the submission is used, or one named `main`, `app`, `run`, `program` or
 `index`.
 
+**Tasks.** A challenge has **one task or several** (up to 20), all in the one
+assignment. Each task has its own **question** (what the student must write, shown
+above the code box), an optional **title**, and its **own test cases** (input and
+expected output); the mark is the points of the test cases passed **over all the
+tasks**, so an instructor weights a task by the points of its tests. A challenge
+made without tasks has one. In the API and the database a task is called a
+*question*: a test case's `question` (1, 2, ...) names the task it belongs to, and
+`questions` holds the titles and question texts (`title`, `statement`) in
+`POST` / `PUT /assignments` (the tests must cover every task, and a task can't be
+left without a test). The *number* of tasks is fixed once a student has
+submitted, because their code is saved per task; the wording and the test cases
+can always be fixed. A challenge with several tasks is answered on its code page
+only (a plain file upload is refused), and "Main file to run" is ignored for it.
+
 **Languages: Python and Ruby only, for now.** Other languages can be submitted
 to a normal assignment, but a challenge cannot run them yet.
 
-**Students** answer in a code editor on the assignment card instead of
-uploading a file (the typed code is saved as `main.py` / `main.rb`, through the
-same `/submissions` endpoints). The visible tests are shown as examples. **Run
-sample tests** (`POST /assignments/{id}/sample-run`) runs the typed code against
-the **visible tests only** and shows each one's expected and actual output. It
-is practice: no submission is made and no mark changes. Limits, since every run
-starts Docker containers: one run at a time per student,
+**Students** do a code challenge on **its own page** (`/student/code/{id}`). The
+assignment card shows **no question and no description**: it has a **Do
+assignment** button (**Continue assignment** once some tasks are handed in), and
+the questions are first shown on the page it opens. (This only keeps them off the
+card: `GET /assignments` still carries the text, because the page needs it and
+nothing records a "start".) On the page the student does **one task at a time**.
+The typed code is saved as `main.py` / `main.rb`, or `q1.py`, `q2.rb`, ... when
+there are several tasks. With several tasks the page shows a **tab for each**, with
+the task's question; every task has its own code and language, and they can be
+done in any order. Each task has two buttons:
+
+- **Run** (`POST /assignments/{id}/run-code`, with the task's `question` number)
+  runs the typed code of the open task against **every test case of that task,
+  hidden ones included**, and always tells the student how many
+  passed out of the total ("3 of 3 test cases passed: all passed", or "2 of 5
+  test cases passed"). For each **visible** test that failed it adds just its
+  **expected output and actual output** (plus the error message if the program
+  crashed or ran out of time). A failing **hidden** test is only counted ("2
+  hidden test cases did not pass"). Run is practice: no submission is made and
+  no mark changes, and the result is dropped as soon as the code is edited (or
+  the page is left).
+- **Submit** (`POST /assignments/{id}/submit-code`, body `{"question": 1, "code":
+  "...", "language": "python"}`; `question` is the first when left out) hands in
+  **that task**, after a "Submit your code?" confirmation, because it is
+  **final**. The server saves the code as the student's answer (the first task
+  handed in creates the student's one submission for the assignment, the others
+  add a file to it), runs the task against its own test cases and **saves the
+  points of the tests passed** with the answer. The submission's **mark** is the
+  points of the tests passed in all the answers **over the points of all the
+  tasks' tests** (the instructor sets the points on each test case; 8 of 10
+  tests worth 2 points each is 16 of 20). A task not handed in yet earns
+  nothing for now, but its points are already in the total, so "Your mark so
+  far: 6 / 10" goes up as the other tasks are handed in. The page shows the
+  result at once: "Submitted", "X of Y test cases passed" (with the same
+  expected-vs-actual for failing visible tests), the points of that answer and
+  the mark so far. The task's box locks and shows the code that was handed in,
+  and a button leads on to the next task still to do. If the instructor set a
+  **marks release date**, the student still sees the test results, but the
+  points and the mark wait for that date.
+
+`GET /assignments/{id}/my-code` gives the page what was handed in so far (the
+code, the report and the points of each task, and the mark so far), so it can be
+closed and reopened, and still shows the results after the deadline. The reports
+are kept with the submission (`Submission.question_results`, see
+`app/code_answers.py`), so nothing is run again to show them.
+
+**A task that is handed in cannot be changed.** There is no Edit or Delete for
+a challenge's submission: `PUT` and `DELETE /submissions/{id}` are refused (409),
+and `can_edit` is always false. A second Submit of the same task is refused
+too (409); the other tasks can still be handed in until the deadline, and a
+task not handed in by then earns nothing. Submit uses **none of the student's
+hourly runs** (so a student who practised with every run can still submit), and
+when the server is busy it **waits for a free place** (up to 2 minutes) rather
+than being refused. If the tests cannot be run at all (the sandbox is off or
+down, the server stayed busy, an error) the code is **still handed in**, without
+a result. The page then shows **Get my marks** under that answer, and the card
+says the code has no mark yet (`POST /assignments/{id}/mark-my-code`): it runs
+the same marking on every handed-in answer that has no result yet (never on one
+that has, so a result cannot change), works after the deadline too, and refuses
+(409) when every answer already has its result. The instructor can press **Run
+and save as mark** instead. The same lock applies to a challenge handed in as a
+plain file upload through `POST /submissions` (which does not mark it). A
+submission made before answers were kept one by one (all at once, or uploaded as
+files) has no per-task record: the page works its answers out from its files,
+it cannot be added to, and Get my marks gives it its per-task results.
+
+The assignment card shows how many tasks are handed in ("1 of 3 tasks
+submitted") and links to the page: **Do assignment**, **Continue assignment**
+while tasks are left, and **See your code and result** afterwards (also after
+the deadline).
+
+**The student portal never lists the test cases.** The assignment card shows
+no sample input or expected output, before or after submitting (the server does
+not send them; the question of each task is what students read up front, on the
+task's page).
+The only way a student sees a visible test's expected output is the result of a
+Run in which that test fails. Limits on Run, since every run
+starts a Docker container per test case: one run at a time per student,
 `CODE_SAMPLE_RUNS_PER_HOUR` (10) per student, and `CODE_SAMPLE_MAX_PARALLEL` (2)
-at once on the server. The counts are in memory and start again when the
+at once on the server (a Submit's marking run counts towards that cap and goes
+before new practice runs). Every Run of every task uses one of the hourly
+runs, so a challenge with several tasks may need a higher
+`CODE_SAMPLE_RUNS_PER_HOUR`. The counts are in memory and start again when the
 backend restarts.
 
-**Hidden tests never leave the server.** Students receive the visible tests,
-and only how *many* hidden tests there are; a sample run returns no test ids
-or points that could hint at them. The instructor's view shows every test.
+**Hidden tests never leave the server.** Students receive a visible test's
+expected and actual output only when it fails in a Run, and only how *many*
+hidden tests failed; a run returns no test ids, points or inputs that could
+hint at them, and a hidden test's error output is never shown. The
+instructor's view shows every test.
 
-**Instructors** open **Tests** on a submission:
+**Instructors**: a student's code is already marked when they hand a task in (see
+above), so nothing has to be done for a normal submission. Open **Tests** on a
+submission to look at every result, or to mark again (for example after fixing a
+test case, or for a submission that was left unmarked):
 
 - `POST /submissions/{id}/run-tests` runs every test and returns each result
   (expected vs actual output, error output, status `passed` / `failed` /
-  `error` / `timeout`) and the score. It changes nothing.
+  `error` / `timeout`, or `skipped` for a task the student left empty) and the
+  score, overall and task by task (`questions`). The panel groups the
+  results by task. It changes nothing.
 - `POST /submissions/{id}/mark-from-tests` does the same and **saves the points
   of the tests passed as the mark** (e.g. 12 of 16; 8 of 10 tests worth 2
   points each is 16 of 20) and sets the submission to graded. Running it again
-  replaces the mark. The student sees it like any mark, including the
-  assignment's marks release date; there is no per-criterion breakdown. It is
-  stored on the submission (`test_earned`, `test_total`, `tests_run_at`).
+  replaces the mark, and the result of every task the student handed in (so
+  what they see per task follows it); it never hands a task in for them.
+  The student sees it like any mark, including the assignment's marks release
+  date; there is no per-criterion breakdown. It is stored on the submission
+  (`test_earned`, `test_total`, `tests_run_at`, and `question_results` for each
+  answer). Changing the points of a test case later does not change marks
+  already saved: mark again to apply it.
 
 **The sandbox.** Running student code is **off by default**: set
 `CODE_SANDBOX=docker` in `.env`, start Docker Desktop (Docker is needed only on
@@ -296,7 +402,10 @@ CPU, 64 processes, a read-only filesystem, all Linux capabilities dropped, an
 unprivileged user and a time limit** (`CODE_TEST_TIMEOUT`, 10 s). The code is
 mounted read-only and copied to a small in-memory scratch folder, so programs
 that save and load files still work and nothing one test writes is seen by the
-next. There is no "run it locally" fallback. Settings: `CODE_SANDBOX`,
+next. There is no "run it locally" fallback. If Docker is running but cannot
+start a test container (for example the image was never pulled and there is no
+internet), the tests count as *not run*, never as failed, so no mark of 0 is
+saved by mistake. Settings: `CODE_SANDBOX`,
 `CODE_TEST_TIMEOUT`, `CODE_SANDBOX_IMAGE`, `CODE_SANDBOX_RUBY_IMAGE`,
 `CODE_SAMPLE_RUNS_PER_HOUR`, `CODE_SAMPLE_MAX_PARALLEL` (see `.env.example`).
 
@@ -650,10 +759,14 @@ rejection), covering the same flow the automated backend tests cover.
 - Code challenges run **Python and Ruby only**; each test starts its own
   Docker container (about 1-3 seconds), so a long test list takes a while;
   `exact` matching is strict about inner spaces and wording; and the mark
-  measures only what the tests check, not code quality, style or a report. Each
-  mark is saved one submission at a time ("Mark all" for a class is not built).
-  Sample-run limits reset when the backend restarts. The editor is a plain code
-  box, without syntax colouring.
+  measures only what the tests check, not code quality, style or a report. A
+  student's mark is saved when they submit; marking again after a test case
+  changes is done one submission at a time ("Mark all" for a class is not
+  built). A submitted challenge is final, and an instructor cannot reopen it
+  for a student (not built). Marking a Submit waits at most 2 minutes for a free
+  place when many students submit at once; after that the code is kept
+  unmarked. The Run limits reset when the backend restarts. The editor is a
+  plain code box, without syntax colouring.
 - `HeuristicRubricGrader` and the AI-content heuristics are keyword/style
   signals, not semantic understanding or validated classifiers. Treat
   every score and flag as a starting point for human review.

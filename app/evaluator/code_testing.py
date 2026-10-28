@@ -68,11 +68,12 @@ class TestResult:
     visible: bool
     points: float
     match: str
-    status: str  # passed | failed | error | timeout
+    status: str  # passed | failed | error | timeout | skipped (no code was submitted for its question)
     passed: bool
     expected_output: str
     actual_output: str  # clipped for display
     stderr: str = ""
+    question: int = 1  # the question of the code challenge the test belongs to
 
 
 @dataclass
@@ -246,6 +247,11 @@ def _run_one(test: dict, code_dir: Path, relative_file: str, language: Language,
                           stderr=f"No result within {timeout + 30} seconds.")
 
     out = out[:MAX_CAPTURED_CHARS]
+    if code == 125:
+        # `docker run` itself failed (the daemon refused, or the image is missing and cannot be downloaded):
+        # that says nothing about the program, so it must not become a failed test and a saved mark of 0.
+        reason = next((line for line in reversed(err.strip().splitlines()) if line.strip()), "no details")
+        raise SandboxUnavailable(f"Docker could not start the test container: {reason.strip()[:300]}")
     if code == 124:  # coreutils `timeout`: the program hit its time limit
         return TestResult(**base, status="timeout", passed=False, actual_output=_clip(out, MAX_SHOWN_CHARS),
                           stderr=f"Time limit of {timeout} seconds exceeded.")
@@ -264,7 +270,7 @@ def run_tests(code_dir: Path, tests: list, *, main_file: str = "", only_visible:
 
     Raises SandboxUnavailable (and runs nothing) when Docker cannot be used,
     and CodeTestError when the submission cannot be run. `only_visible` runs
-    just the tests students may see (the students' "run sample tests")."""
+    just the visible tests."""
     if not _docker_ready(runner):
         raise SandboxUnavailable("Docker is not available, so the tests were not run")
     code_dir = Path(code_dir).resolve()
@@ -275,3 +281,87 @@ def run_tests(code_dir: Path, tests: list, *, main_file: str = "", only_visible:
     chosen = [t for t in tests if t.get("visible")] if only_visible else list(tests)
     results = [_run_one(t, code_dir, relative_file, language, runner, timeout) for t in chosen]
     return TestRun(file=relative_file, language=language.id, results=results)
+
+
+# ---- a challenge with several tasks ----------------------------------------
+
+
+@dataclass
+class QuestionRun:
+    """How one task of a code challenge was run on a submission."""
+
+    question: int
+    title: str
+    answered: bool  # False: the submission has no code for this task, so none of its tests ran
+    file: str  # the file that was run, "" when none was
+    language: str  # "" when none was
+    results: list  # a TestResult per test of the question ("skipped" ones when it was not answered)
+
+
+def answer_filename(question_count: int, question: int, language: str) -> str:
+    """The name a typed answer is saved under: main.py (or main.rb) for a challenge with one
+    question, q1.py, q2.rb, ... for one with several."""
+    stem = "main" if question_count == 1 else f"q{question}"
+    return f"{stem}{LANGUAGES[language].extensions[0]}"
+
+
+def answer_file(code_dir: Path, question: int) -> str:
+    """The file that answers `question` in a submission of a challenge with several questions
+    (q1.py, q2.rb, ...), or "" when the student wrote nothing for it."""
+    for lang in LANGUAGES.values():
+        for extension in lang.extensions:
+            if (Path(code_dir) / f"q{question}{extension}").is_file():
+                return f"q{question}{extension}"
+    return ""
+
+
+def _single_question_file(code_dir: Path, preferred: str) -> str:
+    """The file to run for a challenge with one question: the instructor's main file when the submission
+    has it, otherwise "" so run_tests picks it (a typed answer is the only file, main.py or main.rb)."""
+    if preferred.strip():
+        try:
+            return pick_main_file(code_dir, preferred)
+        except CodeTestError:
+            pass
+    return ""
+
+
+def _skipped(test: dict, question: int) -> TestResult:
+    return TestResult(
+        test_id=test["id"], name=test["name"], visible=bool(test.get("visible")), points=test.get("points", 1),
+        match=test.get("match", "exact"), status="skipped", passed=False,
+        expected_output=test.get("expected_output", ""), actual_output="",
+        stderr="No code was submitted for this task.", question=question)
+
+
+def run_question(code_dir: Path, question: dict, tests: list, *, file: str = "") -> QuestionRun:
+    """Run one question's tests (those of `tests` that name it) on `file`, relative to code_dir ("" picks
+    it, as run_tests does). Raises what run_tests raises."""
+    mine = [t for t in tests if t.get("question", 1) == question["id"]]
+    run = run_tests(Path(code_dir), mine, main_file=file)
+    for result in run.results:
+        result.question = question["id"]
+    return QuestionRun(question["id"], question["title"], True, run.file, run.language, run.results)
+
+
+def run_questions(code_dir: Path, questions: list, tests: list, *, main_file: str = "") -> list:
+    """Run each question's tests on the code that answers it; returns a QuestionRun per question.
+
+    A challenge with one question runs `main_file` (or the only code file), as run_tests does. With
+    several, each question is answered by its own file (see answer_file): one without a file is not
+    run and its tests earn nothing. Raises what run_tests raises, and runs nothing more after that."""
+    code_dir = Path(code_dir)
+    if not code_dir.is_dir():
+        raise CodeTestError("This submission has no code.")
+    runs = []
+    for q in questions:
+        if len(questions) == 1:
+            file = _single_question_file(code_dir, main_file)
+        else:
+            file = answer_file(code_dir, q["id"])
+            if not file:
+                mine = [t for t in tests if t.get("question", 1) == q["id"]]
+                runs.append(QuestionRun(q["id"], q["title"], False, "", "", [_skipped(t, q["id"]) for t in mine]))
+                continue
+        runs.append(run_question(code_dir, q, tests, file=file))
+    return runs
