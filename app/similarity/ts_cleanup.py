@@ -563,9 +563,12 @@ class _Cleaner:
         return bool(statements) and all(self._inside_removed(s) for s in statements)
 
 
-def strip_dead_code(source: str, language: str, external_names: set[str] | None = None) -> str:
+def strip_dead_code(source: str, language: str, external_names: set[str] | None = None,
+                    keep_lines: bool = False) -> str:
     """`source` (Java, JavaScript, C or C++) without unused local declarations,
-    dead branches and unreachable statements. Unparseable code comes back unchanged."""
+    dead branches and unreachable statements. Unparseable code comes back unchanged.
+    `keep_lines`: removed code leaves its line breaks behind, so every remaining
+    line keeps its line number (for fingerprints, whose matches are shown by line)."""
     parser = _parser(language)
     if parser is None:
         return source
@@ -601,6 +604,8 @@ def strip_dead_code(source: str, language: str, external_names: set[str] | None 
     out, last = [], 0
     for start, end in merged:
         out.append(data[last:start])
+        if keep_lines:
+            out.append(b"\n" * data.count(b"\n", start, end))
         last = end
     out.append(data[last:])
     return b"".join(out).decode("utf-8", errors="replace")

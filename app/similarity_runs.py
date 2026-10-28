@@ -21,7 +21,8 @@ from .notebook import read_code
 from .similarity import report_similarity as _report_sim
 from .similarity.core import Fingerprint, compare_all, fingerprint_source, subtract_starter
 from .similarity.python_cleanup import names_in
-from .similarity.semantic import apply_semantic_signal, get_semantic_service, normalize_code, submissions_needing_semantic
+from .similarity.semantic import (apply_semantic_signal, get_semantic_service, normalize_code, strip_junk,
+                                  submissions_needing_semantic)
 
 
 @dataclass
@@ -101,16 +102,21 @@ def code_similarity_for_dirs(code_dirs: dict[str, Path], starter_fp=None,
             files = [(path, *read_code(path)) for path in sorted(code_dir.rglob("*"))
                      if path.is_file() and path.suffix.lower() in ANALYZED_EXTENSIONS]
         # Names each code file uses, so a top-level constant read by
-        # another file isn't removed as "unused" before the semantic check.
+        # another file isn't removed as "unused" by the junk-code cleanup.
         py_names = {path: names_in(source) for path, _, source in files}
         own_files = []
         for path, name, source in files:
-            fp = subtract_starter(fingerprint_source(sid, name, source), starter_fp)
+            external = set().union(*(names for other, names in py_names.items() if other != path))
+            # Fingerprints come from the code without junk (unused variables,
+            # dead branches), so padding a copy doesn't lower its Jaccard. Removed
+            # code leaves its line breaks, so highlights keep the original line numbers.
+            cleaned = strip_junk(source, name, external, keep_lines=True)
+            fp = subtract_starter(fingerprint_source(sid, name, cleaned), starter_fp)
             merged.hashes |= fp.hashes
             own_files.append(_self_checks.OwnFile(name=display_name(code_dir, path, name),
-                                                  source=source, hashes=set(fp.hashes)))
+                                                  source=source, hashes=set(fp.hashes),
+                                                  fingerprinted=cleaned))
             merged.token_count += fp.token_count
-            external = set().union(*(names for other, names in py_names.items() if other != path))
             normalized_files.append(normalize_code(source, name, external))
         fingerprints[sid] = merged
         files_by_submission[sid] = own_files

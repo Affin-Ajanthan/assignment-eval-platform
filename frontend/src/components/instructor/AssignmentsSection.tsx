@@ -411,6 +411,8 @@ export default function AssignmentsSection({
               </div>
             )}
           </>
+        )}
+
         {form.types.includes("code") && (
           <fieldset className="mt-3">
             <legend className="text-sm font-semibold">Code similarity</legend>
@@ -640,6 +642,8 @@ export default function AssignmentsSection({
                     <p className="text-xs text-gray-600" data-testid="test-cases-summary">
                       Test cases: {a.test_cases.length} ({a.test_cases.filter((t) => t.visible).length} visible) ·{" "}
                       {a.test_cases.reduce((sum, t) => sum + t.points, 0)} points
+                    </p>
+                  )}
                   {a.submission_types.includes("code") && (
                     <p className="text-xs text-gray-600">
                       Code similarity: {a.ignore_common_code ? "ignores code most of the class shares" : "compares all code"}

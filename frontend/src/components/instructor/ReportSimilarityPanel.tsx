@@ -77,6 +77,7 @@ export default function ReportSimilarityPanel({
           (b.semantic_similarity ?? 0) - (a.semantic_similarity ?? 0)
       )
     : [];
+  const citedWords = Object.values(result?.cited_words_removed ?? {}).reduce((sum, n) => sum + n, 0);
 
   return (
     <div className="mt-6 border-t border-gray-200 pt-4">
@@ -239,6 +240,7 @@ export default function ReportSimilarityPanel({
               `Template "${result.template_filename}" cut out of reports (${Object.values(
                 result.template_words_removed
               ).reduce((sum, n) => sum + n, 0)} words in total) · `}
+            {citedWords > 0 && `References and cited quotations ignored (${citedWords} words in total) · `}
             {result.common_fingerprints_excluded > 0 &&
               `${result.common_fingerprints_excluded} fingerprint(s) shared by most reports ignored · `}
             {result.semantic.status === "ok" && `Semantic model: ${result.semantic.model}`}

@@ -297,3 +297,65 @@ def test_failed_model_load_is_retried_after_the_cooldown(monkeypatch):
     assert service.load() is True and service.status == "ready" and len(attempts) == 2
     result = rs.compare_reports({"orig": ORIGINAL, "copy": COPIED}, service)
     assert result.semantic_status == "ok"
+
+
+# ---- cited material: reference lists and cited quotations are cut out ------
+
+OWN_A = ("I designed the lending module around a single Loan class that records the book, the member and the due "
+         "date, and every change to a loan goes through one method so that the fines are always recalculated. "
+         "The menu reads one option at a time and validates it before calling the module, which kept the main "
+         "loop short. Testing showed that dates entered with slashes were rejected, so I accepted both forms. ") * 2
+OWN_B = ("My solution keeps the books and members in two dictionaries that are saved to separate CSV files when "
+         "the program exits. Borrowing checks the member's limit first and then the book's availability, and a "
+         "returned book clears its due date. The hardest part was the report of overdue loans, which I sorted "
+         "by the number of days late so the worst cases appear at the top of the list for the librarian. ") * 2
+SHARED_REFERENCES = (" 9. References Python Software Foundation (2024). csv - CSV File Reading and Writing. "
+                     "https://docs.python.org/3/library/csv.html Python Software Foundation (2024). datetime - "
+                     "Basic date and time types. https://docs.python.org/3/library/datetime.html")
+
+
+def test_a_shared_reference_list_no_longer_makes_reports_look_alike():
+    a, b = OWN_A + SHARED_REFERENCES, OWN_B + SHARED_REFERENCES
+    text, cut = rs.remove_cited_text(a)
+    assert text == " ".join(OWN_A.split()) and cut == rs._word_count(SHARED_REFERENCES)
+    result = rs.compare_reports({"1": a, "2": b})
+    assert result.pairs[0].passages == [] and result.pairs[0].jaccard == 0.0
+    assert result.cited_words_removed == {"1": cut, "2": cut}
+
+
+def test_an_informal_short_reference_list_is_cut_too():
+    informal = OWN_A + " References Python docs: enum, dataclasses and csv modules. Lecture notes: Week 6 - Classes."
+    text, cut = rs.remove_cited_text(informal)
+    assert text == " ".join(OWN_A.split()) and cut > 0
+
+
+def test_the_table_of_contents_entry_is_not_the_reference_list():
+    report = "Contents 1. Design 2. Testing 9. References " + OWN_A + SHARED_REFERENCES
+    text, _ = rs.remove_cited_text(report)
+    assert text.startswith("Contents 1. Design 2. Testing 9. References I designed")  # only the real list goes
+
+
+def test_copied_prose_under_a_made_up_references_heading_is_kept():
+    # a long section that doesn't read like a reference list (no URLs, years, DOIs)
+    hidden = OWN_A + " References " + OWN_B
+    assert rs.remove_cited_text(hidden) == (" ".join(hidden.split()), 0)
+    # nor is a reference list that is most of the report
+    assert rs.remove_cited_text("Intro text here. References " + SHARED_REFERENCES * 3)[1] == 0
+
+
+def test_an_appendix_after_the_references_is_kept():
+    report = OWN_A + SHARED_REFERENCES + " Appendix A Sample run of the program with three loans."
+    text, _ = rs.remove_cited_text(report)
+    assert text.endswith("Appendix A Sample run of the program with three loans.")
+    assert "docs.python.org" not in text
+
+
+def test_only_quotations_followed_by_a_citation_are_cut():
+    cited = 'As the guide puts it, "a function should do one thing and do it well" (Martin, 2008), so I split it.'
+    numbered = 'The standard says "dates must be written in the ISO format year month day" [3] and I followed it.'
+    bare = 'My tutor said "write the tests before the code every single time" and I did.'
+    short = 'It is "fast" (Smith, 2020).'
+    assert rs.remove_cited_text(cited) == ("As the guide puts it, , so I split it.", 10)
+    assert rs.remove_cited_text(numbered)[1] == 11
+    assert rs.remove_cited_text(bare) == (bare, 0)          # no citation: could be copied text in quote marks
+    assert rs.remove_cited_text(short) == (short, 0)        # too short to matter
