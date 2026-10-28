@@ -1,16 +1,21 @@
-"""Students run their own code against the visible tests of a code challenge.
+"""Students run their typed code against ALL of a code challenge's test cases.
 
-POST /assignments/{id}/sample-run takes the code the student has typed (it is
-not a submission yet), runs it in the Docker sandbox against the VISIBLE test
-cases only, and returns each test's expected and actual output. It is practice:
-it never creates a submission or changes a mark.
+POST /assignments/{id}/run-code takes the code the student has typed (it is not
+a submission yet), runs it in the Docker sandbox against every test case of the
+challenge, visible and hidden, and tells the student only what they may know:
 
-Hidden tests never take part: they are not run and not mentioned beyond how
-many there are. Every rule below is enforced here, whatever the page shows.
+- every test passed: ``all_passed`` and the counts;
+- a VISIBLE test failed: that test's expected output and actual output (plus the
+  error message when the program crashed or ran out of time);
+- a HIDDEN test failed: only how many did. Hidden tests' names, inputs and
+  expected outputs never leave the server.
 
-Each run starts Docker containers, so runs are limited: one at a time per
-student, a number per hour per student, and a cap on runs at once across the
-server.
+It is practice: it never creates a submission or changes a mark. Every rule
+below is enforced here, whatever the page shows.
+
+Each run starts Docker containers (one per test), so runs are limited: one at a
+time per student, a number per hour per student, and a cap on runs at once
+across the server.
 """
 
 from __future__ import annotations
@@ -52,8 +57,8 @@ class RunLimitError(Exception):
 
 
 class RunLimiter:
-    """Keeps sample runs from overloading the server. In memory, so the counts
-    start again when the server restarts (the limits are about load, not marks)."""
+    """Keeps runs from overloading the server. In memory, so the counts start
+    again when the server restarts (the limits are about load, not marks)."""
 
     def __init__(self, per_hour: int = RUNS_PER_HOUR, max_parallel: int = MAX_PARALLEL_RUNS,
                  clock: Callable[[], float] = time.monotonic):
@@ -79,7 +84,7 @@ class RunLimiter:
             if len(starts) >= self.per_hour:
                 minutes = max(1, math.ceil((_HOUR - (self._clock() - starts[0])) / 60))
                 raise RunLimitError(
-                    429, f"You can run sample tests {self.per_hour} times per hour. Try again in {minutes} minute(s).")
+                    429, f"You can run your code {self.per_hour} times per hour. Try again in {minutes} minute(s).")
             if len(self._active) >= self.max_parallel:
                 raise RunLimitError(503, "The server is busy running other students' code. Try again in a moment.")
             starts.append(self._clock())
@@ -103,40 +108,39 @@ class RunLimiter:
 limiter = RunLimiter()
 
 
-class SampleRunIn(BaseModel):
+class RunIn(BaseModel):
     code: str = Field(min_length=1, max_length=MAX_CODE_CHARS)
     # Left out: the assignment's language (its first one when it allows several).
     language: Optional[Literal["python", "ruby"]] = None
 
 
-class SampleResultOut(BaseModel):
-    """One visible test's outcome. Deliberately without ids or points: nothing
-    here can hint at the hidden tests."""
+class RunFailureOut(BaseModel):
+    """A VISIBLE test that did not pass: what was expected and what the program
+    printed. Deliberately without ids, points or the input."""
 
+    sample: int  # its place among the visible tests, from 1
     name: str
-    input: str
-    match: str
+    status: str  # failed | error | timeout
     expected_output: str
-    status: str  # passed | failed | error | timeout
-    passed: bool
     actual_output: str
-    stderr: str = ""
+    error: str = ""  # the crash message, or the time-limit note
 
 
-class SampleRunOut(BaseModel):
+class RunOut(BaseModel):
     language: str
-    passed: int  # visible tests passed
-    total: int  # visible tests run
-    hidden_test_count: int  # not run here; they are used when the work is marked
-    remaining_runs: int  # sample runs left this hour
-    results: list[SampleResultOut]
+    all_passed: bool  # every test case, hidden ones included
+    passed: int  # test cases passed
+    total: int  # test cases run
+    hidden_failed: int  # hidden test cases that did not pass: nothing more is said about them
+    remaining_runs: int  # runs left this hour
+    failures: list[RunFailureOut]  # the visible tests that did not pass
 
 
 def _pick_language(requested: Optional[str], assignment: Assignment) -> str:
     supported = list(code_testing.LANGUAGES)
     allowed = [lang for lang in (assignment.code_languages or supported) if lang in supported]
     if not allowed:
-        raise HTTPException(400, "Sample tests can run Python and Ruby code only.")
+        raise HTTPException(400, "This can run Python and Ruby code only.")
     if requested is None:
         return allowed[0]
     if requested not in allowed:
@@ -144,25 +148,42 @@ def _pick_language(requested: Optional[str], assignment: Assignment) -> str:
     return requested
 
 
-@router.post("/assignments/{assignment_id}/sample-run", response_model=SampleRunOut)
-def run_sample_tests(
-    assignment_id: int, payload: SampleRunIn,
+def _report(results: list, language: str, runs_left: int) -> RunOut:
+    """What a student may see of a run: counts, plus expected vs actual for the visible tests that failed."""
+    failures: list[RunFailureOut] = []
+    visible_seen = hidden_failed = 0
+    for r in results:
+        if r.visible:
+            visible_seen += 1
+            if not r.passed:
+                failures.append(RunFailureOut(
+                    sample=visible_seen, name=r.name, status=r.status, expected_output=r.expected_output,
+                    actual_output=r.actual_output, error=r.stderr))
+        elif not r.passed:
+            hidden_failed += 1  # counted, never described
+    passed = sum(1 for r in results if r.passed)
+    return RunOut(language=language, all_passed=passed == len(results), passed=passed, total=len(results),
+                  hidden_failed=hidden_failed, remaining_runs=runs_left, failures=failures)
+
+
+@router.post("/assignments/{assignment_id}/run-code", response_model=RunOut)
+def run_code(
+    assignment_id: int, payload: RunIn,
     student: User = Depends(require_student), db: Session = Depends(get_db),
 ):
-    """Run the typed code against the assignment's visible tests."""
+    """Run the typed code against every test case of the assignment."""
     assignment = db.get(Assignment, assignment_id)
     now = utcnow_naive()
     if (not assignment or assignment.subject_id not in student_subject_ids(db, student)
             or assignment.status_at(now) == "upcoming"):
         raise HTTPException(404, "Assignment not found")
     if assignment.kind != "code_challenge":
-        raise HTTPException(400, "Sample tests are only for code challenges.")
+        raise HTTPException(400, "Running code is only for code challenges.")
     if assignment.status_at(now) != "open":
         raise HTTPException(400, "This assignment is closed.")
     tests = assignment.test_cases or []
-    visible = [t for t in tests if t.get("visible")]
-    if not visible:
-        raise HTTPException(400, "This assignment has no sample tests to run.")
+    if not tests:
+        raise HTTPException(400, "This assignment has no test cases to run.")
     language = _pick_language(payload.language, assignment)
     if not sandbox_enabled():
         raise HTTPException(503, "Running code is not available right now.")
@@ -173,10 +194,9 @@ def run_sample_tests(
         raise HTTPException(exc.status, exc.detail)
     try:
         filename = f"main{code_testing.LANGUAGES[language].extensions[0]}"
-        with tempfile.TemporaryDirectory(prefix="sample-run-") as folder:
+        with tempfile.TemporaryDirectory(prefix="student-run-") as folder:
             (Path(folder) / filename).write_bytes(payload.code.replace("\r\n", "\n").encode("utf-8"))
-            # Visible tests only, twice over: filtered above and again by the runner.
-            run = code_testing.run_tests(Path(folder), visible, main_file=filename, only_visible=True)
+            run = code_testing.run_tests(Path(folder), tests, main_file=filename)
     except code_testing.CodeTestError as exc:
         raise HTTPException(400, str(exc))
     except SandboxUnavailable:
@@ -184,13 +204,4 @@ def run_sample_tests(
     finally:
         limiter.finish(student.id)
 
-    results = [
-        SampleResultOut(name=r.name, input=next((t["input"] for t in visible if t["id"] == r.test_id), ""),
-                        match=r.match, expected_output=r.expected_output, status=r.status, passed=r.passed,
-                        actual_output=r.actual_output, stderr=r.stderr)
-        for r in run.results
-    ]
-    return SampleRunOut(
-        language=language, passed=sum(1 for r in results if r.passed), total=len(results),
-        hidden_test_count=len(tests) - len(visible), remaining_runs=left, results=results,
-    )
+    return _report(run.results, language, left)

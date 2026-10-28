@@ -255,18 +255,34 @@ to a normal assignment, but a challenge cannot run them yet.
 
 **Students** answer in a code editor on the assignment card instead of
 uploading a file (the typed code is saved as `main.py` / `main.rb`, through the
-same `/submissions` endpoints). The visible tests are shown as examples. **Run
-sample tests** (`POST /assignments/{id}/sample-run`) runs the typed code against
-the **visible tests only** and shows each one's expected and actual output. It
-is practice: no submission is made and no mark changes. Limits, since every run
-starts Docker containers: one run at a time per student,
+same `/submissions` endpoints). The editor has three buttons:
+
+- **Run** (`POST /assignments/{id}/run-code`) runs the typed code against **every
+  test case, hidden ones included**, and tells the student only this: if all
+  passed, that all test cases passed; otherwise how many passed, and for each
+  **visible** test that failed just its **expected output and actual output**
+  (plus the error message if the program crashed or ran out of time). A failing
+  **hidden** test is only counted ("2 hidden test cases did not pass"). Run is
+  practice: no submission is made and no mark changes, and the result is dropped
+  as soon as the code is edited.
+- **Submit** hands the code in (a new submission, or an update of the existing
+  one while the assignment is open and not yet marked).
+- **Cancel** closes the editor.
+
+Before a student has submitted, the assignment shows **no** sample input or
+expected output (the server sends none; the instructor's description is what
+students read up front); the visible tests appear on the assignment, above the
+editor when they edit, once they have submitted. Limits, since every run
+starts a Docker container per test case: one run at a time per student,
 `CODE_SAMPLE_RUNS_PER_HOUR` (10) per student, and `CODE_SAMPLE_MAX_PARALLEL` (2)
 at once on the server. The counts are in memory and start again when the
 backend restarts.
 
-**Hidden tests never leave the server.** Students receive the visible tests,
-and only how *many* hidden tests there are; a sample run returns no test ids
-or points that could hint at them. The instructor's view shows every test.
+**Hidden tests never leave the server.** Students receive the visible tests
+(after submitting, or when one fails in a run), and only how *many* hidden
+tests there are or failed; a run returns no test ids, points or inputs that
+could hint at them, and a hidden test's error output is never shown. The
+instructor's view shows every test.
 
 **Instructors** open **Tests** on a submission:
 
@@ -635,7 +651,7 @@ rejection), covering the same flow the automated backend tests cover.
   `exact` matching is strict about inner spaces and wording; and the mark
   measures only what the tests check, not code quality, style or a report. Each
   mark is saved one submission at a time ("Mark all" for a class is not built).
-  Sample-run limits reset when the backend restarts. The editor is a plain code
+  The Run limits reset when the backend restarts. The editor is a plain code
   box, without syntax colouring.
 - `HeuristicRubricGrader` and the AI-content heuristics are keyword/style
   signals, not semantic understanding or validated classifiers. Treat

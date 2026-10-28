@@ -420,8 +420,8 @@ class StudentAssignmentOut(BaseModel):
     student_ai_check: bool = True
     # Set only while marks are still held back: when they will be released.
     marks_release_at: Optional[UTCDateTime] = None
-    # The tests marked visible, as examples for the student; hidden tests are
-    # never sent, only how many there are.
+    # The tests marked visible, as examples for the student, but only once they have
+    # submitted (empty before); hidden tests are never sent, only how many there are.
     sample_tests: list[SampleTestOut] = []
     hidden_test_count: int = 0
     my_submission: Optional[MySubmissionOut]
@@ -1418,8 +1418,11 @@ def _student_assignment_out(db: Session, student: User, a: Assignment, now: date
         student_similarity_check=_on(a.student_similarity_check),
         student_ai_check=_on(a.student_ai_check),
         marks_release_at=None if a.marks_released_at(now) else _as_utc(a.marks_release_at),
+        # The samples (a visible test's input and expected output) are sent only once the
+        # student has submitted. Before that they meet the visible tests by running their
+        # code ("Run"), where a failing visible test shows its expected and actual output.
         sample_tests=[SampleTestOut(**{k: t[k] for k in SampleTestOut.model_fields})
-                      for t in a.test_cases or [] if t.get("visible")],
+                      for t in a.test_cases or [] if t.get("visible") and mine is not None],
         hidden_test_count=sum(1 for t in a.test_cases or [] if not t.get("visible")),
         my_submission=_my_submission_out(mine, status == "open", now) if mine else None,
     )
@@ -2981,7 +2984,7 @@ from .routers.self_checks import router as _self_check_router  # noqa: E402  (af
 
 app.include_router(_self_check_router)
 
-# Students run their typed code against a code challenge's visible tests: app/routers/sample_runs.py.
-from .routers.sample_runs import router as _sample_run_router  # noqa: E402
+# Students run their typed code against a code challenge's tests: app/routers/student_runs.py.
+from .routers.student_runs import router as _student_run_router  # noqa: E402
 
-app.include_router(_sample_run_router)
+app.include_router(_student_run_router)

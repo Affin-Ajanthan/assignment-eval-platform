@@ -7,6 +7,7 @@ import Message, { MessageState } from "@/components/Message";
 import SelfCheckPanel from "@/components/student/SelfCheckPanel";
 import UploadForm from "@/components/student/UploadForm";
 import CodeEditorForm, { editorLanguages } from "@/components/student/CodeEditorForm";
+import SampleTests from "@/components/student/SampleTests";
 import { OpenForm, TYPE_LABEL } from "@/components/student/labels";
 import { languageNames } from "@/lib/codeLanguages";
 
@@ -32,7 +33,7 @@ export default function AssignmentCard({
     ? [sub.has_code && "code", sub.has_report && "report", sub.has_video && "video"].filter(Boolean).join(", ")
     : "";
   const formMode = openForm?.id === a.id ? openForm.mode : null;
-  // A code challenge is answered by typing code (and practising on the sample tests), not by uploading a file.
+  // A code challenge is answered by typing code (checking it with Run, then Submit), not by uploading a file.
   // Only when the server can run its language: otherwise the usual upload form is used.
   const useEditor = a.assignment_type === "code_challenge" && editorLanguages(a).length > 0;
   const FormComponent = useEditor ? CodeEditorForm : UploadForm;
@@ -60,40 +61,9 @@ export default function AssignmentCard({
         </div>
       )}
 
-      {(a.sample_tests.length > 0 || a.hidden_test_count > 0) && (
-        <div className="mt-3" data-testid="sample-tests">
-          <p className="text-sm font-semibold">Tests for your code</p>
-          <p className="text-xs text-gray-500">
-            Your code is run with each test&apos;s input and its output is compared with the expected output.
-            {a.hidden_test_count > 0 &&
-              ` ${a.hidden_test_count} more test${a.hidden_test_count === 1 ? " is" : "s are"} hidden and used only for marking.`}
-          </p>
-          {a.sample_tests.map((t, i) => (
-            <details key={i} className="mt-2 rounded-md border border-gray-200 bg-gray-50">
-              <summary className="cursor-pointer px-3 py-1.5 text-sm">
-                <span className="font-semibold">{t.name}</span>{" "}
-                <span className="text-xs text-gray-500">
-                  {t.points} point{t.points === 1 ? "" : "s"} · {t.match === "contains" ? "output contains" : "exact output"}
-                </span>
-              </summary>
-              <div className="grid gap-2 px-3 pb-2 sm:grid-cols-2">
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-gray-600">Input</p>
-                  <pre className="mt-1 overflow-auto whitespace-pre-wrap rounded border border-gray-200 bg-white p-2 font-mono text-xs">
-                    {t.input === "" ? "(none)" : t.input}
-                  </pre>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-gray-600">Expected output</p>
-                  <pre className="mt-1 overflow-auto whitespace-pre-wrap rounded border border-gray-200 bg-white p-2 font-mono text-xs">
-                    {t.expected_output}
-                  </pre>
-                </div>
-              </div>
-            </details>
-          ))}
-        </div>
-      )}
+      {/* The samples are shown only after the student has submitted (the server sends none before).
+          While the code editor is open it shows them itself, right above the code box. */}
+      {sub && !(formMode && useEditor) && <SampleTests samples={a.sample_tests} hiddenCount={a.hidden_test_count} />}
 
       <dl className="mt-3 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[max-content_1fr]">
         <dt className="font-semibold">Available from</dt>

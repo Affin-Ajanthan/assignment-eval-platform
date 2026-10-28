@@ -264,7 +264,7 @@ def run_tests(code_dir: Path, tests: list, *, main_file: str = "", only_visible:
 
     Raises SandboxUnavailable (and runs nothing) when Docker cannot be used,
     and CodeTestError when the submission cannot be run. `only_visible` runs
-    just the tests students may see (the students' "run sample tests")."""
+    just the visible tests."""
     if not _docker_ready(runner):
         raise SandboxUnavailable("Docker is not available, so the tests were not run")
     code_dir = Path(code_dir).resolve()

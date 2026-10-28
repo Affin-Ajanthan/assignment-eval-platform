@@ -1,5 +1,5 @@
-"""Students running their typed code against a code challenge's visible tests
-(POST /assignments/{id}/sample-run, app/routers/sample_runs.py).
+"""Students running their typed code against all of a code challenge's test cases
+(POST /assignments/{id}/run-code, app/routers/student_runs.py).
 
 The runner is faked, so these tests need no Docker.
 """
@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from app.evaluator import code_testing as ct
 from app.evaluator.code_execution import SandboxUnavailable
 from app.main import app as fastapi_app
-from app.routers import sample_runs as sr
+from app.routers import student_runs as sr
 from tests.auth_helpers import auth_headers, new_student, setup_subject_with_users
 
 client = TestClient(fastapi_app)
@@ -50,32 +50,45 @@ def _challenge(itok, subject, name, tests=None, *, hours_open=(-1, 168), **extra
 
 
 def _run(assignment, token, code="print(int(input()) * 2)", **extra):
-    return client.post(f"/assignments/{assignment['id']}/sample-run", headers=auth_headers(token),
+    return client.post(f"/assignments/{assignment['id']}/run-code", headers=auth_headers(token),
                        json={"code": code, **extra})
 
 
 class FakeRunTests:
-    """Stands in for code_testing.run_tests: records what it was given and
-    answers 'passed' for the tests expecting 42."""
+    """Stands in for code_testing.run_tests: records what it was given and answers per test.
 
-    def __init__(self, error=None):
-        self.calls, self.error = [], error
+    By default a test passes when it expects "42" (as if the program printed 42) and
+    fails otherwise; `outcomes` overrides a test by name with (status, actual_output, stderr)."""
+
+    def __init__(self, outcomes=None, error=None):
+        self.calls, self.outcomes, self.error = [], outcomes or {}, error
 
     def __call__(self, code_dir, tests, *, main_file="", only_visible=False, **kwargs):
         if self.error:
             raise self.error
         self.calls.append({"file": main_file, "code": (Path(code_dir) / main_file).read_text(encoding="utf-8"),
                            "names": [t["name"] for t in tests], "only_visible": only_visible})
-        results = [ct.TestResult(test_id=t["id"], name=t["name"], visible=t["visible"], points=t["points"],
-                                 match=t["match"], status="passed" if t["expected_output"] == "42" else "failed",
-                                 passed=t["expected_output"] == "42", expected_output=t["expected_output"],
-                                 actual_output="42") for t in tests if t["visible"] or not only_visible]
+        results = []
+        for t in tests:
+            if only_visible and not t["visible"]:
+                continue
+            default = ("passed", "42", "") if t["expected_output"] == "42" else ("failed", "42", "")
+            status, actual, stderr = self.outcomes.get(t["name"], default)
+            results.append(ct.TestResult(
+                test_id=t["id"], name=t["name"], visible=t["visible"], points=t["points"], match=t["match"],
+                status=status, passed=status == "passed", expected_output=t["expected_output"],
+                actual_output=actual, stderr=stderr))
         return ct.TestRun(file=main_file, language="python", results=results)
 
 
 @pytest.fixture
 def fake(monkeypatch):
     runner = FakeRunTests()
+    monkeypatch.setattr(sr.code_testing, "run_tests", runner)
+    return runner
+
+
+def _use(monkeypatch, runner):
     monkeypatch.setattr(sr.code_testing, "run_tests", runner)
     return runner
 
@@ -130,30 +143,66 @@ def test_the_limiter_allows_one_run_at_a_time_per_student_and_a_server_wide_cap(
 
 
 # --------------------------------------------------------------------------
-# The endpoint
+# What a student sees of a run
 # --------------------------------------------------------------------------
 
 
-def test_a_student_runs_their_code_against_the_visible_tests_only(fake):
+def test_run_checks_every_test_case_but_shows_only_what_a_student_may_know(fake):
     subject, itok, stok = setup_subject_with_users(client)
-    assignment = _challenge(itok, subject, "Visible only", TESTS)
+    assignment = _challenge(itok, subject, "All tests", TESTS)
     r = _run(assignment, stok, code="print(int(input()) * 2)\r\n")
     assert r.status_code == 200, r.text
     body = r.json()
 
-    assert (body["language"], body["passed"], body["total"], body["hidden_test_count"]) == ("python", 1, 2, 1)
+    # Doubles passes, the hidden test and "Wrong on purpose" fail.
+    assert (body["language"], body["all_passed"], body["passed"], body["total"], body["hidden_failed"]) == (
+        "python", False, 1, 3, 1)
     assert body["remaining_runs"] == 9
-    assert [(x["name"], x["status"], x["passed"]) for x in body["results"]] == [
-        ("Doubles", "passed", True), ("Wrong on purpose", "failed", False)]
-    first = body["results"][0]
-    assert (first["input"], first["expected_output"], first["actual_output"], first["match"]) == (
-        "21", "42", "42", "exact")
-    # Only the visible tests reached the runner, and the typed code was saved as main.py (newlines unified).
+    # The failing VISIBLE test shows what was expected and what the program printed, and nothing else.
+    assert body["failures"] == [{"sample": 2, "name": "Wrong on purpose", "status": "failed",
+                                 "expected_output": "99", "actual_output": "42", "error": ""}]
+    # Every test case ran, the hidden one included; the typed code was saved as main.py (newlines unified).
     assert fake.calls == [{"file": "main.py", "code": "print(int(input()) * 2)\n",
-                           "names": ["Doubles", "Wrong on purpose"], "only_visible": True}]
-    # Nothing about the hidden test, and no ids or points that could hint at it.
-    assert not any(secret in json.dumps(body) for secret in ("HIDDEN", "points"))
-    assert set(first) == {"name", "input", "match", "expected_output", "status", "passed", "actual_output", "stderr"}
+                           "names": ["Doubles", "HIDDEN-NAME", "Wrong on purpose"], "only_visible": False}]
+    # Nothing about the hidden test, and no ids, points or inputs that could hint at it.
+    assert not any(secret in json.dumps(body) for secret in ("HIDDEN", "points", "test_id", "visible", '"input"'))
+
+
+def test_when_every_test_case_passes_the_student_just_sees_that_they_all_passed(monkeypatch):
+    _use(monkeypatch, FakeRunTests(outcomes={"HIDDEN-NAME": ("passed", "HIDDEN-OUT", ""),
+                                             "Wrong on purpose": ("passed", "99", "")}))
+    subject, itok, stok = setup_subject_with_users(client)
+    body = _run(_challenge(itok, subject, "All pass", TESTS), stok).json()
+    assert (body["all_passed"], body["passed"], body["total"], body["hidden_failed"], body["failures"]) == (
+        True, 3, 3, 0, [])
+    assert "HIDDEN" not in json.dumps(body) and "expected_output" not in json.dumps(body)
+
+
+def test_a_failing_hidden_test_is_only_counted_when_every_visible_test_passes(monkeypatch):
+    _use(monkeypatch, FakeRunTests(outcomes={"Wrong on purpose": ("passed", "99", "")}))  # the hidden one still fails
+    subject, itok, stok = setup_subject_with_users(client)
+    body = _run(_challenge(itok, subject, "Hidden fails", TESTS), stok).json()
+    assert (body["all_passed"], body["passed"], body["total"], body["hidden_failed"], body["failures"]) == (
+        False, 2, 3, 1, [])
+    assert "HIDDEN" not in json.dumps(body)
+
+
+def test_a_visible_test_that_crashes_or_times_out_shows_its_error_but_hidden_errors_stay_secret(monkeypatch):
+    _use(monkeypatch, FakeRunTests(outcomes={
+        "Doubles": ("error", "", "Traceback: boom"),
+        "Wrong on purpose": ("timeout", "partial", "Time limit of 10 seconds exceeded."),
+        "HIDDEN-NAME": ("error", "", "Traceback: failed on HIDDEN-IN secret"),
+    }))
+    subject, itok, stok = setup_subject_with_users(client)
+    body = _run(_challenge(itok, subject, "Crashes", TESTS), stok).json()
+    assert body["failures"] == [
+        {"sample": 1, "name": "Doubles", "status": "error", "expected_output": "42", "actual_output": "",
+         "error": "Traceback: boom"},
+        {"sample": 2, "name": "Wrong on purpose", "status": "timeout", "expected_output": "99",
+         "actual_output": "partial", "error": "Time limit of 10 seconds exceeded."},
+    ]
+    assert (body["hidden_failed"], body["passed"], body["total"]) == (1, 0, 3)
+    assert "secret" not in json.dumps(body) and "HIDDEN" not in json.dumps(body)  # the hidden test's error is not shown
 
 
 def test_a_run_is_practice_only_it_creates_no_submission(fake):
@@ -186,9 +235,9 @@ def test_only_enrolled_students_can_run_and_only_on_open_code_challenges(fake):
     _, other_itok, other_stok = setup_subject_with_users(client)
     assert _run(assignment, other_stok).status_code == 404                    # not enrolled in this subject
     assert _run(assignment, itok).status_code == 403                          # an instructor
-    assert client.post("/assignments/999999/sample-run", headers=auth_headers(stok),
+    assert client.post("/assignments/999999/run-code", headers=auth_headers(stok),
                        json={"code": "x"}).status_code == 404
-    assert client.post(f"/assignments/{assignment['id']}/sample-run", json={"code": "x"}).status_code == 401
+    assert client.post(f"/assignments/{assignment['id']}/run-code", json={"code": "x"}).status_code == 401
 
     upcoming = _challenge(itok, subject, "Upcoming", TESTS, hours_open=(24, 48))
     assert _run(upcoming, stok).status_code == 404                            # not visible to students yet
@@ -198,10 +247,13 @@ def test_only_enrolled_students_can_run_and_only_on_open_code_challenges(fake):
     plain = _challenge(itok, subject, "Plain submission")
     r = _run(plain, stok)
     assert r.status_code == 400 and "only for code challenges" in r.json()["detail"]
+    assert fake.calls == []  # none of those ran anything
+
+    # A challenge whose tests are all hidden can still be run: the student just hears pass or fail.
     hidden_only = _challenge(itok, subject, "Hidden only", [TESTS[1]])
     r = _run(hidden_only, stok)
-    assert r.status_code == 400 and "no sample tests" in r.json()["detail"]
-    assert fake.calls == []  # none of those ran anything
+    assert r.status_code == 200
+    assert (r.json()["failures"], r.json()["hidden_failed"], r.json()["total"]) == ([], 1, 1)
 
 
 def test_code_size_is_limited_and_empty_code_is_refused(fake):

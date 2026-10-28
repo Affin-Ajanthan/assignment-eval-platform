@@ -152,7 +152,7 @@ export interface StudentAssignment {
   student_ai_check: boolean;
   /** Set only while marks are held back: when they will be released. */
   marks_release_at: string | null;
-  /** The visible tests, as examples; hidden tests are never sent, only counted. */
+  /** The visible tests, as examples, once the student has submitted (empty before); hidden tests are never sent, only counted. */
   sample_tests: SampleTest[];
   hidden_test_count: number;
   /** A code challenge is answered in the code editor instead of by uploading files. */
@@ -160,26 +160,33 @@ export interface StudentAssignment {
   my_submission: MySubmission | null;
 }
 
-/** A visible test's outcome from POST /assignments/{id}/sample-run (nothing about hidden tests). */
-export interface SampleRunResult {
+/** A VISIBLE test that did not pass, from POST /assignments/{id}/run-code: what was expected and what was printed. */
+export interface CodeRunFailure {
+  /** Its place among the visible tests, from 1. */
+  sample: number;
   name: string;
-  input: string;
-  match: TestMatch;
+  status: "failed" | "error" | "timeout";
   expected_output: string;
-  status: "passed" | "failed" | "error" | "timeout";
-  passed: boolean;
   actual_output: string;
-  stderr: string;
+  /** The crash message, or the time-limit note. */
+  error: string;
 }
 
-export interface SampleRun {
+/**
+ * What a student sees after pressing Run: the code was run against every test
+ * case, hidden ones included, but a hidden test is only ever counted.
+ */
+export interface CodeRun {
   language: string;
+  /** Every test case passed, hidden ones included. */
+  all_passed: boolean;
   passed: number;
   total: number;
-  /** Hidden tests are not run here; they are used when the work is marked. */
-  hidden_test_count: number;
+  /** Hidden test cases that did not pass; nothing more is said about them. */
+  hidden_failed: number;
   remaining_runs: number;
-  results: SampleRunResult[];
+  /** The visible tests that did not pass, with expected vs actual output. */
+  failures: CodeRunFailure[];
 }
 
 /** A visible test as a student sees it. */
