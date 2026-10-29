@@ -13,8 +13,9 @@ import RichText from "@/components/RichText";
 import CodeEditorForm, { editorLanguages } from "@/components/student/CodeEditorForm";
 
 /**
- * A code challenge's own page, opened with Do assignment on its card on the student portal. The questions
- * are shown here and not on the card. The student writes their code and hands the tasks in one at a time
+ * A code challenge's own page, opened with Do assignment on its card on the student portal. It first shows only
+ * the title and the instructions, with a Do task button; pressing it shows the tasks and their questions in
+ * the same page (not on the card). The student writes their code and hands the tasks in one at a time
  * (see CodeEditorForm). What was already handed in comes from the server, so the page can be closed and
  * reopened, and still shows the results after the deadline.
  */
@@ -24,6 +25,7 @@ export default function CodeChallengePage() {
   const [assignment, setAssignment] = useState<StudentAssignment | null>(null);
   const [work, setWork] = useState<CodeWork | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [started, setStarted] = useState(false); // the student pressed Do task: the tasks are shown
 
   const load = useCallback(async () => {
     try {
@@ -53,6 +55,9 @@ export default function CodeChallengePage() {
   if (!ready || !user) return null;
 
   const open = assignment?.status === "open";
+  const taskCount = assignment?.questions?.length ?? 0;
+  // Once an answer is handed in the student has plainly begun, so the tasks stay in view when the page is reopened.
+  const showTasks = started || (work?.questions.some((q) => q.submitted) ?? false);
   let body: ReactNode;
   if (error) {
     body = (
@@ -81,11 +86,27 @@ export default function CodeChallengePage() {
         </div>
         {assignment.description && (
           <div className="mt-3">
-            <p className="text-sm font-semibold">Description</p>
+            <p className="text-sm font-semibold">Instructions</p>
             <RichText text={assignment.description} className="text-sm text-gray-700" />
           </div>
         )}
-        <CodeEditorForm assignment={assignment} work={work} onWork={setWork} />
+        {showTasks ? (
+          <CodeEditorForm assignment={assignment} work={work} onWork={setWork} />
+        ) : (
+          // The tasks are not shown until the student asks for them: this page first gives only the title and
+          // the instructions.
+          <div className="mt-4" data-testid="do-task">
+            {taskCount > 1 && <p className="mb-2 text-sm text-gray-700">This assignment has {taskCount} tasks.</p>}
+            <button
+              type="button"
+              onClick={() => setStarted(true)}
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+              data-testid="do-task-button"
+            >
+              {open ? (taskCount > 1 ? "Do tasks" : "Do task") : taskCount > 1 ? "See tasks" : "See task"}
+            </button>
+          </div>
+        )}
       </>
     );
   }

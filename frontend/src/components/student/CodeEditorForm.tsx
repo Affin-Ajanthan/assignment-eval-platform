@@ -6,6 +6,7 @@ import { formatDateTime, formatMark } from "@/lib/datetime";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import Message, { MessageState } from "@/components/Message";
 import RichText from "@/components/RichText";
+import LineNumberedTextarea from "@/components/student/LineNumberedTextarea";
 import { CodeLanguageId, languagesFor } from "@/lib/codeLanguages";
 import { taskName } from "@/lib/tasks";
 
@@ -472,7 +473,7 @@ export default function CodeEditorForm({
             (saved || !locked) && <span className="text-xs text-gray-600">{languageName}</span>
           )}
         </div>
-        <textarea
+        <LineNumberedTextarea
           key={question.id}
           id={editorId}
           value={code}
@@ -486,7 +487,7 @@ export default function CodeEditorForm({
           wrap="off"
           readOnly={busy || locked}
           placeholder={locked ? undefined : PLACEHOLDER[language]}
-          className="mt-1 block w-full overflow-auto rounded-md border border-gray-300 bg-white p-3 font-mono text-sm leading-5 read-only:bg-gray-50"
+          className="resize-none read-only:bg-gray-50"
         />
         {!locked && starterOf(question.id).trim() !== "" && (
           <p className="mt-1 text-xs text-gray-600" data-testid="starter-note">

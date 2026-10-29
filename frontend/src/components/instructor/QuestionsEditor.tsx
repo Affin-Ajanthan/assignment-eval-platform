@@ -91,7 +91,7 @@ export default function QuestionsEditor({
       <legend className="text-sm font-semibold">Tasks and test cases</legend>
       <p className="text-xs text-gray-500">
         A code challenge needs at least one task. Each task has a title, its own question and its own test cases (input
-        and expected output), all required. Students see the questions only after they press Do assignment, and they hand the tasks in one
+        and expected output), all required. Students see the questions only after they press Do assignment and then Do task, and they hand the tasks in one
         at a time; the mark is the points of all the test cases passed, over all the tasks. Each test runs the
         student&apos;s program with the input below (as if typed on the keyboard) and compares its output. Use
         &ldquo;Output contains&rdquo; for menu-driven programs that print prompts. Hidden tests are never shown to
@@ -143,7 +143,7 @@ export default function QuestionsEditor({
               value={row.statement}
               rows={5}
               maxLength={10000}
-              placeholder="What the student must write. It is shown above the code box, after the student presses Do assignment."
+              placeholder="What the student must write. It is shown above the code box, after the student presses Do task."
               onChange={(text) => update(i, { statement: text })}
             />
 

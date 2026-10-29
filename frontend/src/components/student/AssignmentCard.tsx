@@ -96,8 +96,8 @@ export default function AssignmentCard({
           {manyTasks && <p className="text-sm font-semibold">{taskCount} tasks</p>}
           <p className="text-xs text-gray-500">
             {manyTasks
-              ? "The questions are shown when you press Do assignment, and you hand the tasks in one at a time. Each task is marked as soon as you submit it and cannot be changed afterwards; the mark adds up the test cases you pass in every task."
-              : "The question is shown when you press Do assignment. Your code is marked as soon as you submit it, and cannot be changed afterwards."}
+              ? "The questions are shown when you press Do assignment and then Do task, and you hand the tasks in one at a time. Each task is marked as soon as you submit it and cannot be changed afterwards; the mark adds up the test cases you pass in every task."
+              : "The question is shown when you press Do assignment and then Do task. Your code is marked as soon as you submit it, and cannot be changed afterwards."}
           </p>
         </div>
       )}
