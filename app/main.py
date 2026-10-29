@@ -258,6 +258,7 @@ _STARTER_CODE_MAX = 200_000
 _TEST_CASES_MAX = 50  # in all, whatever the number of questions
 _QUESTIONS_MAX = 20
 _STATEMENT_MAX = 10_000
+_TASK_STARTER_MAX = 50_000  # the student editor's limit (MAX_CODE_CHARS in app/routers/student_runs.py)
 _TEST_TEXT_MAX = 10_000
 
 
@@ -268,6 +269,9 @@ class QuestionIn(BaseModel):
 
     title: str = Field(default="", max_length=200)  # blank: "Task 1", "Task 2", ... (when there are several)
     statement: str = Field(default="", max_length=_STATEMENT_MAX)  # the question text, shown above the code box
+    # Optional starting code: put in the student's code box when they open the task, for them to write on.
+    # (The assignment's own starter_code is a different thing: instructor-only, left out of the similarity check.)
+    starter_code: str = Field(default="", max_length=_TASK_STARTER_MAX)
 
 
 class QuestionOut(QuestionIn):
@@ -1356,7 +1360,7 @@ def _clean_questions(questions: list[QuestionIn]) -> Optional[list[dict]]:
         return None
     return [
         {"id": n, "title": q.title.strip() or (f"Task {n}" if len(questions) > 1 else ""),
-         "statement": q.statement.strip()}
+         "statement": q.statement.strip(), "starter_code": q.starter_code if q.starter_code.strip() else ""}
         for n, q in enumerate(questions, start=1)
     ]
 

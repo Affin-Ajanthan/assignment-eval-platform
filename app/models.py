@@ -181,8 +181,9 @@ class Assignment(Base):
     # its own tests: a test says which one it belongs to ("question": 1, 2, ...; a test saved without it
     # belongs to task 1).
     test_cases = Column(JSON, nullable=True)
-    # The tasks of a code challenge: [{"id": 1, "title": str, "statement": str}, ...] in the order
-    # students see them ("statement" is the task's question text). NULL: one task without a title
+    # The tasks of a code challenge: [{"id": 1, "title": str, "statement": str, "starter_code": str}, ...]
+    # in the order students see them ("statement" is the task's question text, "starter_code" the code
+    # their editor starts with; older rows have no such key). NULL: one task without a title
     # (every challenge made before tasks existed). Read it through `questions`.
     code_questions = Column(JSON, nullable=True)
     # The file the tests run, e.g. "student_management.rb" (a name or a path
@@ -215,12 +216,13 @@ class Assignment(Base):
 
     @property
     def questions(self) -> list[dict]:
-        """The tasks of a code challenge, each {"id", "title", "statement"}, ids 1, 2, ... in order.
+        """The tasks of a code challenge, each {"id", "title", "statement", "starter_code"}, ids 1, 2, ...
+        in order (a task saved before starting code existed has no "starter_code" key).
         A challenge saved without any has the one untitled task that all its tests belong to.
         Empty for any other assignment."""
         if self.kind != "code_challenge":
             return []
-        return list(self.code_questions or [{"id": 1, "title": "", "statement": ""}])
+        return list(self.code_questions or [{"id": 1, "title": "", "statement": "", "starter_code": ""}])
 
     def tests_of(self, question_id: int) -> list[dict]:
         """The test cases of one task, in order."""

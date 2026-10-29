@@ -680,8 +680,9 @@ def test_students_see_each_questions_title_and_statement_but_never_a_test_case(f
         (1, 1, "Doubles"), (2, 1, "HIDDEN-NAME"), (3, 2, "Triples"), (4, 2, "Wrong on purpose")]
 
     seen = client.get(f"/assignments/{assignment['id']}", headers=auth_headers(stok)).json()
-    assert seen["questions"] == [{"id": 1, "title": "Double it", "statement": "Print twice the number."},
-                                 {"id": 2, "title": "Triple it", "statement": "Print three times the number."}]
+    assert seen["questions"] == [
+        {"id": 1, "title": "Double it", "statement": "Print twice the number.", "starter_code": ""},
+        {"id": 2, "title": "Triple it", "statement": "Print three times the number.", "starter_code": ""}]
     listed = json.dumps(client.get("/assignments", headers=auth_headers(stok)).json())
     for secret in ("Doubles", "Triples", "HIDDEN", "Wrong on purpose", "test_cases", "expected_output"):
         assert secret not in listed and secret not in json.dumps(seen), secret

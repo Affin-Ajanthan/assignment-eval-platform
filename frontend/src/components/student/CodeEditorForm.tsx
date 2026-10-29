@@ -222,7 +222,9 @@ export default function CodeEditorForm({
     : [{ id: 1, title: "", statement: "" }]; // a challenge made before tasks existed has the one
   const many = questions.length > 1;
   const open = assignment.status === "open";
-  const blankAnswer: Answer = { code: "", language: languages[0].id };
+  /** A task's code box before the student types: the instructor's starting code for it, if there is any. */
+  const starterOf = (id: number) => questions.find((q) => q.id === id)?.starter_code ?? "";
+  const blankFor = (id: number): Answer => ({ code: starterOf(id), language: languages[0].id });
   /** The answer the student handed in for a task, or null while it is not handed in. */
   const handedIn = (id: number): CodeAnswer | null => work.questions.find((q) => q.question === id && q.submitted) ?? null;
 
@@ -238,7 +240,7 @@ export default function CodeEditorForm({
   const busy = running || submitting;
   const editorId = `code-editor-${assignment.id}`;
 
-  const answerOf = (id: number): Answer => answers[id] ?? blankAnswer;
+  const answerOf = (id: number): Answer => answers[id] ?? blankFor(id);
   const question = questions.find((q) => q.id === current) ?? questions[0];
   const saved = handedIn(question.id);
   const locked = saved !== null || !open; // handed in (final), or the deadline has passed
@@ -252,7 +254,7 @@ export default function CodeEditorForm({
 
   /** A change to a task's code or language makes its last Run's result stale: drop it. */
   function change(id: number, patch: Partial<Answer>) {
-    setAnswers((all) => ({ ...all, [id]: { ...(all[id] ?? blankAnswer), ...patch } }));
+    setAnswers((all) => ({ ...all, [id]: { ...(all[id] ?? blankFor(id)), ...patch } }));
     setRuns((all) => ({ ...all, [id]: null }));
   }
 
@@ -388,8 +390,10 @@ export default function CodeEditorForm({
           >
             {questions.map((q) => {
               const selected = q.id === question.id;
-              // A tick once the task is handed in, a dot while some code is typed for it.
-              const mark = handedIn(q.id) ? "✓ " : (answers[q.id]?.code.trim() ?? "") !== "" ? "• " : "";
+              // A tick once the task is handed in, a dot while the student has changed the code for it
+              // (the starting code alone does not count).
+              const typedCode = answers[q.id]?.code.trim() ?? "";
+              const mark = handedIn(q.id) ? "✓ " : typedCode !== "" && typedCode !== starterOf(q.id).trim() ? "• " : "";
               return (
                 <button
                   key={q.id}
@@ -472,6 +476,11 @@ export default function CodeEditorForm({
           placeholder={locked ? undefined : PLACEHOLDER[language]}
           className="mt-1 block w-full overflow-auto rounded-md border border-gray-300 bg-white p-3 font-mono text-sm leading-5 read-only:bg-gray-50"
         />
+        {!locked && starterOf(question.id).trim() !== "" && (
+          <p className="mt-1 text-xs text-gray-600" data-testid="starter-note">
+            Your instructor gave you starting code for this task. Write your answer on top of it.
+          </p>
+        )}
         {!locked && (
           <p className="mt-1 text-xs text-gray-500">
             Tab indents; press Esc then Tab to move to the next control. {code.length} / {MAX_CODE_CHARS} characters.

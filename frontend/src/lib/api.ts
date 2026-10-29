@@ -118,6 +118,8 @@ export interface CodeQuestion {
   title: string;
   /** The question text: what the student must write. */
   statement: string;
+  /** Code the student's editor starts with for this task ("" = an empty box); missing from an older server. */
+  starter_code?: string;
 }
 
 /** One test for submitted code: `input` goes to standard input, the output is compared with `expected_output`. */
