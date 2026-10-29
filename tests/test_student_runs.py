@@ -84,7 +84,7 @@ class FakeRunTests:
             results.append(ct.TestResult(
                 test_id=t["id"], name=t["name"], visible=t["visible"], points=t["points"], match=t["match"],
                 status=status, passed=status == "passed", expected_output=t["expected_output"],
-                actual_output=actual, stderr=stderr))
+                actual_output=actual, stderr=stderr, input=t.get("input", "")))
         return ct.TestRun(file=main_file, language="python", results=results)
 
 
@@ -167,12 +167,12 @@ def test_run_checks_every_test_case_but_shows_only_what_a_student_may_know(fake)
     assert body["remaining_runs"] == 9
     # The failing VISIBLE test shows what was expected and what the program printed, and nothing else.
     assert body["failures"] == [{"sample": 2, "name": "Wrong on purpose", "status": "failed",
-                                 "expected_output": "99", "actual_output": "42", "error": ""}]
+                                 "input": "1", "expected_output": "99", "actual_output": "42", "error": ""}]
     # Every test case ran, the hidden one included; the typed code was saved as main.py (newlines unified).
     assert fake.calls == [{"file": "main.py", "code": "print(int(input()) * 2)\n",
                            "names": ["Doubles", "HIDDEN-NAME", "Wrong on purpose"], "only_visible": False}]
     # Nothing about the hidden test, and no ids, points or inputs that could hint at it.
-    assert not any(secret in json.dumps(body) for secret in ("HIDDEN", "points", "test_id", "visible", '"input"'))
+    assert not any(secret in json.dumps(body) for secret in ("HIDDEN", "points", "test_id", "visible"))
 
 
 def test_when_every_test_case_passes_the_student_just_sees_that_they_all_passed(monkeypatch):
@@ -203,13 +203,29 @@ def test_a_visible_test_that_crashes_or_times_out_shows_its_error_but_hidden_err
     subject, itok, stok = setup_subject_with_users(client)
     body = _run(_challenge(itok, subject, "Crashes", TESTS), stok).json()
     assert body["failures"] == [
-        {"sample": 1, "name": "Doubles", "status": "error", "expected_output": "42", "actual_output": "",
-         "error": "Traceback: boom"},
-        {"sample": 2, "name": "Wrong on purpose", "status": "timeout", "expected_output": "99",
+        {"sample": 1, "name": "Doubles", "status": "error", "input": "21", "expected_output": "42", "actual_output": "",
+         "error": "Compiler error."},  # the traceback itself is never shown to the student
+        {"sample": 2, "name": "Wrong on purpose", "status": "timeout", "input": "1", "expected_output": "99",
          "actual_output": "partial", "error": "Time limit of 10 seconds exceeded."},
     ]
     assert (body["hidden_failed"], body["passed"], body["total"]) == (1, 0, 3)
     assert "secret" not in json.dumps(body) and "HIDDEN" not in json.dumps(body)  # the hidden test's error is not shown
+
+
+def test_a_crash_is_reported_as_a_compiler_error_with_its_line_and_nothing_else():
+    from app.code_answers import compiler_error
+
+    syntax = 'Traceback...\n  File "/run/main.py", line 3\n    print(\n         ^\nSyntaxError: \'(\' was never closed'
+    assert compiler_error(syntax, "python") == "Compiler error. Error on line 3."
+    # A crash further down: the last frame in the student's file counts, not one inside the standard library.
+    nested = ('Traceback (most recent call last):\n  File "/run/main.py", line 9, in <module>\n    solve()\n'
+              '  File "/run/main.py", line 5, in solve\n    json.loads(x)\n'
+              '  File "/usr/lib/python3.12/json/__init__.py", line 346, in loads\nValueError: boom')
+    assert compiler_error(nested, "python") == "Compiler error. Error on line 5."
+    assert compiler_error("main.rb:4:in 'x': undefined local variable (NameError)\n\tfrom main.rb:8:in '<main>'",
+                          "ruby") == "Compiler error. Error on line 4."
+    assert compiler_error("something went wrong", "python") == "Compiler error."  # no line to point at
+    assert "out of memory" in compiler_error("Killed: probably out of memory (limit 256 MB).", "python")
 
 
 def test_a_run_is_practice_only_it_creates_no_submission(fake):
@@ -353,8 +369,8 @@ def test_submitting_saves_the_points_of_the_tests_passed_as_the_mark_and_shows_t
     run = _run_of(body)
     assert (run["passed"], run["total"], run["hidden_failed"]) == (1, 3, 1)
     assert run["failures"] == [{"sample": 2, "name": "Wrong on purpose", "status": "failed",
-                                "expected_output": "99", "actual_output": "42", "error": ""}]
-    assert not any(secret in json.dumps(body) for secret in ("HIDDEN", "points", "test_id", "visible", '"input"'))
+                                "input": "1", "expected_output": "99", "actual_output": "42", "error": ""}]
+    assert not any(secret in json.dumps(body) for secret in ("HIDDEN", "points", "test_id", "visible"))
     # Every test case ran, the hidden one included, on the typed code (newlines unified).
     assert fake.calls == [{"file": "main.py", "code": "print(int(input()) * 2)\n",
                            "names": ["Doubles", "HIDDEN-NAME", "Wrong on purpose"], "only_visible": False}]
@@ -588,7 +604,7 @@ def test_a_student_can_get_the_mark_of_code_that_was_submitted_unmarked(monkeypa
     assert (run["passed"], run["total"], run["hidden_failed"]) == (1, 3, 1)
     assert run["failures"][0]["name"] == "Wrong on purpose"           # the same report Submit gives
     assert runner.calls[0]["names"] == ["Doubles", "HIDDEN-NAME", "Wrong on purpose"]
-    assert not any(secret in json.dumps(body) for secret in ("HIDDEN", "points", "test_id", "visible", '"input"'))
+    assert not any(secret in json.dumps(body) for secret in ("HIDDEN", "points", "test_id", "visible"))
 
     mine = _my_submission(assignment, stok)
     assert (mine["status"], mine["final_mark"], mine["max_mark"], mine["can_edit"]) == ("graded", 2, 8, False)
@@ -698,7 +714,7 @@ def test_run_checks_the_tests_of_the_question_it_was_sent_for(fake):
     second = _run(assignment, stok, code="print(2)", question=2)
     assert (second.json()["passed"], second.json()["total"], second.json()["hidden_failed"]) == (1, 2, 0)
     assert second.json()["failures"] == [{"sample": 2, "name": "Wrong on purpose", "status": "failed",
-                                          "expected_output": "99", "actual_output": "42", "error": ""}]
+                                          "input": "1", "expected_output": "99", "actual_output": "42", "error": ""}]
     # Each run used only its own question's tests, and the code was saved in a file named after the question.
     assert [(c["file"], c["names"]) for c in fake.calls] == [
         ("q1.py", ["Doubles", "HIDDEN-NAME"]), ("q2.py", ["Triples", "Wrong on purpose"])]
@@ -741,11 +757,11 @@ def test_each_question_is_handed_in_and_marked_on_its_own_and_the_points_add_up(
     assert (one["earned"], one["total"], two["earned"], two["total"]) == (2, 5, 4, 5)
     assert (two["run"]["passed"], two["run"]["total"], two["run"]["hidden_failed"]) == (1, 2, 0)
     assert two["run"]["failures"] == [{"sample": 2, "name": "Wrong on purpose", "status": "failed",
-                                       "expected_output": "99", "actual_output": "42", "error": ""}]
+                                       "input": "1", "expected_output": "99", "actual_output": "42", "error": ""}]
     assert one["run"]["passed"] == 1                                   # question 1 keeps the result it got
     assert [(c["file"], c["names"]) for c in fake.calls] == [
         ("q1.py", ["Doubles", "HIDDEN-NAME"]), ("q2.py", ["Triples", "Wrong on purpose"])]  # and did not run again
-    assert not any(secret in json.dumps(body) for secret in ("HIDDEN", "points", "test_id", "visible", '"input"'))
+    assert not any(secret in json.dumps(body) for secret in ("HIDDEN", "points", "test_id", "visible"))
 
     mine = _my_submission(assignment, stok)
     assert (mine["status"], mine["final_mark"], mine["max_mark"], mine["questions_submitted"]) == ("graded", 6, 10, 2)
@@ -829,7 +845,7 @@ def test_reopening_the_page_shows_what_was_handed_in_with_its_report(fake):
     assert after == handed_in                                         # the same picture: the report was kept
     assert after["questions"][1]["code"] == "print(2)"
     assert after["questions"][1]["run"]["failures"][0]["name"] == "Wrong on purpose"
-    assert not any(secret in json.dumps(after) for secret in ("HIDDEN", "points", "test_id", "visible", '"input"'))
+    assert not any(secret in json.dumps(after) for secret in ("HIDDEN", "points", "test_id", "visible"))
 
     other = _work(assignment, new_student(client, subject["id"])).json()  # another student sees none of it
     assert (other["submission_id"], other["questions"]) == (None, [_not_handed_in(1, "Double it"),

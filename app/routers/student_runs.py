@@ -186,15 +186,16 @@ class AnswerIn(BaseModel):
 
 
 class RunFailureOut(BaseModel):
-    """A VISIBLE test that did not pass: what was expected and what the program
-    printed. Deliberately without ids, points or the input."""
+    """A VISIBLE test that did not pass: the input it gave the program, what was expected and what the
+    program printed. Deliberately without ids or points, and never for a hidden test."""
 
     sample: int  # its place among the visible tests, from 1
     name: str
     status: str  # failed | error | timeout
+    input: str = ""
     expected_output: str
     actual_output: str
-    error: str = ""  # the crash message, or the time-limit note
+    error: str = ""  # "Compiler error. Error on line N." for a crash, or the time-limit note; "" for a wrong answer
 
 
 class RunOut(BaseModel):

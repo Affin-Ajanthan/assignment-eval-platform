@@ -164,7 +164,7 @@ export default function AssignmentForm({
     }
     const hasStarter = form.starterCode.trim() !== "";
     const starterExt = form.starterFilename.trim().toLowerCase().match(/\.[a-z0-9]+$/)?.[0] ?? "";
-    if (hasStarter && !CODE_EXTENSIONS.includes(starterExt)) {
+    if (!challenge && hasStarter && !CODE_EXTENSIONS.includes(starterExt)) {
       return setMsg({
         text: `Give the starter code a file name with a code extension (${CODE_EXTENSIONS.join(", ")}), e.g. starter.py.`,
         kind: "error",
@@ -504,31 +504,37 @@ export default function AssignmentForm({
         </>
       )}
 
-      <label className="mt-3 block text-sm font-semibold" htmlFor="assignment-starter-code">
-        Starter code (optional)
-      </label>
-      <p className="text-xs text-gray-600">
-        Code you give every student. It is left out of the token similarity check, so students aren&apos;t flagged for
-        sharing it. Only compared against submitted files with the same extension. Not shown to students.
-      </p>
-      <input
-        aria-label="Starter code file name"
-        maxLength={200}
-        value={form.starterFilename}
-        onChange={(e) => set("starterFilename", e.target.value)}
-        placeholder="starter.py"
-        className={input}
-      />
-      <AutoGrowTextarea
-        id="assignment-starter-code"
-        rows={6}
-        maxLength={200000}
-        value={form.starterCode}
-        onChange={(e) => set("starterCode", e.target.value)}
-        placeholder="Paste the starter code here..."
-        spellCheck={false}
-        className={`${input} font-mono`}
-      />
+      {/* A code challenge gives its starting code task by task (see QuestionsEditor), so it has no starter code
+          of its own here; one saved earlier is kept as it is. */}
+      {form.kind === "submission" && (
+        <>
+          <label className="mt-3 block text-sm font-semibold" htmlFor="assignment-starter-code">
+            Starter code (optional)
+          </label>
+          <p className="text-xs text-gray-600">
+            Code you give every student. It is left out of the token similarity check, so students aren&apos;t flagged
+            for sharing it. Only compared against submitted files with the same extension. Not shown to students.
+          </p>
+          <input
+            aria-label="Starter code file name"
+            maxLength={200}
+            value={form.starterFilename}
+            onChange={(e) => set("starterFilename", e.target.value)}
+            placeholder="starter.py"
+            className={input}
+          />
+          <AutoGrowTextarea
+            id="assignment-starter-code"
+            rows={6}
+            maxLength={200000}
+            value={form.starterCode}
+            onChange={(e) => set("starterCode", e.target.value)}
+            placeholder="Paste the starter code here..."
+            spellCheck={false}
+            className={`${input} font-mono`}
+          />
+        </>
+      )}
 
       <div className="mt-4 flex flex-wrap gap-2">
         <button

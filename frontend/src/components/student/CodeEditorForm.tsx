@@ -68,23 +68,34 @@ export function CodeRunResults({ run, submitted = false }: { run: CodeRun; submi
         <div key={f.sample} className="mt-2 rounded-md border border-red-100 bg-white p-3" data-testid="run-failure">
           <p className="text-sm font-semibold">
             {sampleLabel(f.name, f.sample - 1)} did not pass
-            {f.status === "timeout" ? " (it ran out of time)" : f.status === "error" ? " (the program crashed)" : ""}
+            {f.status === "timeout" ? " (it ran out of time)" : ""}
           </p>
-          <div className="mt-1 grid gap-2 sm:grid-cols-2">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-gray-600">Expected output</p>
-              <pre className={pre}>{f.expected_output}</pre>
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-gray-600">Actual output</p>
-              <pre className={pre}>{f.actual_output === "" ? "(empty)" : f.actual_output}</pre>
-            </div>
-          </div>
-          {f.error && (
-            <div className="mt-2">
-              <p className="text-xs font-semibold text-red-700">Error message</p>
-              <pre className={`${pre} border-red-100 bg-red-50`}>{f.error}</pre>
-            </div>
+          {f.status === "error" ? (
+            // The program crashed, so there is no output to compare: only where it went wrong. (A result saved
+            // before this was how it is shown holds the whole traceback in `error`: that is not printed.)
+            <p className="mt-1 text-sm font-semibold text-red-800" data-testid="compiler-error">
+              {f.error.startsWith("Compiler error") ? f.error : "Compiler error."}
+            </p>
+          ) : (
+            <>
+              {f.input !== undefined && (
+                <div className="mt-1 min-w-0">
+                  <p className="text-xs font-semibold text-gray-600">Input</p>
+                  <pre className={pre}>{f.input === "" ? "(none)" : f.input}</pre>
+                </div>
+              )}
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-gray-600">Expected output</p>
+                  <pre className={pre}>{f.expected_output}</pre>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-gray-600">Actual output</p>
+                  <pre className={pre}>{f.actual_output === "" ? "(empty)" : f.actual_output}</pre>
+                </div>
+              </div>
+              {f.error && <p className="mt-2 text-xs text-red-700">{f.error}</p>}
+            </>
           )}
         </div>
       ))}

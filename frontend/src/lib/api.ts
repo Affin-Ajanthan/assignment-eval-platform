@@ -187,9 +187,11 @@ export interface CodeRunFailure {
   sample: number;
   name: string;
   status: "failed" | "error" | "timeout";
+  /** What the program was given on standard input; missing from a result saved before it was shown. */
+  input?: string;
   expected_output: string;
   actual_output: string;
-  /** The crash message, or the time-limit note. */
+  /** "Compiler error. Error on line N." for a crash (no traceback), or the time-limit note; "" for a wrong answer. */
   error: string;
 }
 
