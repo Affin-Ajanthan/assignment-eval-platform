@@ -23,12 +23,10 @@ from ..common import ANALYZED_EXTENSIONS, UTCDateTime, as_utc, instructor_assign
 from ..db import BASE_DIR, SessionLocal, get_db
 from ..evaluator.document_extraction import extract_report_text, load_extraction
 from ..evaluator.report_analysis import ai_text_signal
-from ..evaluator.semantic_consistency import get_consistency_service
 from ..models import SelfCheck, Submission, User
 from ..notebook import read_code
-from ..similarity import report_similarity as _report_sim
 from ..similarity.ai_heuristics import score_source as _score_ai_code
-from ..similarity_runs import code_similarity_run, report_similarity_text
+from ..similarity_runs import code_similarity_run, report_similarity_run, report_similarity_text
 
 router = APIRouter()
 
@@ -270,24 +268,19 @@ def _self_check_code(db: Session, submission: Submission) -> dict:
 
 
 def _self_check_report(db: Session, submission: Submission) -> dict:
-    own, reason = report_similarity_text(submission)
-    if own is None:
+    # The student's own report first: if it can't be read, nobody else's is.
+    _, reason = report_similarity_text(submission)
+    if reason is not None:
         return _self_checks.report_result(str(submission.id), [], "disabled", skipped_reason=reason)
-    texts = {str(submission.id): own}
-    for other in (db.query(Submission)
-                  .filter(Submission.subject_id == submission.subject_id,
-                          Submission.assignment_name == submission.assignment_name,
-                          Submission.id != submission.id).all()):
-        text, _ = report_similarity_text(other)
-        if text is not None:
-            texts[str(other.id)] = text
-    if len(texts) < 2:
+    # Same comparison as the instructor's check, template PDF included.
+    run = report_similarity_run(db, submission.subject_id, submission.assignment_name,
+                                db.query(Submission)
+                                .filter(Submission.subject_id == submission.subject_id,
+                                        Submission.assignment_name == submission.assignment_name).all())
+    if run.comparison is None:
         return _self_checks.report_result(str(submission.id), [], "disabled",
                                           skipped_reason="No other reports to compare with yet.")
-    a = submission.assignment
-    comparison = _report_sim.compare_reports(texts, get_consistency_service(),
-                                             template_text=a.report_template_text if a else None)
-    return _self_checks.report_result(str(submission.id), comparison.pairs, comparison.semantic_status)
+    return _self_checks.report_result(str(submission.id), run.comparison.pairs, run.comparison.semantic_status)
 
 
 def _self_check_ai(submission: Submission) -> dict:

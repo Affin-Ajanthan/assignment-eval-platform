@@ -370,10 +370,10 @@ def test_each_assignment_has_its_own_hourly_limit(tmp_path):
     assert _run(tok, sids[1], "code_similarity").status_code == 202
 
 
-def _pair(j, c, flag_level=None):
+def _pair(j, c, flag_level=None, semantic=None):
     from app.similarity.core import PairResult
     return PairResult(submission_a="1", submission_b="2", jaccard=j, containment=c, shared_fingerprints=1,
-                      flag_level=flag_level)
+                      flag_level=flag_level, semantic_similarity=semantic)
 
 
 def test_moderate_is_relative_to_the_class_typical_overlap():
@@ -385,7 +385,19 @@ def test_moderate_is_relative_to_the_class_typical_overlap():
     assert lines["jaccard_line"] == 0.50
     assert self_checks.code_pair_band(_pair(0.55, 0.70), lines) == "moderate"   # stands out, below "high"
     assert self_checks.code_pair_band(_pair(0.96, 0.99), lines) == "high"       # instructor's flag rule
-    assert self_checks.code_pair_band(_pair(0.30, 0.50, "review"), lines) == "moderate"  # semantic review
+    assert self_checks.code_pair_band(_pair(0.30, 0.50, "review", 0.90), lines) == "moderate"  # semantic review
+
+
+def test_a_meaning_only_match_needs_a_higher_score_for_the_student_than_for_the_instructor():
+    # The instructor's review flag starts at 0.80 (rewritten copies score from ~0.81), but honest
+    # same-task solutions reach 0.84, so the student sees Moderate only from 0.85.
+    from app.similarity.semantic import SemanticThresholds
+    lines = self_checks.code_fixed_lines(1)
+    assert SemanticThresholds().review == 0.80 < self_checks.CODE_SEMANTIC_MODERATE == 0.85
+    assert self_checks.code_pair_band(_pair(0.10, 0.20, "review", 0.84), lines) == "low"
+    assert self_checks.code_pair_band(_pair(0.10, 0.20, "review", 0.85), lines) == "moderate"
+    assert self_checks.code_pair_band(_pair(0.10, 0.20, None, 0.95), lines) == "low"    # not flagged: cohort bar
+    assert self_checks.code_pair_band(_pair(0.96, 0.99, "high", 0.60), lines) == "high"  # tokens decide High
 
 
 def test_floor_applies_when_the_class_shares_little():
