@@ -98,6 +98,10 @@ export interface Assignment {
   questions: CodeQuestion[];
   /** The file the tests run (a name or path in the submission); "" = picked automatically. Single-task challenges only. */
   test_main_file: string;
+  /** A code challenge's access password, shown to the instructor only ("" = none; missing from an older server). */
+  task_password?: string;
+  /** A code challenge whose tasks must be handed in in order (missing from an older server). */
+  tasks_in_order?: boolean;
   /** "submission": students upload files; "code_challenge": code only, run against test cases. Fixed at creation. */
   assignment_type: AssignmentKind;
 }
@@ -118,6 +122,8 @@ export interface CodeQuestion {
   title: string;
   /** The question text: what the student must write. */
   statement: string;
+  /** Code the student's editor starts with for this task ("" = an empty box); missing from an older server. */
+  starter_code?: string;
 }
 
 /** One test for submitted code: `input` goes to standard input, the output is compared with `expected_output`. */
@@ -176,6 +182,12 @@ export interface StudentAssignment {
   assignment_type: AssignmentKind;
   /** What a code challenge asks, task by task (never any test case); empty for other assignments. */
   questions: CodeQuestion[];
+  /** The challenge has a password the student must enter (POST /assignments/{id}/unlock-tasks) to see the questions. */
+  has_task_password?: boolean;
+  /** False while has_task_password and the student has not entered it: the questions come back empty. */
+  tasks_unlocked?: boolean;
+  /** The tasks must be handed in in order. */
+  tasks_in_order?: boolean;
   my_submission: MySubmission | null;
 }
 
@@ -185,9 +197,11 @@ export interface CodeRunFailure {
   sample: number;
   name: string;
   status: "failed" | "error" | "timeout";
+  /** What the program was given on standard input; missing from a result saved before it was shown. */
+  input?: string;
   expected_output: string;
   actual_output: string;
-  /** The crash message, or the time-limit note. */
+  /** "Compiler error. Error on line N." for a crash (no traceback), or the time-limit note; "" for a wrong answer. */
   error: string;
 }
 

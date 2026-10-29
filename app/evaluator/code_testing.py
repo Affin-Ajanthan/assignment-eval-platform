@@ -74,6 +74,7 @@ class TestResult:
     actual_output: str  # clipped for display
     stderr: str = ""
     question: int = 1  # the question of the code challenge the test belongs to
+    input: str = ""  # what the program was given on standard input (shown to a student for a visible test only)
 
 
 @dataclass
@@ -235,7 +236,8 @@ def _run_one(test: dict, code_dir: Path, relative_file: str, language: Language,
     command = build_test_command(name, code_dir, relative_file, language, timeout)
     expected = test.get("expected_output", "")
     base = dict(test_id=test["id"], name=test["name"], visible=bool(test.get("visible")),
-                points=test.get("points", 1), match=test.get("match", "exact"), expected_output=expected)
+                points=test.get("points", 1), match=test.get("match", "exact"), expected_output=expected,
+                input=test.get("input") or "")
     try:
         code, out, err = runner(command, timeout + 30, _stdin_for(test))  # slack for container start-up
     except subprocess.TimeoutExpired:
@@ -331,7 +333,7 @@ def _skipped(test: dict, question: int) -> TestResult:
         test_id=test["id"], name=test["name"], visible=bool(test.get("visible")), points=test.get("points", 1),
         match=test.get("match", "exact"), status="skipped", passed=False,
         expected_output=test.get("expected_output", ""), actual_output="",
-        stderr="No code was submitted for this task.", question=question)
+        stderr="No code was submitted for this task.", question=question, input=test.get("input") or "")
 
 
 def run_question(code_dir: Path, question: dict, tests: list, *, file: str = "") -> QuestionRun:

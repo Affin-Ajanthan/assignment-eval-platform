@@ -181,14 +181,22 @@ class Assignment(Base):
     # its own tests: a test says which one it belongs to ("question": 1, 2, ...; a test saved without it
     # belongs to task 1).
     test_cases = Column(JSON, nullable=True)
-    # The tasks of a code challenge: [{"id": 1, "title": str, "statement": str}, ...] in the order
-    # students see them ("statement" is the task's question text). NULL: one task without a title
+    # The tasks of a code challenge: [{"id": 1, "title": str, "statement": str, "starter_code": str}, ...]
+    # in the order students see them ("statement" is the task's question text, "starter_code" the code
+    # their editor starts with; older rows have no such key). NULL: one task without a title
     # (every challenge made before tasks existed). Read it through `questions`.
     code_questions = Column(JSON, nullable=True)
     # The file the tests run, e.g. "student_management.rb" (a name or a path
     # inside the submission). NULL: the only Python/Ruby file, or a main.* one.
     # Only used by a challenge with a single task.
     test_main_file = Column(String, nullable=True)
+    # A code challenge's access password: students must enter it (POST /assignments/{id}/unlock-tasks) before
+    # they are shown the questions or can run or submit code. Kept as typed, because the instructor reads it
+    # back to share it with the class; never sent to students. NULL: no password (every challenge made before this).
+    task_password = Column(String, nullable=True)
+    # A code challenge whose tasks must be handed in in order: task 2 can be run or submitted only once task 1
+    # is handed in, and so on. Enforced by the API.
+    tasks_in_order = Column(Boolean, nullable=False, default=False, server_default="0")
     # "submission": students upload code, a report and/or a video, graded with a
     # rubric. "code_challenge": students submit code only, and it is run against
     # test_cases (HackerRank style). Chosen when the assignment is created and
@@ -215,12 +223,18 @@ class Assignment(Base):
 
     @property
     def questions(self) -> list[dict]:
-        """The tasks of a code challenge, each {"id", "title", "statement"}, ids 1, 2, ... in order.
+        """The tasks of a code challenge, each {"id", "title", "statement", "starter_code"}, ids 1, 2, ...
+        in order (a task saved before starting code existed has no "starter_code" key).
         A challenge saved without any has the one untitled task that all its tests belong to.
         Empty for any other assignment."""
         if self.kind != "code_challenge":
             return []
-        return list(self.code_questions or [{"id": 1, "title": "", "statement": ""}])
+        return list(self.code_questions or [{"id": 1, "title": "", "statement": "", "starter_code": ""}])
+
+    @property
+    def requires_password(self) -> bool:
+        """Whether students must enter the task password before they can see or do the tasks."""
+        return self.kind == "code_challenge" and bool((self.task_password or "").strip())
 
     def tests_of(self, question_id: int) -> list[dict]:
         """The test cases of one task, in order."""
@@ -438,6 +452,19 @@ class SelfCheck(Base):
     error = Column(String, nullable=True)
     created_at = Column(DateTime, default=_utcnow, index=True)
     finished_at = Column(DateTime, nullable=True)
+
+
+class TaskUnlock(Base):
+    """A student who entered the right task password of a code challenge: from then on they are shown its
+    questions and can run and submit code. One row per student and challenge (the password is not asked again)."""
+
+    __tablename__ = "task_unlocks"
+    __table_args__ = (UniqueConstraint("assignment_id", "student_id", name="uq_task_unlock"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    assignment_id = Column(Integer, ForeignKey("assignments.id"), nullable=False, index=True)
+    student_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    unlocked_at = Column(DateTime, default=_utcnow)
 
 
 class BatchJob(Base):

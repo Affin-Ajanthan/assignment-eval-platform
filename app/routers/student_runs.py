@@ -32,6 +32,11 @@ unmarked. The student can then ask for the mark with POST /assignments/{id}/mark
 (it runs the same marking on the saved code of every answer that has no result yet,
 which cannot have changed), or the instructor can mark it with "Run and save as mark".
 
+A challenge can have a task password (Assignment.task_password) and can require its tasks in order
+(Assignment.tasks_in_order). Until the student has entered the password (POST /assignments/{id}/unlock-tasks,
+once, with a limit on wrong tries) the questions are not sent and running or submitting code is refused.
+With the order on, a task can be run or handed in only after every task before it was handed in.
+
 GET /assignments/{id}/my-code gives back what the student has handed in so far, task
 by task (the code, and the report each answer got), so the page can be reopened,
 also after the deadline. app/code_answers.py keeps this per-task bookkeeping.
@@ -69,7 +74,7 @@ from ..common import utcnow_naive
 from ..db import BASE_DIR, UPLOAD_DIR, get_db
 from ..evaluator import code_testing
 from ..evaluator.code_execution import SandboxUnavailable, sandbox_enabled
-from ..models import Assignment, Submission, User
+from ..models import Assignment, Submission, TaskUnlock, User
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -186,15 +191,16 @@ class AnswerIn(BaseModel):
 
 
 class RunFailureOut(BaseModel):
-    """A VISIBLE test that did not pass: what was expected and what the program
-    printed. Deliberately without ids, points or the input."""
+    """A VISIBLE test that did not pass: the input it gave the program, what was expected and what the
+    program printed. Deliberately without ids or points, and never for a hidden test."""
 
     sample: int  # its place among the visible tests, from 1
     name: str
     status: str  # failed | error | timeout
+    input: str = ""
     expected_output: str
     actual_output: str
-    error: str = ""  # the crash message, or the time-limit note
+    error: str = ""  # "Compiler error. Error on line N." for a crash, or the time-limit note; "" for a wrong answer
 
 
 class RunOut(BaseModel):
@@ -267,7 +273,59 @@ def _challenge_for(db: Session, student: User, assignment_id: int, what: str) ->
         raise HTTPException(400, "This assignment is closed.")
     if not assignment.test_cases:
         raise HTTPException(400, "This assignment has no test cases to run.")
+    if not code_answers.tasks_unlocked(db, student.id, assignment):
+        raise HTTPException(403, "Enter the task password first.")
     return assignment
+
+
+def _require_turn(assignment: Assignment, submission: Optional[Submission], question: int) -> None:
+    """A challenge whose tasks go in order: a task can be run or handed in only once the ones before it are."""
+    earlier = code_answers.unfinished_before(assignment, submission, question)
+    if earlier is not None:
+        raise HTTPException(409, f"The tasks of this assignment are done in order: hand in task {earlier} first.")
+
+
+class UnlockIn(BaseModel):
+    password: str = Field(max_length=200)
+
+
+class UnlockOut(BaseModel):
+    unlocked: bool = True
+
+
+class UnlockLimiter:
+    """Keeps a student from guessing the password: after a number of wrong tries in a few minutes, no more
+    tries until the oldest has aged out. In memory, per student and challenge."""
+
+    def __init__(self, tries: int = 8, window: float = 600, clock: Callable[[], float] = time.monotonic):
+        self.tries, self.window, self._clock = tries, window, clock
+        self._lock = threading.Lock()
+        self._misses: dict[tuple[int, int], deque] = {}
+
+    def _recent(self, key: tuple[int, int]) -> deque:
+        misses = self._misses.setdefault(key, deque())
+        while misses and self._clock() - misses[0] >= self.window:
+            misses.popleft()
+        return misses
+
+    def check(self, key: tuple[int, int]) -> None:
+        """Raises RunLimitError when the student has used up their tries."""
+        with self._lock:
+            misses = self._recent(key)
+            if len(misses) >= self.tries:
+                minutes = max(1, math.ceil((self.window - (self._clock() - misses[0])) / 60))
+                raise RunLimitError(429, f"Too many wrong passwords. Try again in {minutes} minute(s).")
+
+    def miss(self, key: tuple[int, int]) -> None:
+        with self._lock:
+            self._recent(key).append(self._clock())
+
+    def clear(self, key: tuple[int, int]) -> None:
+        with self._lock:
+            self._misses.pop(key, None)
+
+
+unlock_limiter = UnlockLimiter()
 
 
 def _question_of(assignment: Assignment, number: int) -> dict:
@@ -285,6 +343,7 @@ def run_code(
     """Run the typed code against every test case of its task."""
     assignment = _challenge_for(db, student, assignment_id, "Running code")
     question = _question_of(assignment, payload.question)
+    _require_turn(assignment, _latest_submission(db, student, assignment), question["id"])
     language = _pick_language(payload.language, assignment)
     if not sandbox_enabled():
         raise HTTPException(503, "Running code is not available right now.")
@@ -424,6 +483,31 @@ def my_code(
     return _work_out(student, assignment, _latest_submission(db, student, assignment))
 
 
+@router.post("/assignments/{assignment_id}/unlock-tasks", response_model=UnlockOut)
+def unlock_tasks(
+    assignment_id: int, payload: UnlockIn,
+    student: User = Depends(require_student), db: Session = Depends(get_db),
+):
+    """Enter the code challenge's task password. Right: the student is let in for good and the questions are
+    shown from now on (GET /assignments/{id}). Wrong: refused, and after a few wrong tries in a row the student
+    must wait. A challenge without a password lets everyone in."""
+    assignment = _visible_challenge(db, student, assignment_id, "The task password is")
+    if code_answers.tasks_unlocked(db, student.id, assignment):
+        return UnlockOut()
+    key = (student.id, assignment.id)
+    try:
+        unlock_limiter.check(key)
+    except RunLimitError as exc:
+        raise HTTPException(exc.status, exc.detail)
+    if not code_answers.password_matches(assignment, payload.password):
+        unlock_limiter.miss(key)
+        raise HTTPException(403, "Wrong password.")
+    unlock_limiter.clear(key)
+    db.add(TaskUnlock(assignment_id=assignment.id, student_id=student.id))
+    db.commit()
+    return UnlockOut()
+
+
 @router.post("/assignments/{assignment_id}/submit-code", response_model=CodeWorkOut)
 def submit_code(
     assignment_id: int, payload: AnswerIn,
@@ -437,6 +521,7 @@ def submit_code(
     question = _question_of(assignment, payload.question)
     language = _pick_language(payload.language, assignment)
     submission = _latest_submission(db, student, assignment)
+    _require_turn(assignment, submission, question["id"])
     if submission is not None:
         if submission.question_results is None:
             # Made before answers were kept one by one, or uploaded as files: it is complete as it stands.

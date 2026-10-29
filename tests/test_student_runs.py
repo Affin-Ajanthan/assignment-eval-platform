@@ -84,7 +84,7 @@ class FakeRunTests:
             results.append(ct.TestResult(
                 test_id=t["id"], name=t["name"], visible=t["visible"], points=t["points"], match=t["match"],
                 status=status, passed=status == "passed", expected_output=t["expected_output"],
-                actual_output=actual, stderr=stderr))
+                actual_output=actual, stderr=stderr, input=t.get("input", "")))
         return ct.TestRun(file=main_file, language="python", results=results)
 
 
@@ -167,12 +167,12 @@ def test_run_checks_every_test_case_but_shows_only_what_a_student_may_know(fake)
     assert body["remaining_runs"] == 9
     # The failing VISIBLE test shows what was expected and what the program printed, and nothing else.
     assert body["failures"] == [{"sample": 2, "name": "Wrong on purpose", "status": "failed",
-                                 "expected_output": "99", "actual_output": "42", "error": ""}]
+                                 "input": "1", "expected_output": "99", "actual_output": "42", "error": ""}]
     # Every test case ran, the hidden one included; the typed code was saved as main.py (newlines unified).
     assert fake.calls == [{"file": "main.py", "code": "print(int(input()) * 2)\n",
                            "names": ["Doubles", "HIDDEN-NAME", "Wrong on purpose"], "only_visible": False}]
     # Nothing about the hidden test, and no ids, points or inputs that could hint at it.
-    assert not any(secret in json.dumps(body) for secret in ("HIDDEN", "points", "test_id", "visible", '"input"'))
+    assert not any(secret in json.dumps(body) for secret in ("HIDDEN", "points", "test_id", "visible"))
 
 
 def test_when_every_test_case_passes_the_student_just_sees_that_they_all_passed(monkeypatch):
@@ -203,13 +203,29 @@ def test_a_visible_test_that_crashes_or_times_out_shows_its_error_but_hidden_err
     subject, itok, stok = setup_subject_with_users(client)
     body = _run(_challenge(itok, subject, "Crashes", TESTS), stok).json()
     assert body["failures"] == [
-        {"sample": 1, "name": "Doubles", "status": "error", "expected_output": "42", "actual_output": "",
-         "error": "Traceback: boom"},
-        {"sample": 2, "name": "Wrong on purpose", "status": "timeout", "expected_output": "99",
+        {"sample": 1, "name": "Doubles", "status": "error", "input": "21", "expected_output": "42", "actual_output": "",
+         "error": "Compiler error."},  # the traceback itself is never shown to the student
+        {"sample": 2, "name": "Wrong on purpose", "status": "timeout", "input": "1", "expected_output": "99",
          "actual_output": "partial", "error": "Time limit of 10 seconds exceeded."},
     ]
     assert (body["hidden_failed"], body["passed"], body["total"]) == (1, 0, 3)
     assert "secret" not in json.dumps(body) and "HIDDEN" not in json.dumps(body)  # the hidden test's error is not shown
+
+
+def test_a_crash_is_reported_as_a_compiler_error_with_its_line_and_nothing_else():
+    from app.code_answers import compiler_error
+
+    syntax = 'Traceback...\n  File "/run/main.py", line 3\n    print(\n         ^\nSyntaxError: \'(\' was never closed'
+    assert compiler_error(syntax, "python") == "Compiler error. Error on line 3."
+    # A crash further down: the last frame in the student's file counts, not one inside the standard library.
+    nested = ('Traceback (most recent call last):\n  File "/run/main.py", line 9, in <module>\n    solve()\n'
+              '  File "/run/main.py", line 5, in solve\n    json.loads(x)\n'
+              '  File "/usr/lib/python3.12/json/__init__.py", line 346, in loads\nValueError: boom')
+    assert compiler_error(nested, "python") == "Compiler error. Error on line 5."
+    assert compiler_error("main.rb:4:in 'x': undefined local variable (NameError)\n\tfrom main.rb:8:in '<main>'",
+                          "ruby") == "Compiler error. Error on line 4."
+    assert compiler_error("something went wrong", "python") == "Compiler error."  # no line to point at
+    assert "out of memory" in compiler_error("Killed: probably out of memory (limit 256 MB).", "python")
 
 
 def test_a_run_is_practice_only_it_creates_no_submission(fake):
@@ -353,8 +369,8 @@ def test_submitting_saves_the_points_of_the_tests_passed_as_the_mark_and_shows_t
     run = _run_of(body)
     assert (run["passed"], run["total"], run["hidden_failed"]) == (1, 3, 1)
     assert run["failures"] == [{"sample": 2, "name": "Wrong on purpose", "status": "failed",
-                                "expected_output": "99", "actual_output": "42", "error": ""}]
-    assert not any(secret in json.dumps(body) for secret in ("HIDDEN", "points", "test_id", "visible", '"input"'))
+                                "input": "1", "expected_output": "99", "actual_output": "42", "error": ""}]
+    assert not any(secret in json.dumps(body) for secret in ("HIDDEN", "points", "test_id", "visible"))
     # Every test case ran, the hidden one included, on the typed code (newlines unified).
     assert fake.calls == [{"file": "main.py", "code": "print(int(input()) * 2)\n",
                            "names": ["Doubles", "HIDDEN-NAME", "Wrong on purpose"], "only_visible": False}]
@@ -588,7 +604,7 @@ def test_a_student_can_get_the_mark_of_code_that_was_submitted_unmarked(monkeypa
     assert (run["passed"], run["total"], run["hidden_failed"]) == (1, 3, 1)
     assert run["failures"][0]["name"] == "Wrong on purpose"           # the same report Submit gives
     assert runner.calls[0]["names"] == ["Doubles", "HIDDEN-NAME", "Wrong on purpose"]
-    assert not any(secret in json.dumps(body) for secret in ("HIDDEN", "points", "test_id", "visible", '"input"'))
+    assert not any(secret in json.dumps(body) for secret in ("HIDDEN", "points", "test_id", "visible"))
 
     mine = _my_submission(assignment, stok)
     assert (mine["status"], mine["final_mark"], mine["max_mark"], mine["can_edit"]) == ("graded", 2, 8, False)
@@ -680,8 +696,9 @@ def test_students_see_each_questions_title_and_statement_but_never_a_test_case(f
         (1, 1, "Doubles"), (2, 1, "HIDDEN-NAME"), (3, 2, "Triples"), (4, 2, "Wrong on purpose")]
 
     seen = client.get(f"/assignments/{assignment['id']}", headers=auth_headers(stok)).json()
-    assert seen["questions"] == [{"id": 1, "title": "Double it", "statement": "Print twice the number."},
-                                 {"id": 2, "title": "Triple it", "statement": "Print three times the number."}]
+    assert seen["questions"] == [
+        {"id": 1, "title": "Double it", "statement": "Print twice the number.", "starter_code": ""},
+        {"id": 2, "title": "Triple it", "statement": "Print three times the number.", "starter_code": ""}]
     listed = json.dumps(client.get("/assignments", headers=auth_headers(stok)).json())
     for secret in ("Doubles", "Triples", "HIDDEN", "Wrong on purpose", "test_cases", "expected_output"):
         assert secret not in listed and secret not in json.dumps(seen), secret
@@ -697,7 +714,7 @@ def test_run_checks_the_tests_of_the_question_it_was_sent_for(fake):
     second = _run(assignment, stok, code="print(2)", question=2)
     assert (second.json()["passed"], second.json()["total"], second.json()["hidden_failed"]) == (1, 2, 0)
     assert second.json()["failures"] == [{"sample": 2, "name": "Wrong on purpose", "status": "failed",
-                                          "expected_output": "99", "actual_output": "42", "error": ""}]
+                                          "input": "1", "expected_output": "99", "actual_output": "42", "error": ""}]
     # Each run used only its own question's tests, and the code was saved in a file named after the question.
     assert [(c["file"], c["names"]) for c in fake.calls] == [
         ("q1.py", ["Doubles", "HIDDEN-NAME"]), ("q2.py", ["Triples", "Wrong on purpose"])]
@@ -740,11 +757,11 @@ def test_each_question_is_handed_in_and_marked_on_its_own_and_the_points_add_up(
     assert (one["earned"], one["total"], two["earned"], two["total"]) == (2, 5, 4, 5)
     assert (two["run"]["passed"], two["run"]["total"], two["run"]["hidden_failed"]) == (1, 2, 0)
     assert two["run"]["failures"] == [{"sample": 2, "name": "Wrong on purpose", "status": "failed",
-                                       "expected_output": "99", "actual_output": "42", "error": ""}]
+                                       "input": "1", "expected_output": "99", "actual_output": "42", "error": ""}]
     assert one["run"]["passed"] == 1                                   # question 1 keeps the result it got
     assert [(c["file"], c["names"]) for c in fake.calls] == [
         ("q1.py", ["Doubles", "HIDDEN-NAME"]), ("q2.py", ["Triples", "Wrong on purpose"])]  # and did not run again
-    assert not any(secret in json.dumps(body) for secret in ("HIDDEN", "points", "test_id", "visible", '"input"'))
+    assert not any(secret in json.dumps(body) for secret in ("HIDDEN", "points", "test_id", "visible"))
 
     mine = _my_submission(assignment, stok)
     assert (mine["status"], mine["final_mark"], mine["max_mark"], mine["questions_submitted"]) == ("graded", 6, 10, 2)
@@ -828,7 +845,7 @@ def test_reopening_the_page_shows_what_was_handed_in_with_its_report(fake):
     assert after == handed_in                                         # the same picture: the report was kept
     assert after["questions"][1]["code"] == "print(2)"
     assert after["questions"][1]["run"]["failures"][0]["name"] == "Wrong on purpose"
-    assert not any(secret in json.dumps(after) for secret in ("HIDDEN", "points", "test_id", "visible", '"input"'))
+    assert not any(secret in json.dumps(after) for secret in ("HIDDEN", "points", "test_id", "visible"))
 
     other = _work(assignment, new_student(client, subject["id"])).json()  # another student sees none of it
     assert (other["submission_id"], other["questions"]) == (None, [_not_handed_in(1, "Double it"),
@@ -1015,3 +1032,121 @@ def test_a_challenge_with_several_questions_is_not_answered_by_uploading_a_file(
                     headers=auth_headers(stok))
     assert r.status_code == 400 and "several tasks" in r.json()["detail"]
     assert client.get("/submissions", headers=auth_headers(stok)).json() == []
+
+
+# --------------------------------------------------------------------------
+# The task password and tasks done in order
+# --------------------------------------------------------------------------
+
+
+def _unlock(assignment, token, password):
+    return client.post(f"/assignments/{assignment['id']}/unlock-tasks", headers=auth_headers(token),
+                       json={"password": password})
+
+
+def _seen_by(assignment, token):
+    return client.get(f"/assignments/{assignment['id']}", headers=auth_headers(token)).json()
+
+
+def test_a_task_password_hides_the_questions_and_blocks_running_until_it_is_entered(fake, monkeypatch):
+    monkeypatch.setattr(sr, "unlock_limiter", sr.UnlockLimiter())
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _two_questions(itok, subject, "Locked", task_password="  open sesame ")
+    assert assignment["task_password"] == "open sesame"               # the instructor reads it back, trimmed
+    other = new_student(client, subject["id"])
+
+    locked = _seen_by(assignment, stok)
+    assert (locked["has_task_password"], locked["tasks_unlocked"]) == (True, False)
+    assert locked["questions"] == [{"id": 1, "title": "Double it", "statement": "", "starter_code": ""},
+                                   {"id": 2, "title": "Triple it", "statement": "", "starter_code": ""}]
+    assert "open sesame" not in json.dumps(locked) and "open sesame" not in json.dumps(
+        client.get("/assignments", headers=auth_headers(stok)).json())
+    assert _run(assignment, stok).status_code == 403 and _submit_question(assignment, stok, 1, "print(1)").status_code == 403
+    assert fake.calls == []
+
+    wrong = _unlock(assignment, stok, "nope")
+    assert wrong.status_code == 403 and wrong.json()["detail"] == "Wrong password."
+    assert _seen_by(assignment, stok)["tasks_unlocked"] is False
+
+    assert _unlock(assignment, stok, "open sesame").status_code == 200   # case matters, outer spaces do not
+    opened = _seen_by(assignment, stok)
+    assert opened["tasks_unlocked"] is True
+    assert [q["statement"] for q in opened["questions"]] == ["Print twice the number.", "Print three times the number."]
+    assert _run(assignment, stok).status_code == 200
+    assert _submit_question(assignment, stok, 1, "print(1)").status_code == 200
+
+    # Each student enters it for themselves.
+    assert _seen_by(assignment, other)["tasks_unlocked"] is False
+    assert _run(assignment, other).status_code == 403
+    assert _unlock(assignment, other, "Open sesame").status_code == 403
+
+
+def test_a_challenge_without_a_password_is_open_to_everyone(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _two_questions(itok, subject, "No password")
+    seen = _seen_by(assignment, stok)
+    assert (seen["has_task_password"], seen["tasks_unlocked"], seen["tasks_in_order"]) == (False, True, False)
+    assert seen["questions"][0]["statement"] == "Print twice the number."
+    assert _unlock(assignment, stok, "anything").status_code == 200
+    assert _run(assignment, stok).status_code == 200
+
+
+def test_too_many_wrong_passwords_lock_the_student_out_for_a_while(monkeypatch):
+    clock = Clock()
+    monkeypatch.setattr(sr, "unlock_limiter", sr.UnlockLimiter(tries=3, window=600, clock=clock))
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _two_questions(itok, subject, "Guessing", task_password="right")
+    for _ in range(3):
+        assert _unlock(assignment, stok, "wrong").status_code == 403
+    blocked = _unlock(assignment, stok, "right")                      # even the right one has to wait
+    assert blocked.status_code == 429 and "Too many wrong passwords" in blocked.json()["detail"]
+    clock.now += 601
+    assert _unlock(assignment, stok, "right").status_code == 200
+
+
+def test_the_instructor_can_change_or_remove_the_password_and_the_order(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _two_questions(itok, subject, "Changing", task_password="one", tasks_in_order=True)
+    assert (assignment["task_password"], assignment["tasks_in_order"]) == ("one", True)
+    put = lambda body: client.put(f"/assignments/{assignment['id']}", headers=auth_headers(itok), json=body).json()
+
+    assert put({"task_password": "two"})["task_password"] == "two"
+    assert put({"name": "Changing again"})["task_password"] == "two"  # left out: kept
+    assert put({"tasks_in_order": False})["tasks_in_order"] is False
+    cleared = put({"task_password": ""})
+    assert cleared["task_password"] == ""
+    seen = _seen_by(assignment, stok)
+    assert (seen["has_task_password"], seen["tasks_unlocked"], seen["tasks_in_order"]) == (False, True, False)
+    assert seen["questions"][0]["statement"] == "Print twice the number."
+
+
+def test_a_submission_challenge_ignores_a_password(fake):
+    subject, itok, _ = setup_subject_with_users(client)
+    plain = _challenge(itok, subject, "Plain upload", task_password="x", tasks_in_order=True)
+    assert (plain["task_password"], plain["tasks_in_order"]) == ("", False)
+
+
+def test_tasks_in_order_means_the_next_task_waits_for_the_one_before(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _two_questions(itok, subject, "In order", tasks_in_order=True)
+    assert _seen_by(assignment, stok)["tasks_in_order"] is True
+
+    early_run = _run(assignment, stok, question=2)
+    early_submit = _submit_question(assignment, stok, 2, "print(2)")
+    for refused in (early_run, early_submit):
+        assert refused.status_code == 409 and "hand in task 1 first" in refused.json()["detail"]
+    assert fake.calls == [] and client.get("/submissions", headers=auth_headers(stok)).json() == []
+
+    assert _run(assignment, stok, question=1).status_code == 200      # the first can be run, and
+    assert _run(assignment, stok, question=2).status_code == 409      # running it does not unlock the second
+    assert _submit_question(assignment, stok, 1, "print(1)").status_code == 200
+    assert _run(assignment, stok, question=2).status_code == 200
+    assert _submit_question(assignment, stok, 2, "print(2)").status_code == 200
+    assert _work(assignment, stok).json()["complete"] is True
+
+
+def test_without_the_order_the_tasks_can_be_done_in_any_order(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _two_questions(itok, subject, "Any order")
+    assert _submit_question(assignment, stok, 2, "print(2)").status_code == 200
+    assert _submit_question(assignment, stok, 1, "print(1)").status_code == 200

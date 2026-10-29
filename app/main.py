@@ -94,6 +94,7 @@ from .models import (
     SimilarityFlag,
     Subject,
     Submission,
+    TaskUnlock,
     User,
 )
 from .similarity.ai_heuristics import score_source as _score_ai_code
@@ -131,6 +132,7 @@ add_missing_columns("submissions", {"question_results": "JSON"})
 add_missing_columns("assignments", {"test_cases": "JSON"})
 add_missing_columns("assignments", {"test_main_file": "VARCHAR"})
 add_missing_columns("assignments", {"code_questions": "JSON"})
+add_missing_columns("assignments", {"task_password": "VARCHAR", "tasks_in_order": "BOOLEAN NOT NULL DEFAULT 0"})
 add_missing_columns("assignments", {"assignment_type": "VARCHAR NOT NULL DEFAULT 'submission'"})
 add_missing_columns("assignments", {"submission_types": "JSON"})
 add_missing_columns("assignments", {"starter_code": "TEXT", "starter_code_filename": "VARCHAR"})
@@ -258,7 +260,9 @@ _STARTER_CODE_MAX = 200_000
 _TEST_CASES_MAX = 50  # in all, whatever the number of questions
 _QUESTIONS_MAX = 20
 _STATEMENT_MAX = 10_000
+_TASK_STARTER_MAX = 50_000  # the student editor's limit (MAX_CODE_CHARS in app/routers/student_runs.py)
 _TEST_TEXT_MAX = 10_000
+_TASK_PASSWORD_MAX = 100
 
 
 class QuestionIn(BaseModel):
@@ -268,6 +272,9 @@ class QuestionIn(BaseModel):
 
     title: str = Field(default="", max_length=200)  # blank: "Task 1", "Task 2", ... (when there are several)
     statement: str = Field(default="", max_length=_STATEMENT_MAX)  # the question text, shown above the code box
+    # Optional starting code: put in the student's code box when they open the task, for them to write on.
+    # (The assignment's own starter_code is a different thing: instructor-only, left out of the similarity check.)
+    starter_code: str = Field(default="", max_length=_TASK_STARTER_MAX)
 
 
 class QuestionOut(QuestionIn):
@@ -335,6 +342,10 @@ class AssignmentIn(BaseModel):
     # The file the tests run (a name or a path in the submission); blank picks it automatically.
     # Only used by a challenge with a single task.
     test_main_file: str = Field(default="", max_length=200)
+    # A code challenge's access password: students enter it before they see or do the tasks. Blank: none.
+    task_password: str = Field(default="", max_length=_TASK_PASSWORD_MAX)
+    # A code challenge's tasks must be handed in in order, the first before the second, and so on.
+    tasks_in_order: bool = False
 
 
 class AssignmentUpdate(BaseModel):
@@ -357,6 +368,8 @@ class AssignmentUpdate(BaseModel):
     # students have submitted (their code is saved per task).
     questions: Optional[list[QuestionIn]] = Field(default=None, max_length=_QUESTIONS_MAX)
     test_main_file: Optional[str] = Field(default=None, max_length=200)  # "" picks it automatically
+    task_password: Optional[str] = Field(default=None, max_length=_TASK_PASSWORD_MAX)  # "" removes it
+    tasks_in_order: Optional[bool] = None  # can be changed at any time
 
 
 class AssignmentOut(BaseModel):
@@ -395,6 +408,8 @@ class AssignmentOut(BaseModel):
     test_cases: list[TestCaseOut] = []
     questions: list[QuestionOut] = []  # a code challenge's tasks; empty for other assignments
     test_main_file: str = ""
+    task_password: str = ""  # the code challenge's access password, for the instructor to read back and share
+    tasks_in_order: bool = False
 
 
 class CriterionMarkOut(BaseModel):
@@ -444,8 +459,14 @@ class StudentAssignmentOut(BaseModel):
     # What a code challenge asks, task by task (title and question text only). No test case is
     # ever part of this: a student meets the tests only through the result of "Run"
     # (POST /assignments/{id}/run-code), where a visible test that fails shows its expected and
-    # actual output and everything else is only counted.
+    # actual output and everything else is only counted. While the challenge has a password the student
+    # has not entered yet, each task keeps its number and title but its question and starting code are empty.
     questions: list[QuestionOut] = []
+    # A code challenge with a password: the student must enter it (POST /assignments/{id}/unlock-tasks) before
+    # the questions are shown. The password itself is never sent.
+    has_task_password: bool = False
+    tasks_unlocked: bool = True  # False: has_task_password and this student has not entered it yet
+    tasks_in_order: bool = False  # the tasks must be handed in in order
     my_submission: Optional[MySubmissionOut]
 
 
@@ -978,6 +999,7 @@ def _delete_user(db: Session, user: User) -> dict:
     db.query(InstructorAssignment).filter(InstructorAssignment.instructor_id == user.id).delete(
         synchronize_session=False)
     db.query(Enrollment).filter(Enrollment.student_id == user.id).delete(synchronize_session=False)
+    db.query(TaskUnlock).filter(TaskUnlock.student_id == user.id).delete(synchronize_session=False)
     db.delete(user)
     db.commit()
     for rel_path, kind in upload_parts:  # files only after the database change succeeded
@@ -1330,6 +1352,8 @@ def _assignment_out(db: Session, a: Assignment) -> AssignmentOut:
         questions=[QuestionOut(**q) for q in a.questions],
         test_main_file=a.test_main_file or "",
         assignment_type=a.kind,
+        task_password=(a.task_password or "") if a.kind == "code_challenge" else "",
+        tasks_in_order=_on(a.tasks_in_order) if a.kind == "code_challenge" else False,
     )
 
 
@@ -1358,7 +1382,7 @@ def _clean_questions(questions: list[QuestionIn]) -> Optional[list[dict]]:
         return None
     return [
         {"id": n, "title": q.title.strip() or (f"Task {n}" if len(questions) > 1 else ""),
-         "statement": q.statement.strip()}
+         "statement": q.statement.strip(), "starter_code": q.starter_code if q.starter_code.strip() else ""}
         for n, q in enumerate(questions, start=1)
     ]
 
@@ -1495,6 +1519,7 @@ def _student_assignment_out(db: Session, student: User, a: Assignment, now: date
         .order_by(Submission.id.desc())
         .first()
     )
+    unlocked = _code_answers.tasks_unlocked(db, student.id, a)
     return StudentAssignmentOut(
         id=a.id, subject_id=a.subject_id, subject_name=a.subject.name if a.subject else "",
         name=a.name, description=a.description or "",
@@ -1505,7 +1530,11 @@ def _student_assignment_out(db: Session, student: User, a: Assignment, now: date
         student_similarity_check=_on(a.student_similarity_check),
         student_ai_check=_on(a.student_ai_check),
         marks_release_at=None if a.marks_released_at(now) else _as_utc(a.marks_release_at),
-        questions=[QuestionOut(**q) for q in a.questions],
+        # Behind the password only the titles are shown: the questions and starting code come after it is entered.
+        questions=[QuestionOut(**(q if unlocked else {**q, "statement": "", "starter_code": ""})) for q in a.questions],
+        has_task_password=a.requires_password,
+        tasks_unlocked=unlocked,
+        tasks_in_order=_on(a.tasks_in_order) if a.kind == "code_challenge" else False,
         my_submission=_my_submission_out(mine, status == "open", now) if mine else None,
     )
 
@@ -1536,6 +1565,8 @@ def create_assignment(payload: AssignmentIn, instructor: User = Depends(require_
         test_cases=_clean_test_cases(payload.test_cases, types, len(questions or [1])),
         code_questions=questions,
         test_main_file=payload.test_main_file.strip() or None,
+        task_password=(payload.task_password.strip() or None) if kind == "code_challenge" else None,
+        tasks_in_order=payload.tasks_in_order and kind == "code_challenge",
         created_by_id=instructor.id,
     )
     db.add(assignment)
@@ -1639,6 +1670,12 @@ def update_assignment(
     # list is replaced as a whole. Checked against the types as saved above.
     if payload.test_main_file is not None:
         assignment.test_main_file = payload.test_main_file.strip() or None
+    # The password and the order can change at any time (a student who has entered the password stays in).
+    if assignment.kind == "code_challenge":
+        if payload.task_password is not None:
+            assignment.task_password = payload.task_password.strip() or None
+        if payload.tasks_in_order is not None:
+            assignment.tasks_in_order = payload.tasks_in_order
     if payload.test_cases is not None or payload.questions is not None:
         if assignment.kind == "code_challenge":
             _update_questions_and_tests(db, assignment, payload)
@@ -1735,6 +1772,7 @@ def delete_assignment(assignment_id: int, instructor: User = Depends(require_ins
     assignment = _instructor_assignment(db, instructor, assignment_id)
     kept = db.query(Submission).filter(Submission.assignment_id == assignment.id).update(
         {Submission.assignment_id: None})
+    db.query(TaskUnlock).filter(TaskUnlock.assignment_id == assignment.id).delete(synchronize_session=False)
     db.delete(assignment)
     db.commit()
     return {"status": "deleted", "submissions_kept": kept}

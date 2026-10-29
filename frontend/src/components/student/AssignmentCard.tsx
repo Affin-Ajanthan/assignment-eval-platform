@@ -4,6 +4,7 @@ import Link from "next/link";
 import { StudentAssignment } from "@/lib/api";
 import { formatDateTime, formatMark } from "@/lib/datetime";
 import Badge from "@/components/Badge";
+import RichText from "@/components/RichText";
 import Message, { MessageState } from "@/components/Message";
 import SelfCheckPanel from "@/components/student/SelfCheckPanel";
 import UploadForm from "@/components/student/UploadForm";
@@ -86,17 +87,27 @@ export default function AssignmentCard({
       {a.description && !useEditor && (
         <div className="mt-3">
           <p className="text-sm font-semibold">Description</p>
-          <p className="whitespace-pre-wrap text-sm text-gray-700">{a.description}</p>
+          <RichText text={a.description} className="text-sm text-gray-700" />
         </div>
       )}
 
       {useEditor && a.status === "open" && (
         <div className="mt-3" data-testid="questions-hidden-note">
           {manyTasks && <p className="text-sm font-semibold">{taskCount} tasks</p>}
+          {a.has_task_password && !a.tasks_unlocked && (
+            <p className="text-xs text-gray-500" data-testid="password-note">
+              You need the password from your instructor to start the tasks.
+            </p>
+          )}
+          {manyTasks && a.tasks_in_order && (
+            <p className="text-xs text-gray-500" data-testid="order-note">
+              The tasks are done in order: you can start a task only after handing in the one before it.
+            </p>
+          )}
           <p className="text-xs text-gray-500">
             {manyTasks
-              ? "The questions are shown when you press Do assignment, and you hand the tasks in one at a time. Each task is marked as soon as you submit it and cannot be changed afterwards; the mark adds up the test cases you pass in every task."
-              : "The question is shown when you press Do assignment. Your code is marked as soon as you submit it, and cannot be changed afterwards."}
+              ? "The questions are shown when you press Do assignment and then Do task, and you hand the tasks in one at a time. Each task is marked as soon as you submit it and cannot be changed afterwards; the mark adds up the test cases you pass in every task."
+              : "The question is shown when you press Do assignment and then Do task. Your code is marked as soon as you submit it, and cannot be changed afterwards."}
           </p>
         </div>
       )}

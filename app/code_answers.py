@@ -25,13 +25,40 @@ files. Its answers are worked out from its files (answers_of), and it cannot be 
 
 from __future__ import annotations
 
+import hmac
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from sqlalchemy.orm import Session
+
 from .db import BASE_DIR
 from .evaluator import code_testing
-from .models import Assignment, Submission
+from .models import Assignment, Submission, TaskUnlock
+
+
+def tasks_unlocked(db: Session, student_id: int, assignment: Assignment) -> bool:
+    """Whether the student may see and do the tasks: the challenge has no password, or they entered it."""
+    if not assignment.requires_password:
+        return True
+    return db.query(TaskUnlock.id).filter(
+        TaskUnlock.assignment_id == assignment.id, TaskUnlock.student_id == student_id).first() is not None
+
+
+def password_matches(assignment: Assignment, given: str) -> bool:
+    """Whether `given` is the challenge's task password (case matters, surrounding spaces do not)."""
+    expected = (assignment.task_password or "").strip().encode("utf-8")
+    return hmac.compare_digest(given.strip().encode("utf-8"), expected)
+
+
+def unfinished_before(assignment: Assignment, submission: Optional[Submission], question: int) -> Optional[int]:
+    """For a challenge whose tasks go in order: the first earlier task not handed in yet, which must be
+    handed in before `question` can be done. None when it may be done now (or the order is not enforced)."""
+    if not assignment.tasks_in_order:
+        return None
+    done = {a["question"] for a in answers_of(assignment, submission)}
+    return next((q["id"] for q in assignment.questions if q["id"] < question and q["id"] not in done), None)
 
 
 def points_of(tests: list) -> float:
@@ -39,19 +66,45 @@ def points_of(tests: list) -> float:
     return round(sum(t.get("points", 1) for t in tests), 2)
 
 
+_PYTHON_FRAME = re.compile(r'File "([^"]*)", line (\d+)')
+_RUBY_LINE = re.compile(r"\.rb:(\d+)")
+
+
+def compiler_error(stderr: str, language: str) -> str:
+    """What a student is told when their program crashed before it could give an answer: just that it
+    failed and on which line, never the traceback (which can show paths and the tester's own files).
+    The line is the one in the student's own file: the last Python frame outside the standard library,
+    or the first line Ruby names."""
+    if "out of memory" in stderr:
+        return "The program ran out of memory."
+    if language == "ruby":
+        found = _RUBY_LINE.search(stderr)
+        line = found.group(1) if found else None
+    else:
+        frames = [n for path, n in _PYTHON_FRAME.findall(stderr) if "/usr/" not in path and "/lib/" not in path]
+        line = frames[-1] if frames else None
+    return f"Compiler error. Error on line {line}." if line else "Compiler error."
+
+
 def student_report(results: list, language: str) -> dict:
-    """What a student may see of one question's run: how many test cases passed, and the expected and
-    actual output of each VISIBLE test that failed. A HIDDEN test that failed is only counted: its name,
-    input and expected output never leave the server. The keys are those of RunOut, bar `remaining_runs`."""
+    """What a student may see of one question's run: how many test cases passed, and for each VISIBLE test
+    that failed either its input with the expected and actual output (the program ran) or just "Compiler
+    error. Error on line N." (it crashed). A HIDDEN test that failed is only counted: its name, input and
+    expected output never leave the server. The keys are those of RunOut, bar `remaining_runs`."""
     failures: list[dict] = []
     visible_seen = hidden_failed = 0
     for r in results:
         if r.visible:
             visible_seen += 1
             if not r.passed:
+                # A wrong answer is shown as expected vs actual only; a crash as the compiler error alone; a
+                # timeout keeps its note (the time limit), which says nothing about the code.
+                error = compiler_error(r.stderr, language) if r.status == "error" else (
+                    r.stderr if r.status == "timeout" else "")
                 failures.append({"sample": visible_seen, "name": r.name, "status": r.status,
-                                 "expected_output": r.expected_output, "actual_output": r.actual_output,
-                                 "error": r.stderr})
+                                 "input": r.input, "expected_output": r.expected_output,
+                                 "actual_output": "" if r.status == "error" else r.actual_output,
+                                 "error": error})
         elif not r.passed:
             hidden_failed += 1  # counted, never described
     passed = sum(1 for r in results if r.passed)

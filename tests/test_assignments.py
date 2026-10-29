@@ -775,11 +775,11 @@ def test_a_challenge_can_have_several_questions_with_their_own_tests():
 
     # Without questions a challenge has one, as every challenge made before questions existed.
     single = _new_assignment(itok, subject, "One question", test_cases=SORT_TESTS).json()
-    assert single["questions"] == [{"id": 1, "title": "", "statement": ""}]
+    assert single["questions"] == [{"id": 1, "title": "", "statement": "", "starter_code": ""}]
     assert {t["question"] for t in single["test_cases"]} == {1}
     titled = _new_assignment(itok, subject, "One titled question", test_cases=SORT_TESTS,
                              questions=[{"title": "Sorting", "statement": "Sort them."}]).json()
-    assert titled["questions"] == [{"id": 1, "title": "Sorting", "statement": "Sort them."}]
+    assert titled["questions"] == [{"id": 1, "title": "Sorting", "statement": "Sort them.", "starter_code": ""}]
     assert _new_assignment(itok, subject, "Plain").json()["questions"] == []  # other assignments have none
 
 
@@ -836,6 +836,28 @@ def test_questions_can_be_edited_and_the_tests_stay_consistent_with_them():
     grown = put({"questions": [{"title": "X"}, {"title": "Y"}, {"title": "Z"}],
                  "test_cases": _tests_for(1, "a") + _tests_for(2, "b") + _tests_for(3, "c")})
     assert grown.status_code == 200 and [q["title"] for q in grown.json()["questions"]] == ["X", "Y", "Z"]
+
+
+def test_a_task_can_have_starting_code_that_students_see_and_the_instructor_can_change():
+    subject, itok, stok = setup_subject_with_users(client)
+    starter = "def solve(n):\n    # your code here\n    pass\n"
+    a = _new_assignment(itok, subject, "With starting code", test_cases=_tests_for(1, "a") + _tests_for(2, "b"),
+                        questions=[{"title": "A", "statement": "Do A.", "starter_code": starter},
+                                   {"title": "B", "statement": "Do B.", "starter_code": "   \n"}]).json()
+    # Kept as written (indentation and all); a blank one is saved as none.
+    assert [q["starter_code"] for q in a["questions"]] == [starter, ""]
+    # Students get it with the task, so their editor can start from it.
+    seen = client.get(f"/assignments/{a['id']}", headers=H(stok)).json()
+    assert [q["starter_code"] for q in seen["questions"]] == [starter, ""]
+
+    put = lambda body: client.put(f"/assignments/{a['id']}", headers=H(itok), json=body)  # noqa: E731
+    changed = put({"questions": [{"title": "A", "statement": "Do A.", "starter_code": "print(1)"},
+                                 {"title": "B", "statement": "Do B.", "starter_code": starter}]}).json()
+    assert [q["starter_code"] for q in changed["questions"]] == ["print(1)", starter]
+    removed = put({"questions": [{"title": "A", "statement": "Do A."}, {"title": "B", "statement": "Do B."}]}).json()
+    assert [q["starter_code"] for q in removed["questions"]] == ["", ""]
+    assert _new_assignment(itok, subject, "Huge starting code", test_cases=_tests_for(1, "a"),
+                           questions=[{"title": "A", "starter_code": "x" * 50_001}]).status_code == 422
 
 
 def test_the_number_of_questions_is_locked_once_students_have_submitted():

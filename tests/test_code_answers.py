@@ -54,12 +54,29 @@ def test_a_report_counts_hidden_failures_and_describes_only_visible_ones():
         _result(3, 1, False, visible=False, name="SECRET-NAME", actual="SECRET-OUT")], "python")
     assert report == {
         "language": "python", "all_passed": False, "passed": 1, "total": 3, "hidden_failed": 1,
-        "failures": [{"sample": 2, "name": "seen and wrong", "status": "failed", "expected_output": "want",
-                      "actual_output": "42", "error": "oops"}]}
+        "failures": [{"sample": 2, "name": "seen and wrong", "status": "failed", "input": "",
+                      "expected_output": "want",
+                      "actual_output": "42", "error": ""}]}  # a wrong answer shows expected vs actual, not stderr
     assert "SECRET" not in json.dumps(report)                         # a hidden test is only counted
 
     everything = code_answers.student_report([_result(1, 1, True), _result(2, 1, True, visible=False)], "ruby")
     assert (everything["all_passed"], everything["failures"], everything["hidden_failed"]) == (True, [], 0)
+
+
+def test_a_wrong_answer_shows_its_input_expected_and_actual_but_a_hidden_input_never_leaves():
+    def result(name, visible, status, stderr=""):
+        return ct.TestResult(test_id=1, name=name, visible=visible, points=1, match="exact", status=status,
+                             passed=False, expected_output="want", actual_output="got", stderr=stderr,
+                             input=f"input of {name}")
+
+    report = code_answers.student_report([
+        result("shown wrong", True, "failed"), result("shown crash", True, "error", 'File "/run/main.py", line 7'),
+        result("hidden", False, "failed")], "python")
+    wrong, crash = report["failures"]
+    assert (wrong["input"], wrong["expected_output"], wrong["actual_output"], wrong["error"]) == (
+        "input of shown wrong", "want", "got", "")
+    assert (crash["status"], crash["error"]) == ("error", "Compiler error. Error on line 7.")
+    assert "input of hidden" not in json.dumps(report) and report["hidden_failed"] == 1
 
 
 def test_an_answer_handed_in_is_remembered_in_question_order_without_a_result():
