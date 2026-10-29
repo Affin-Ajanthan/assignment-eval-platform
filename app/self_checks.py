@@ -184,10 +184,13 @@ def report_pair_band(pair, own_coverage: float, lines: dict) -> str:
 
 @dataclass
 class OwnFile:
-    """One of the student's own code files: shown name, source, fingerprints."""
+    """One of the student's own code files: shown name, source, fingerprints.
+    `fingerprinted`: the text the fingerprints came from (the source without
+    junk code, same line numbers), when it differs from `source`."""
     name: str
     source: str
     hashes: set[int]
+    fingerprinted: str | None = None
 
 
 def code_highlights(files: list[OwnFile], shared: set[int]) -> list[dict]:
@@ -198,7 +201,8 @@ def code_highlights(files: list[OwnFile], shared: set[int]) -> list[dict]:
     out: list[dict] = []
     for f in files:
         lines = f.source.splitlines()
-        for start, end in matched_line_ranges(f.source, f.name, shared & f.hashes):
+        fingerprinted = f.source if f.fingerprinted is None else f.fingerprinted
+        for start, end in matched_line_ranges(fingerprinted, f.name, shared & f.hashes):
             shown_end = min(end, start + MAX_HIGHLIGHT_LINES - 1)
             out.append({"file": f.name, "start_line": start, "end_line": end,
                         "text": "\n".join(lines[start - 1:shown_end]),

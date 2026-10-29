@@ -60,6 +60,20 @@ TEMPLATE_MIN_WORDS = 8
 # Reports must still have this much of their own text left to be compared.
 TEMPLATE_MIN_REMAINING = 30
 
+# Cited material is meant to match other sources: a reference list and a
+# quotation followed by its citation are cut out before comparing. A
+# "References" section is only cut when it is the last one, in the second half
+# of the report, no more than REFERENCES_MAX_SHARE of it, and -- when longer
+# than REFERENCES_SHORT_WORDS (students' informal lists: "Python docs: csv
+# module") -- reads like a reference list (a URL, domain, year, DOI, "et al."
+# or [n] at least every REFERENCES_WORDS_PER_MARKER words); otherwise copied
+# prose under a made-up heading would disappear. A quotation needs at least
+# QUOTE_MIN_WORDS words.
+REFERENCES_MAX_SHARE = 0.30
+REFERENCES_SHORT_WORDS = 60
+REFERENCES_WORDS_PER_MARKER = 30
+QUOTE_MIN_WORDS = 6
+
 
 # --------------------------------------------------------------------------
 # 1. Extraction (PyMuPDF)
@@ -283,6 +297,8 @@ class ReportComparison:
     review_threshold: float | None = None
     # Words cut from each report because they match the template PDF.
     template_words_removed: dict[str, int] = field(default_factory=dict)
+    # Words cut from each report as cited material (reference list, cited quotations).
+    cited_words_removed: dict[str, int] = field(default_factory=dict)
 
 
 def remove_template_text(text: str, template: str) -> tuple[str, int]:
@@ -319,15 +335,66 @@ def remove_template_text(text: str, template: str) -> tuple[str, int]:
     return " ".join(" ".join(pieces).split()), sum(end - first for first, end in runs)
 
 
+_REFERENCES_HEADING_RE = re.compile(
+    r"(?:\b\d{1,2}(?:\.\d{1,2})*\.?\s+)?\b(?:References|REFERENCES|Bibliography|BIBLIOGRAPHY|"
+    r"Reference [Ll]ist|REFERENCE LIST|Works [Cc]ited|WORKS CITED)\b\s*:?")
+_APPENDIX_RE = re.compile(r"\b(?:Appendix|Appendices|APPENDIX|APPENDICES)\b")
+_REFERENCE_MARKER_RE = re.compile(
+    r"https?://\S+|\bwww\.\S+|\b[\w-]+\.(?:org|com|net|edu|gov|io|ac\.[a-z]{2})\b|\bdoi\b|\bDOI\b"
+    r"|\b(?:19|20)\d{2}[a-z]?\b|\bet al\b|\b(?:Retrieved|Accessed|Available)\b|\[\d{1,3}\]")
+# "..." or “...” directly followed by (Author, 2020), (Author 2020, p. 4), (n.d.) or [3].
+_CITED_QUOTE_RE = re.compile(
+    r"[\"“]([^\"”]{1,1500}?)[\"”]\s*"
+    r"(?:\((?:[^()]{0,80}?\b(?:19|20)\d{2}[a-z]?|[^()]{0,80}?n\.d\.)[^()]{0,30}\)|\[\d{1,3}(?:\s*[,–-]\s*\d{1,3})*\])")
+
+
+def _word_count(text: str) -> int:
+    return len(re.findall(r"\w+", text))
+
+
+def remove_cited_text(text: str) -> tuple[str, int]:
+    """`text` without its reference list and its cited quotations (see
+    REFERENCES_MAX_SHARE and QUOTE_MIN_WORDS for when each is cut). Returns
+    the remaining text and how many words were cut."""
+    total = _word_count(text)
+    removed = 0
+    headings = [m for m in _REFERENCES_HEADING_RE.finditer(text) if _word_count(text[:m.start()]) >= total / 2]
+    if headings:
+        heading = headings[-1]  # a table of contents names it earlier
+        end_match = _APPENDIX_RE.search(text, heading.end())
+        end = end_match.start() if end_match else len(text)
+        section = text[heading.end():end]
+        words = _word_count(section)
+        markers = len(_REFERENCE_MARKER_RE.findall(section))
+        looks_like_references = words <= REFERENCES_SHORT_WORDS or markers * REFERENCES_WORDS_PER_MARKER >= words
+        if words and words <= total * REFERENCES_MAX_SHARE and looks_like_references:
+            removed += _word_count(text[heading.start():end])
+            text = text[:heading.start()] + " " + text[end:]
+
+    def cut_quote(m: re.Match) -> str:
+        nonlocal removed
+        quoted = _word_count(m.group(1))
+        if quoted < QUOTE_MIN_WORDS:
+            return m.group()
+        removed += quoted
+        return " "
+
+    text = _CITED_QUOTE_RE.sub(cut_quote, text)
+    return " ".join(text.split()), removed
+
+
 def compare_reports(texts: dict[str, str], service=None, template_text: str | None = None) -> ReportComparison:
     """Compare every pair of cleaned report texts. ``service`` is the
     shared sentence-embedding service (None skips the semantic signal).
     ``template_text``: the instructor's template PDF text, cut out of every
     report first. Never raises because the model failed: the text results
     stand alone."""
+    texts = dict(texts)
+    cited: dict[str, int] = {}
+    for sid, text in texts.items():
+        texts[sid], cited[sid] = remove_cited_text(text)
     removed: dict[str, int] = {}
     if template_text:
-        texts = dict(texts)
         for sid, text in texts.items():
             texts[sid], removed[sid] = remove_template_text(text, template_text)
     reports = [tokenize(sid, text) for sid, text in texts.items()]
@@ -356,7 +423,7 @@ def compare_reports(texts: dict[str, str], service=None, template_text: str | No
         pairs.append(pair)
 
     result = ReportComparison(pairs=pairs, common_fingerprints_excluded=common, semantic_status="disabled",
-                              template_words_removed=removed)
+                              template_words_removed=removed, cited_words_removed=cited)
     if service is None or not service.load():
         if service is not None:
             result.semantic_status = service.status

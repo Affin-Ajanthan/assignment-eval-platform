@@ -30,7 +30,7 @@ Note: in production the semantic flag also requires the pair to be an outlier ag
 | 5 | TC04 | Python | same task (sorting), different algorithms | **0.831** | 0.524 | 0.00 / 0.00 | 14% | same task and output; both are loop-heavy list manipulation |
 | 6 | TC20 | Python | same nested-loop structure, different functionality | **0.821** | 0.514 | 0.58 / 0.78 (**token flag**) | 71% | identical nested for-loop/if/counter skeleton |
 | 7 | TC13 | Python | different tasks with the same exception-handling structure | **0.777** | 0.491 | 0.52 / 0.70 | 40% | same try/with open/except FileNotFoundError/except ValueError skeleton |
-| 8 | TC11 | Java | different tasks sharing class/main/Scanner boilerplate | **0.739** | 0.355 | 0.29 / 0.54 | 70% | identical class declaration, main method and Scanner setup |
+| 8 | TC11 | Java | different tasks sharing class/main/Scanner boilerplate | **0.739** | 0.355 | 0.28 / 0.52 | 70% | identical class declaration, main method and Scanner setup |
 | 9 | TC02 | Python | same task (maximum), manual vs standard library | **0.709** | 0.761 | 0.00 / 0.00 | 50% | same function signature and purpose; very short |
 | 10 | TC07 | Python | same string problem (palindrome), different approach | **0.705** | 0.725 | 0.03 / 0.09 | 25% | same task; both normalise case and compare characters |
 | 11 | TC05 | Python | same task (search), linear vs binary | **0.688** | 0.610 | 0.06 / 0.22 | 40% | same task; both loop and compare against a target |
@@ -41,7 +41,7 @@ Note: in production the semantic flag also requires the pair to be an outlier ag
 | 16 | TC16 | Python | different tasks with the same function name | **0.456** | 0.314 | 0.06 / 0.14 | 25% | both define and call `process(data)` (names removed by normalisation) |
 | 17 | TC15 | Python | different tasks with the same variable names | **0.440** | 0.427 | 0.12 / 0.21 | 20% | shares names like values/total/count/result (removed by normalisation) |
 | 18 | TC10 | Python | different tasks sharing the same import block | **0.386** | 0.299 | 0.14 / 0.26 | 50% | identical import statements at the top of both files |
-| 19 | TC18 | JavaScript | different apps sharing Express framework boilerplate | **0.339** | 0.281 | 0.33 / 0.50 | 46% | identical Express setup: require, app, middleware, listen |
+| 19 | TC18 | JavaScript | different apps sharing Express framework boilerplate | **0.339** | 0.281 | 0.31 / 0.47 | 46% | identical Express setup: require, app, middleware, listen |
 | 20 | TC09 | Python | different tasks (FizzBuzz vs grade bands) using common loops/conditions | **0.273** | 0.236 | 0.32 / 0.53 | 8% | both are a for loop over a range/list with an if/elif/else chain |
 
 ## Starter-code cohort simulation (production decision rule)

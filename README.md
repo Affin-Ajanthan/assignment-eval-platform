@@ -409,6 +409,23 @@ saved by mistake. Settings: `CODE_SANDBOX`,
 `CODE_TEST_TIMEOUT`, `CODE_SANDBOX_IMAGE`, `CODE_SANDBOX_RUBY_IMAGE`,
 `CODE_SAMPLE_RUNS_PER_HOUR`, `CODE_SAMPLE_MAX_PARALLEL` (see `.env.example`).
 
+### Token code similarity (Winnowing)
+
+Both the instructor's similarity check and the student self-check
+fingerprint each file the same way (`app/similarity_runs.py`):
+
+- **Junk code is removed first** -- unused variables and imports, `if
+  (false)` blocks, code after a `return` -- with the same cleanup the
+  semantic check uses (`python_cleanup.py`, `ts_cleanup.py`), so padding
+  a copy no longer lowers its Jaccard. Removed code keeps its line
+  breaks, so highlights still show the student's real line numbers.
+- **Tokens come from tree-sitter** for Java, JavaScript, C, C++, C#, Go,
+  Ruby and PHP (Python: its own tokenizer; other languages: a regex
+  fallback). Names fold to one token, strings and numbers too, comments
+  are dropped, and each language's own keywords are kept -- PHP's
+  `$name`, JavaScript's template strings and C's `#include` are read
+  correctly. Code with a syntax error is still tokenized.
+
 ### Semantic code similarity (UniXcoder)
 
 Winnowing fingerprints (Jaccard + containment) catch literal and

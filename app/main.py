@@ -697,6 +697,8 @@ class ReportSimilarityOut(BaseModel):
     # The assignment's template PDF that was cut out of every report first.
     template_filename: Optional[str] = None
     template_words_removed: dict[str, int] = {}  # submission id -> words cut
+    # Reference lists and cited quotations cut out first (they are meant to match sources).
+    cited_words_removed: dict[str, int] = {}  # submission id -> words cut
     pairs: list[ReportSimilarityPairOut]
     semantic: ReportSemanticSummaryOut
     # Thresholds are uncalibrated: results are exploratory review signals.
@@ -2529,6 +2531,7 @@ def check_report_similarity(
         common_fingerprints_excluded=result.common_fingerprints_excluded,
         template_filename=(assignment.report_template_filename if template else None),
         template_words_removed=result.template_words_removed,
+        cited_words_removed=result.cited_words_removed,
         pairs=[
             ReportSimilarityPairOut(
                 submission_a_id=int(p.submission_a), submission_b_id=int(p.submission_b),
