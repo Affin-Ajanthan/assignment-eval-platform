@@ -94,6 +94,16 @@ export default function AssignmentCard({
       {useEditor && a.status === "open" && (
         <div className="mt-3" data-testid="questions-hidden-note">
           {manyTasks && <p className="text-sm font-semibold">{taskCount} tasks</p>}
+          {a.has_task_password && !a.tasks_unlocked && (
+            <p className="text-xs text-gray-500" data-testid="password-note">
+              You need the password from your instructor to start the tasks.
+            </p>
+          )}
+          {manyTasks && a.tasks_in_order && (
+            <p className="text-xs text-gray-500" data-testid="order-note">
+              The tasks are done in order: you can start a task only after handing in the one before it.
+            </p>
+          )}
           <p className="text-xs text-gray-500">
             {manyTasks
               ? "The questions are shown when you press Do assignment and then Do task, and you hand the tasks in one at a time. Each task is marked as soon as you submit it and cannot be changed afterwards; the mark adds up the test cases you pass in every task."

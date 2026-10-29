@@ -34,6 +34,8 @@ type FormState = {
   releaseTime: string;
   questions: QuestionRow[]; // only used by a code challenge: at least one task, each with its question and test cases
   testMainFile: string; // the file the tests run (a challenge with one task); "" = picked automatically
+  taskPassword: string; // only used by a code challenge: students enter it when they press Do task
+  inOrder: boolean; // only used by a code challenge: the tasks must be handed in in order
 };
 
 export const KIND_OPTIONS: { value: AssignmentKind; title: string; text: string }[] = [
@@ -82,6 +84,8 @@ function emptyForm(kind: AssignmentKind): FormState {
     releaseTime: "",
     questions: [emptyQuestionRow()],
     testMainFile: "",
+    taskPassword: "",
+    inOrder: false,
   };
 }
 
@@ -109,6 +113,8 @@ function formFromAssignment(a: Assignment): FormState {
     releaseTime: release.time,
     questions: toQuestionRows(a),
     testMainFile: a.test_main_file ?? "",
+    taskPassword: a.task_password ?? "",
+    inOrder: a.tasks_in_order ?? false,
   };
 }
 
@@ -154,6 +160,9 @@ export default function AssignmentForm({
     if (!form.name.trim()) return setMsg({ text: "Assignment name is required.", kind: "error" });
     if (challenge && !form.description.trim()) {
       return setMsg({ text: "Description / instructions are required for a code challenge.", kind: "error" });
+    }
+    if (challenge && !form.taskPassword.trim()) {
+      return setMsg({ text: "Enter a password for the tasks: students need it when they press Do task.", kind: "error" });
     }
     const from = combineLocal(form.fromDate, form.fromTime);
     const due = combineLocal(form.dueDate, form.dueTime);
@@ -204,6 +213,8 @@ export default function AssignmentForm({
       questions: questionsPayload.questions,
       // Only a challenge with one task runs a named file; with several, each task has its own file.
       test_main_file: challenge && form.questions.length === 1 ? form.testMainFile.trim() : "",
+      task_password: challenge ? form.taskPassword.trim() : "",
+      tasks_in_order: challenge && form.inOrder,
     };
     setSaving(true);
     try {
@@ -327,6 +338,42 @@ export default function AssignmentForm({
 
       {form.kind === "code_challenge" && (
         <>
+          <fieldset className="mt-3" data-testid="task-access">
+            <legend className="text-sm font-semibold">Starting the tasks</legend>
+            <label className="mt-1 block text-sm font-semibold" htmlFor="task-password">
+              Task password <span className="font-normal text-red-600">(required)</span>
+            </label>
+            <input
+              id="task-password"
+              value={form.taskPassword}
+              maxLength={100}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="Choose a password and tell your students"
+              onChange={(e) => set("taskPassword", e.target.value)}
+              className={input}
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Students see the title and the instructions first. When they press Do task they must enter this password
+              before the questions are shown, and the server refuses their code until they have. Give it to your class
+              yourself (case matters). You can change it at any time; students who already entered it stay in.
+            </p>
+            <label className="mt-3 flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={form.inOrder}
+                onChange={(e) => set("inOrder", e.target.checked)}
+              />
+              <span>
+                Tasks must be done in order
+                <span className="block text-xs text-gray-500">
+                  Task 2 can be run or handed in only after Task 1 is handed in, Task 3 after Task 2, and so on. Left
+                  unticked, students can do the tasks in any order. You can change this at any time.
+                </span>
+              </span>
+            </label>
+          </fieldset>
           <QuestionsEditor rows={form.questions} onChange={(rows) => set("questions", rows)} locked={typesLocked} />
           {form.questions.length === 1 && form.questions[0].tests.length > 0 && (
             <div className="mt-3">

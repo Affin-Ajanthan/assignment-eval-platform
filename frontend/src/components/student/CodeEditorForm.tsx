@@ -213,7 +213,8 @@ type Answer = { code: string; language: CodeLanguageId };
  * The code editor of a code challenge, on the challenge's own page (app/student/code/[id]), which the
  * student reaches with "Do assignment": the questions are shown here and nowhere before. The student does
  * the tasks one at a time: with several, they are tabs, each with its own question, language and code,
- * and they can be done in any order. Run checks the code of the task that is open against all of that
+ * and they can be done in any order (or, when the instructor set it, only in order: a task's tab stays locked
+ * until the one before it is handed in). Run checks the code of the task that is open against all of that
  * task's test cases and shows how many passed (practice: nothing is handed in or marked). Submit asks for
  * confirmation, then hands that task in: the server runs every test case of the task, saves the points
  * as the mark and the page shows the result at once. A task handed in is final: its box locks and shows
@@ -240,6 +241,9 @@ export default function CodeEditorForm({
   const blankFor = (id: number): Answer => ({ code: starterOf(id), language: languages[0].id });
   /** The answer the student handed in for a task, or null while it is not handed in. */
   const handedIn = (id: number): CodeAnswer | null => work.questions.find((q) => q.question === id && q.submitted) ?? null;
+  /** When the tasks go in order: the first earlier task not handed in yet, which this one waits for (else null). */
+  const waitingFor = (id: number): number | null =>
+    assignment.tasks_in_order && open ? (questions.find((q) => q.id < id && handedIn(q.id) === null)?.id ?? null) : null;
 
   const [answers, setAnswers] = useState<Record<number, Answer>>({});
   const [runs, setRuns] = useState<Record<number, CodeRun | null>>({}); // the last Run of each task
@@ -393,7 +397,13 @@ export default function CodeEditorForm({
           <p className="mb-2 text-sm text-gray-700" data-testid="progress">
             {work.complete
               ? `All ${questions.length} tasks are handed in.`
-              : `${handedInCount} of ${questions.length} tasks handed in.${open ? " Hand them in one at a time, in any order." : ""}`}
+              : `${handedInCount} of ${questions.length} tasks handed in.${
+                  open
+                    ? assignment.tasks_in_order
+                      ? " Hand them in one at a time, in order: a task opens once the one before it is handed in."
+                      : " Hand them in one at a time, in any order."
+                    : ""
+                }`}
           </p>
           <div
             role="tablist"
@@ -406,7 +416,14 @@ export default function CodeEditorForm({
               // A tick once the task is handed in, a dot while the student has changed the code for it
               // (the starting code alone does not count).
               const typedCode = answers[q.id]?.code.trim() ?? "";
-              const mark = handedIn(q.id) ? "✓ " : typedCode !== "" && typedCode !== starterOf(q.id).trim() ? "• " : "";
+              const waiting = waitingFor(q.id);
+              const mark = waiting !== null
+                ? "🔒 "
+                : handedIn(q.id)
+                  ? "✓ "
+                  : typedCode !== "" && typedCode !== starterOf(q.id).trim()
+                    ? "• "
+                    : "";
               return (
                 <button
                   key={q.id}
@@ -415,11 +432,15 @@ export default function CodeEditorForm({
                   id={`${editorId}-tab-${q.id}`}
                   aria-selected={selected}
                   aria-controls={`${editorId}-panel`}
+                  disabled={waiting !== null}
+                  title={waiting !== null ? `Hand in ${taskName(questions.find((x) => x.id === waiting) ?? q)} first` : undefined}
                   onClick={() => setCurrent(q.id)}
                   className={`-mb-px max-w-[16rem] truncate rounded-t-md border px-3 py-1.5 text-sm font-semibold ${
                     selected
                       ? "border-gray-200 border-b-white bg-white text-blue-700"
-                      : "border-transparent text-gray-600 hover:text-gray-900"
+                      : waiting !== null
+                        ? "cursor-not-allowed border-transparent text-gray-400"
+                        : "border-transparent text-gray-600 hover:text-gray-900"
                   }`}
                 >
                   {mark}

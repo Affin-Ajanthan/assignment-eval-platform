@@ -11,11 +11,12 @@ import AccountBar from "@/components/AccountBar";
 import Badge from "@/components/Badge";
 import RichText from "@/components/RichText";
 import CodeEditorForm, { editorLanguages } from "@/components/student/CodeEditorForm";
+import TaskPasswordForm from "@/components/student/TaskPasswordForm";
 
 /**
  * A code challenge's own page, opened with Do assignment on its card on the student portal. It first shows only
- * the title and the instructions, with a Do task button; pressing it shows the tasks and their questions in
- * the same page (not on the card). The student writes their code and hands the tasks in one at a time
+ * the title and the instructions, with a Do task button; pressing it (and entering the task password, when the
+ * instructor set one) shows the tasks and their questions in the same page (not on the card). The student writes their code and hands the tasks in one at a time
  * (see CodeEditorForm). What was already handed in comes from the server, so the page can be closed and
  * reopened, and still shows the results after the deadline.
  */
@@ -26,6 +27,7 @@ export default function CodeChallengePage() {
   const [work, setWork] = useState<CodeWork | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [started, setStarted] = useState(false); // the student pressed Do task: the tasks are shown
+  const [asking, setAsking] = useState(false); // the student pressed Do task and is asked for the task password
 
   const load = useCallback(async () => {
     try {
@@ -58,6 +60,8 @@ export default function CodeChallengePage() {
   const taskCount = assignment?.questions?.length ?? 0;
   // Once an answer is handed in the student has plainly begun, so the tasks stay in view when the page is reopened.
   const showTasks = started || (work?.questions.some((q) => q.submitted) ?? false);
+  // The instructor's password, until the student has entered it the server does not even send the questions.
+  const passwordNeeded = assignment?.has_task_password === true && assignment?.tasks_unlocked === false;
   let body: ReactNode;
   if (error) {
     body = (
@@ -90,21 +94,35 @@ export default function CodeChallengePage() {
             <RichText text={assignment.description} className="text-sm text-gray-700" />
           </div>
         )}
-        {showTasks ? (
+        {showTasks && !passwordNeeded ? (
           <CodeEditorForm assignment={assignment} work={work} onWork={setWork} />
         ) : (
           // The tasks are not shown until the student asks for them: this page first gives only the title and
-          // the instructions.
+          // the instructions. With a password, pressing the button asks for it.
           <div className="mt-4" data-testid="do-task">
             {taskCount > 1 && <p className="mb-2 text-sm text-gray-700">This assignment has {taskCount} tasks.</p>}
-            <button
-              type="button"
-              onClick={() => setStarted(true)}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-              data-testid="do-task-button"
-            >
-              {open ? (taskCount > 1 ? "Do tasks" : "Do task") : taskCount > 1 ? "See tasks" : "See task"}
-            </button>
+            {assignment.tasks_in_order && taskCount > 1 && (
+              <p className="mb-2 text-sm text-gray-700">The tasks are done in order: each one after the one before it.</p>
+            )}
+            {!asking && (
+              <button
+                type="button"
+                onClick={() => (passwordNeeded ? setAsking(true) : setStarted(true))}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                data-testid="do-task-button"
+              >
+                {open ? (taskCount > 1 ? "Do tasks" : "Do task") : taskCount > 1 ? "See tasks" : "See task"}
+              </button>
+            )}
+            {asking && passwordNeeded && (
+              <TaskPasswordForm
+                assignmentId={assignment.id}
+                onUnlocked={async () => {
+                  await load(); // the questions come with the next answer from the server
+                  setStarted(true);
+                }}
+              />
+            )}
           </div>
         )}
       </>

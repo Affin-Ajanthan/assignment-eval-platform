@@ -1032,3 +1032,121 @@ def test_a_challenge_with_several_questions_is_not_answered_by_uploading_a_file(
                     headers=auth_headers(stok))
     assert r.status_code == 400 and "several tasks" in r.json()["detail"]
     assert client.get("/submissions", headers=auth_headers(stok)).json() == []
+
+
+# --------------------------------------------------------------------------
+# The task password and tasks done in order
+# --------------------------------------------------------------------------
+
+
+def _unlock(assignment, token, password):
+    return client.post(f"/assignments/{assignment['id']}/unlock-tasks", headers=auth_headers(token),
+                       json={"password": password})
+
+
+def _seen_by(assignment, token):
+    return client.get(f"/assignments/{assignment['id']}", headers=auth_headers(token)).json()
+
+
+def test_a_task_password_hides_the_questions_and_blocks_running_until_it_is_entered(fake, monkeypatch):
+    monkeypatch.setattr(sr, "unlock_limiter", sr.UnlockLimiter())
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _two_questions(itok, subject, "Locked", task_password="  open sesame ")
+    assert assignment["task_password"] == "open sesame"               # the instructor reads it back, trimmed
+    other = new_student(client, subject["id"])
+
+    locked = _seen_by(assignment, stok)
+    assert (locked["has_task_password"], locked["tasks_unlocked"]) == (True, False)
+    assert locked["questions"] == [{"id": 1, "title": "Double it", "statement": "", "starter_code": ""},
+                                   {"id": 2, "title": "Triple it", "statement": "", "starter_code": ""}]
+    assert "open sesame" not in json.dumps(locked) and "open sesame" not in json.dumps(
+        client.get("/assignments", headers=auth_headers(stok)).json())
+    assert _run(assignment, stok).status_code == 403 and _submit_question(assignment, stok, 1, "print(1)").status_code == 403
+    assert fake.calls == []
+
+    wrong = _unlock(assignment, stok, "nope")
+    assert wrong.status_code == 403 and wrong.json()["detail"] == "Wrong password."
+    assert _seen_by(assignment, stok)["tasks_unlocked"] is False
+
+    assert _unlock(assignment, stok, "open sesame").status_code == 200   # case matters, outer spaces do not
+    opened = _seen_by(assignment, stok)
+    assert opened["tasks_unlocked"] is True
+    assert [q["statement"] for q in opened["questions"]] == ["Print twice the number.", "Print three times the number."]
+    assert _run(assignment, stok).status_code == 200
+    assert _submit_question(assignment, stok, 1, "print(1)").status_code == 200
+
+    # Each student enters it for themselves.
+    assert _seen_by(assignment, other)["tasks_unlocked"] is False
+    assert _run(assignment, other).status_code == 403
+    assert _unlock(assignment, other, "Open sesame").status_code == 403
+
+
+def test_a_challenge_without_a_password_is_open_to_everyone(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _two_questions(itok, subject, "No password")
+    seen = _seen_by(assignment, stok)
+    assert (seen["has_task_password"], seen["tasks_unlocked"], seen["tasks_in_order"]) == (False, True, False)
+    assert seen["questions"][0]["statement"] == "Print twice the number."
+    assert _unlock(assignment, stok, "anything").status_code == 200
+    assert _run(assignment, stok).status_code == 200
+
+
+def test_too_many_wrong_passwords_lock_the_student_out_for_a_while(monkeypatch):
+    clock = Clock()
+    monkeypatch.setattr(sr, "unlock_limiter", sr.UnlockLimiter(tries=3, window=600, clock=clock))
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _two_questions(itok, subject, "Guessing", task_password="right")
+    for _ in range(3):
+        assert _unlock(assignment, stok, "wrong").status_code == 403
+    blocked = _unlock(assignment, stok, "right")                      # even the right one has to wait
+    assert blocked.status_code == 429 and "Too many wrong passwords" in blocked.json()["detail"]
+    clock.now += 601
+    assert _unlock(assignment, stok, "right").status_code == 200
+
+
+def test_the_instructor_can_change_or_remove_the_password_and_the_order(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _two_questions(itok, subject, "Changing", task_password="one", tasks_in_order=True)
+    assert (assignment["task_password"], assignment["tasks_in_order"]) == ("one", True)
+    put = lambda body: client.put(f"/assignments/{assignment['id']}", headers=auth_headers(itok), json=body).json()
+
+    assert put({"task_password": "two"})["task_password"] == "two"
+    assert put({"name": "Changing again"})["task_password"] == "two"  # left out: kept
+    assert put({"tasks_in_order": False})["tasks_in_order"] is False
+    cleared = put({"task_password": ""})
+    assert cleared["task_password"] == ""
+    seen = _seen_by(assignment, stok)
+    assert (seen["has_task_password"], seen["tasks_unlocked"], seen["tasks_in_order"]) == (False, True, False)
+    assert seen["questions"][0]["statement"] == "Print twice the number."
+
+
+def test_a_submission_challenge_ignores_a_password(fake):
+    subject, itok, _ = setup_subject_with_users(client)
+    plain = _challenge(itok, subject, "Plain upload", task_password="x", tasks_in_order=True)
+    assert (plain["task_password"], plain["tasks_in_order"]) == ("", False)
+
+
+def test_tasks_in_order_means_the_next_task_waits_for_the_one_before(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _two_questions(itok, subject, "In order", tasks_in_order=True)
+    assert _seen_by(assignment, stok)["tasks_in_order"] is True
+
+    early_run = _run(assignment, stok, question=2)
+    early_submit = _submit_question(assignment, stok, 2, "print(2)")
+    for refused in (early_run, early_submit):
+        assert refused.status_code == 409 and "hand in task 1 first" in refused.json()["detail"]
+    assert fake.calls == [] and client.get("/submissions", headers=auth_headers(stok)).json() == []
+
+    assert _run(assignment, stok, question=1).status_code == 200      # the first can be run, and
+    assert _run(assignment, stok, question=2).status_code == 409      # running it does not unlock the second
+    assert _submit_question(assignment, stok, 1, "print(1)").status_code == 200
+    assert _run(assignment, stok, question=2).status_code == 200
+    assert _submit_question(assignment, stok, 2, "print(2)").status_code == 200
+    assert _work(assignment, stok).json()["complete"] is True
+
+
+def test_without_the_order_the_tasks_can_be_done_in_any_order(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _two_questions(itok, subject, "Any order")
+    assert _submit_question(assignment, stok, 2, "print(2)").status_code == 200
+    assert _submit_question(assignment, stok, 1, "print(1)").status_code == 200

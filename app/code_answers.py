@@ -25,14 +25,40 @@ files. Its answers are worked out from its files (answers_of), and it cannot be 
 
 from __future__ import annotations
 
+import hmac
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from sqlalchemy.orm import Session
+
 from .db import BASE_DIR
 from .evaluator import code_testing
-from .models import Assignment, Submission
+from .models import Assignment, Submission, TaskUnlock
+
+
+def tasks_unlocked(db: Session, student_id: int, assignment: Assignment) -> bool:
+    """Whether the student may see and do the tasks: the challenge has no password, or they entered it."""
+    if not assignment.requires_password:
+        return True
+    return db.query(TaskUnlock.id).filter(
+        TaskUnlock.assignment_id == assignment.id, TaskUnlock.student_id == student_id).first() is not None
+
+
+def password_matches(assignment: Assignment, given: str) -> bool:
+    """Whether `given` is the challenge's task password (case matters, surrounding spaces do not)."""
+    expected = (assignment.task_password or "").strip().encode("utf-8")
+    return hmac.compare_digest(given.strip().encode("utf-8"), expected)
+
+
+def unfinished_before(assignment: Assignment, submission: Optional[Submission], question: int) -> Optional[int]:
+    """For a challenge whose tasks go in order: the first earlier task not handed in yet, which must be
+    handed in before `question` can be done. None when it may be done now (or the order is not enforced)."""
+    if not assignment.tasks_in_order:
+        return None
+    done = {a["question"] for a in answers_of(assignment, submission)}
+    return next((q["id"] for q in assignment.questions if q["id"] < question and q["id"] not in done), None)
 
 
 def points_of(tests: list) -> float:

@@ -190,6 +190,13 @@ class Assignment(Base):
     # inside the submission). NULL: the only Python/Ruby file, or a main.* one.
     # Only used by a challenge with a single task.
     test_main_file = Column(String, nullable=True)
+    # A code challenge's access password: students must enter it (POST /assignments/{id}/unlock-tasks) before
+    # they are shown the questions or can run or submit code. Kept as typed, because the instructor reads it
+    # back to share it with the class; never sent to students. NULL: no password (every challenge made before this).
+    task_password = Column(String, nullable=True)
+    # A code challenge whose tasks must be handed in in order: task 2 can be run or submitted only once task 1
+    # is handed in, and so on. Enforced by the API.
+    tasks_in_order = Column(Boolean, nullable=False, default=False, server_default="0")
     # "submission": students upload code, a report and/or a video, graded with a
     # rubric. "code_challenge": students submit code only, and it is run against
     # test_cases (HackerRank style). Chosen when the assignment is created and
@@ -223,6 +230,11 @@ class Assignment(Base):
         if self.kind != "code_challenge":
             return []
         return list(self.code_questions or [{"id": 1, "title": "", "statement": "", "starter_code": ""}])
+
+    @property
+    def requires_password(self) -> bool:
+        """Whether students must enter the task password before they can see or do the tasks."""
+        return self.kind == "code_challenge" and bool((self.task_password or "").strip())
 
     def tests_of(self, question_id: int) -> list[dict]:
         """The test cases of one task, in order."""
@@ -440,6 +452,19 @@ class SelfCheck(Base):
     error = Column(String, nullable=True)
     created_at = Column(DateTime, default=_utcnow, index=True)
     finished_at = Column(DateTime, nullable=True)
+
+
+class TaskUnlock(Base):
+    """A student who entered the right task password of a code challenge: from then on they are shown its
+    questions and can run and submit code. One row per student and challenge (the password is not asked again)."""
+
+    __tablename__ = "task_unlocks"
+    __table_args__ = (UniqueConstraint("assignment_id", "student_id", name="uq_task_unlock"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    assignment_id = Column(Integer, ForeignKey("assignments.id"), nullable=False, index=True)
+    student_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    unlocked_at = Column(DateTime, default=_utcnow)
 
 
 class BatchJob(Base):
