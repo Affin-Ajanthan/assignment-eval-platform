@@ -9,6 +9,7 @@ import { formatDateTime } from "@/lib/datetime";
 import { languageNames } from "@/lib/codeLanguages";
 import AccountBar from "@/components/AccountBar";
 import Badge from "@/components/Badge";
+import RichText from "@/components/RichText";
 import CodeEditorForm, { editorLanguages } from "@/components/student/CodeEditorForm";
 
 /**
@@ -81,7 +82,7 @@ export default function CodeChallengePage() {
         {assignment.description && (
           <div className="mt-3">
             <p className="text-sm font-semibold">Description</p>
-            <p className="whitespace-pre-wrap text-sm text-gray-700">{assignment.description}</p>
+            <RichText text={assignment.description} className="text-sm text-gray-700" />
           </div>
         )}
         <CodeEditorForm assignment={assignment} work={work} onWork={setWork} />

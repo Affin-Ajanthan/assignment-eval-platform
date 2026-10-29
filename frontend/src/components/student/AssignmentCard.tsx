@@ -4,6 +4,7 @@ import Link from "next/link";
 import { StudentAssignment } from "@/lib/api";
 import { formatDateTime, formatMark } from "@/lib/datetime";
 import Badge from "@/components/Badge";
+import RichText from "@/components/RichText";
 import Message, { MessageState } from "@/components/Message";
 import SelfCheckPanel from "@/components/student/SelfCheckPanel";
 import UploadForm from "@/components/student/UploadForm";
@@ -86,7 +87,7 @@ export default function AssignmentCard({
       {a.description && !useEditor && (
         <div className="mt-3">
           <p className="text-sm font-semibold">Description</p>
-          <p className="whitespace-pre-wrap text-sm text-gray-700">{a.description}</p>
+          <RichText text={a.description} className="text-sm text-gray-700" />
         </div>
       )}
 

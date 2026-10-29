@@ -15,6 +15,7 @@ import { useRequireRole } from "@/lib/useRequireRole";
 import AccountBar from "@/components/AccountBar";
 import CrossModalConsistencyPanel from "@/components/CrossModalConsistencyPanel";
 import SubmissionFiles from "@/components/SubmissionFiles";
+import RichText from "@/components/RichText";
 import TestRunPanel from "@/components/instructor/TestRunPanel";
 import AISignalsPanel from "@/components/AISignalsPanel";
 import AssignmentsSection from "@/components/instructor/AssignmentsSection";
@@ -818,11 +819,11 @@ export default function InstructorPage() {
                         : "Closed"}
                   </span>
                 </div>
-                <p className="mt-2 whitespace-pre-wrap text-gray-800">
-                  {selectedOption.assignment.description || (
-                    <span className="text-gray-500">No description was given for this assignment.</span>
-                  )}
-                </p>
+                {selectedOption.assignment.description ? (
+                  <RichText text={selectedOption.assignment.description} className="mt-2 text-gray-800" />
+                ) : (
+                  <p className="mt-2 text-gray-500">No description was given for this assignment.</p>
+                )}
                 <dl className="mt-2 grid gap-x-4 gap-y-0.5 text-xs text-gray-700 sm:grid-cols-[max-content_1fr]">
                   <dt className="font-semibold">Open</dt>
                   <dd>

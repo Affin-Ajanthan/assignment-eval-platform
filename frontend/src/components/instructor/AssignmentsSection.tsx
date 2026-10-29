@@ -7,6 +7,8 @@ import Message, { MessageState } from "@/components/Message";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import ReportTemplateControl from "@/components/instructor/ReportTemplateControl";
 import Badge from "@/components/Badge";
+import RichText from "@/components/RichText";
+import RichTextEditor from "@/components/instructor/RichTextEditor";
 import { CODE_LANGUAGES, CodeLanguageId, languageNames } from "@/lib/codeLanguages";
 import QuestionsEditor, {
   emptyQuestionRow,
@@ -333,17 +335,16 @@ export default function AssignmentsSection({
         />
 
         <label className="mt-3 block text-sm font-semibold" htmlFor="assignment-description">
-          Description / instructions{" "}
+          Instructions{" "}
           {form.kind === "code_challenge" && <span className="font-normal text-red-600">(required)</span>}
         </label>
-        <textarea
+        <RichTextEditor
           id="assignment-description"
-          rows={4}
+          rows={6}
           maxLength={10000}
           value={form.description}
-          onChange={(e) => set("description", e.target.value)}
+          onChange={(text) => set("description", text)}
           placeholder="Enter assignment instructions here..."
-          className={input}
         />
 
         {form.kind === "submission" && (
@@ -696,7 +697,7 @@ export default function AssignmentsSection({
                   </button>
                 </div>
               </div>
-              {a.description && <p className="mt-2 whitespace-pre-wrap text-sm text-gray-700">{a.description}</p>}
+              {a.description && <RichText text={a.description} className="mt-2 text-sm text-gray-700" />}
               <dl className="mt-2 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[max-content_1fr]">
                 <dt className="font-semibold">Available from</dt>
                 <dd>{formatDateTime(a.available_from)}</dd>
