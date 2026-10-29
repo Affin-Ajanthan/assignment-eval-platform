@@ -88,6 +88,14 @@ REPORT_MODERATE_MARGIN = _env_float("SELF_CHECK_REPORT_MODERATE_MARGIN", 0.10)
 # Small classes cannot remove common text, and honest report pairs there reach
 # ~17% coverage (90th percentile ~9%), so the floor is higher than REPORT_MODERATE_COVERAGE.
 REPORT_SMALL_CLASS_COVERAGE = _env_float("SELF_CHECK_REPORT_SMALL_CLASS_COVERAGE", 0.20)
+# A code pair flagged by the meaning check alone ("review") is Moderate for the
+# student only from this UniXcoder score on. The instructor's review flag keeps
+# its 0.80 floor (SemanticThresholds.review): there a person looks, and rewritten
+# copies score from ~0.81. But honest same-task solutions reach 0.84 on the
+# labelled sets (486 pairs), and below 5 submissions there is no cohort bar, so
+# at 0.80 honest students saw "Moderate" for their own code (classes of 4:
+# 100 of 1,748 honest pairs flagged; 4 at 0.85, with the same copies caught).
+CODE_SEMANTIC_MODERATE = _env_float("SELF_CHECK_CODE_SEMANTIC_MODERATE", 0.85)
 
 # How much of the student's own work is shown back.
 MAX_HIGHLIGHTS = 15
@@ -144,8 +152,8 @@ def code_pair_band(pair, lines: dict) -> str:
     """Band for one code pair (app.similarity.core.PairResult)."""
     if pair.token_flagged or pair.flag_level == "high":
         return "high"
-    if (pair.flag_level == "review" or pair.jaccard >= lines["jaccard_line"]
-            or pair.containment >= lines["containment_line"]):
+    semantic = pair.flag_level == "review" and (pair.semantic_similarity or 0) >= CODE_SEMANTIC_MODERATE
+    if semantic or pair.jaccard >= lines["jaccard_line"] or pair.containment >= lines["containment_line"]:
         return "moderate"
     return "low"
 
