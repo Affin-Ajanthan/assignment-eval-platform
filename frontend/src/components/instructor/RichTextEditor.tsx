@@ -1,7 +1,8 @@
 "use client";
 
-import { KeyboardEvent, useLayoutEffect, useRef, useState } from "react";
+import { KeyboardEvent, useRef, useState } from "react";
 import RichText, { SIZE_PREFIX, TextSize } from "@/components/RichText";
+import { MAX_BOX_LINES, useAutoHeight } from "@/lib/useAutoHeight";
 
 /** A new text and the part of it to leave selected. */
 type Edit = { value: string; start: number; end: number };
@@ -78,9 +79,6 @@ function codeBlock(value: string, start: number, end: number): Edit {
   };
 }
 
-/** The most lines the box grows to as the instructor types; longer text scrolls inside it. */
-const MAX_LINES = 20;
-
 const tool =
   "rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-800 hover:bg-gray-100 disabled:opacity-60";
 
@@ -107,25 +105,8 @@ export default function RichTextEditor({
   const ref = useRef<HTMLTextAreaElement>(null);
   const [preview, setPreview] = useState(false);
 
-  // The box grows with what is typed, up to MAX_LINES lines; beyond that it scrolls up and down.
-  useLayoutEffect(() => {
-    const box = ref.current;
-    if (!box) return;
-    const fit = () => {
-      box.style.height = "auto"; // back to `rows`, so the box can shrink again when text is deleted
-      const style = getComputedStyle(box);
-      const px = (v: string) => parseFloat(v) || 0;
-      const borders = px(style.borderTopWidth) + px(style.borderBottomWidth);
-      const padding = px(style.paddingTop) + px(style.paddingBottom);
-      const max = (px(style.lineHeight) || 20) * MAX_LINES + padding + borders;
-      const wanted = box.scrollHeight + borders;
-      box.style.height = `${Math.min(wanted, max)}px`;
-      box.style.overflowY = wanted > max ? "auto" : "hidden";
-    };
-    fit();
-    window.addEventListener("resize", fit); // a narrower box wraps the text onto more lines
-    return () => window.removeEventListener("resize", fit);
-  }, [value, preview]);
+  // The box grows with what is typed, up to 15 lines; beyond that it scrolls up and down.
+  useAutoHeight(ref, value, MAX_BOX_LINES, preview);
 
   /** Run an edit on the current selection, then put the selection back on what it changed. */
   function apply(edit: (value: string, start: number, end: number) => Edit) {
@@ -214,7 +195,7 @@ export default function RichTextEditor({
 
       {preview ? (
         <div
-          className="mt-1 max-h-[26rem] min-h-[8rem] overflow-y-auto rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-800"
+          className="mt-1 max-h-[20.5rem] min-h-[8rem] overflow-y-auto rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-800"
           data-testid="rich-text-preview"
         >
           {value.trim() ? <RichText text={value} /> : <span className="text-gray-500">Nothing to preview yet.</span>}

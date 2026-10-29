@@ -2,6 +2,8 @@
 
 import { Assignment, TestCase } from "@/lib/api";
 import { ownTitle } from "@/lib/tasks";
+import AutoGrowTextarea from "@/components/AutoGrowTextarea";
+import RichTextEditor from "@/components/instructor/RichTextEditor";
 import TestCasesEditor, {
   MAX_TESTS,
   TestCasePayload,
@@ -136,20 +138,19 @@ export default function QuestionsEditor({
             <label className="mt-2 block text-xs font-semibold" htmlFor={`question-${i}-statement`}>
               Question <span className="font-normal text-red-600">(required)</span>
             </label>
-            <textarea
+            <RichTextEditor
               id={`question-${i}-statement`}
               value={row.statement}
-              rows={4}
+              rows={5}
               maxLength={10000}
               placeholder="What the student must write. It is shown above the code box, after the student presses Do assignment."
-              onChange={(e) => update(i, { statement: e.target.value })}
-              className={field}
+              onChange={(text) => update(i, { statement: text })}
             />
 
             <label className="mt-2 block text-xs font-semibold" htmlFor={`question-${i}-starter`}>
               Starting code <span className="font-normal text-gray-500">(optional)</span>
             </label>
-            <textarea
+            <AutoGrowTextarea
               id={`question-${i}-starter`}
               value={row.starterCode}
               rows={6}

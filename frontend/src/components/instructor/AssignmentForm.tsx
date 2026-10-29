@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { apiFetch, Assignment, AssignmentKind, Rubric, SubmissionType } from "@/lib/api";
 import { combineLocal, splitLocal } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
+import AutoGrowTextarea from "@/components/AutoGrowTextarea";
 import RichTextEditor from "@/components/instructor/RichTextEditor";
 import { CODE_LANGUAGES, CodeLanguageId, languageNames } from "@/lib/codeLanguages";
 import QuestionsEditor, {
@@ -518,7 +519,7 @@ export default function AssignmentForm({
         placeholder="starter.py"
         className={input}
       />
-      <textarea
+      <AutoGrowTextarea
         id="assignment-starter-code"
         rows={6}
         maxLength={200000}

@@ -5,6 +5,7 @@ import { apiFetch, CodeAnswer, CodeQuestion, CodeRun, CodeWork, StudentAssignmen
 import { formatDateTime, formatMark } from "@/lib/datetime";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import Message, { MessageState } from "@/components/Message";
+import RichText from "@/components/RichText";
 import { CodeLanguageId, languagesFor } from "@/lib/codeLanguages";
 import { taskName } from "@/lib/tasks";
 
@@ -428,7 +429,7 @@ export default function CodeEditorForm({
           {hasQuestion && (
             <>
               <p className="mt-2 text-xs font-semibold text-gray-600">Question</p>
-              <p className="whitespace-pre-wrap text-sm text-gray-800">{question.statement}</p>
+              <RichText text={question.statement} className="text-sm text-gray-800" />
             </>
           )}
           {noQuestion && (
