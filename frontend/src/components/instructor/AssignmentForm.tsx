@@ -1,0 +1,551 @@
+"use client";
+
+import { FormEvent, useState } from "react";
+import { apiFetch, Assignment, AssignmentKind, Rubric, SubmissionType } from "@/lib/api";
+import { combineLocal, splitLocal } from "@/lib/datetime";
+import Message, { MessageState } from "@/components/Message";
+import RichTextEditor from "@/components/instructor/RichTextEditor";
+import { CODE_LANGUAGES, CodeLanguageId, languageNames } from "@/lib/codeLanguages";
+import QuestionsEditor, {
+  emptyQuestionRow,
+  QuestionRow,
+  questionRowsPayload,
+  toQuestionRows,
+} from "@/components/instructor/QuestionsEditor";
+
+type FormState = {
+  kind: AssignmentKind;
+  name: string;
+  description: string;
+  fromDate: string;
+  fromTime: string;
+  dueDate: string;
+  dueTime: string;
+  rubricId: string; // "" = no rubric
+  types: SubmissionType[];
+  starterCode: string; // "" = no starter code
+  starterFilename: string;
+  languages: CodeLanguageId[]; // [] = any supported language
+  selfSimilarity: boolean; // students may run similarity self-checks before the deadline
+  selfAi: boolean; // students may run AI-content self-checks before the deadline
+  ignoreCommon: boolean; // code similarity ignores code most of the class shares
+  releaseDate: string; // "" (with releaseTime "") = show each mark as soon as it is saved
+  releaseTime: string;
+  questions: QuestionRow[]; // only used by a code challenge: at least one task, each with its question and test cases
+  testMainFile: string; // the file the tests run (a challenge with one task); "" = picked automatically
+};
+
+export const KIND_OPTIONS: { value: AssignmentKind; title: string; text: string }[] = [
+  {
+    value: "submission",
+    title: "Submission",
+    text: "Students upload their work: code, a report and/or a video. You grade it with a rubric, with the automated evaluation as a second opinion.",
+  },
+  {
+    value: "code_challenge",
+    title: "Code challenge",
+    text: "HackerRank style: students submit code only, for one task or several, each with its own question and test cases. It is run against your test cases, and the marks come from the tests passed.",
+  },
+];
+const kindTitle = (k: AssignmentKind) => KIND_OPTIONS.find((o) => o.value === k)?.title ?? k;
+
+const TYPE_OPTIONS: { value: SubmissionType; label: string; hint: string }[] = [
+  { value: "code", label: "Code", hint: "a source file or .zip" },
+  { value: "report", label: "Report", hint: "PDF or DOCX" },
+  { value: "video", label: "Video", hint: "presentation video" },
+];
+
+function toggleType(current: SubmissionType[], t: SubmissionType): SubmissionType[] {
+  return current.includes(t) ? current.filter((x) => x !== t) : [...current, t];
+}
+
+/** A new assignment of this kind: a code challenge accepts code only, a submission starts with every type. */
+function emptyForm(kind: AssignmentKind): FormState {
+  return {
+    kind,
+    name: "",
+    description: "",
+    fromDate: "",
+    fromTime: "",
+    dueDate: "",
+    dueTime: "",
+    rubricId: "",
+    types: kind === "code_challenge" ? ["code"] : ["code", "report", "video"],
+    starterCode: "",
+    starterFilename: "",
+    languages: [],
+    selfSimilarity: true,
+    selfAi: true,
+    ignoreCommon: true,
+    releaseDate: "",
+    releaseTime: "",
+    questions: [emptyQuestionRow()],
+    testMainFile: "",
+  };
+}
+
+function formFromAssignment(a: Assignment): FormState {
+  const from = splitLocal(a.available_from);
+  const due = splitLocal(a.deadline);
+  const release = a.marks_release_at ? splitLocal(a.marks_release_at) : { date: "", time: "" };
+  return {
+    kind: a.assignment_type ?? "submission",
+    name: a.name,
+    description: a.description,
+    fromDate: from.date,
+    fromTime: from.time,
+    dueDate: due.date,
+    dueTime: due.time,
+    rubricId: a.rubric_id ? String(a.rubric_id) : "",
+    types: a.submission_types,
+    starterCode: a.starter_code,
+    starterFilename: a.starter_code_filename,
+    languages: a.code_languages ?? [],
+    selfSimilarity: a.student_similarity_check ?? true,
+    selfAi: a.student_ai_check ?? true,
+    ignoreCommon: a.ignore_common_code ?? true,
+    releaseDate: release.date,
+    releaseTime: release.time,
+    questions: toQuestionRows(a),
+    testMainFile: a.test_main_file ?? "",
+  };
+}
+
+// Starter code is one source file (not a notebook): the backend's CODE_EXTENSIONS (app/common.py).
+const CODE_EXTENSIONS = [...new Set(CODE_LANGUAGES.flatMap((l) => l.extensions))].filter((e) => e !== ".ipynb");
+
+const input = "mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm";
+
+/**
+ * The details of one assignment, on a page of its own (app/instructor/assignments): pass `assignment` to edit
+ * it, or the `kind` to create a new one in `subjectId`. `onSaved` is called with a message once it is saved.
+ */
+export default function AssignmentForm({
+  subjectId,
+  kind,
+  assignment,
+  rubrics,
+  onSaved,
+  onCancel,
+}: {
+  subjectId: number;
+  kind: AssignmentKind;
+  assignment?: Assignment;
+  rubrics: Rubric[];
+  onSaved: (message: string) => void;
+  onCancel: () => void;
+}) {
+  const [form, setForm] = useState<FormState>(() => (assignment ? formFromAssignment(assignment) : emptyForm(kind)));
+  // An assignment that was saved by this form (an older server may not keep everything: see handleSave).
+  const [savedId, setSavedId] = useState<number | null>(assignment?.id ?? null);
+  const [msg, setMsg] = useState<MessageState>(null);
+  const [saving, setSaving] = useState(false);
+
+  function set<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  async function handleSave(e: FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    const challenge = form.kind === "code_challenge";
+    // Same checks the API enforces, so the instructor gets a clear message early.
+    if (!form.name.trim()) return setMsg({ text: "Assignment name is required.", kind: "error" });
+    if (challenge && !form.description.trim()) {
+      return setMsg({ text: "Description / instructions are required for a code challenge.", kind: "error" });
+    }
+    const from = combineLocal(form.fromDate, form.fromTime);
+    const due = combineLocal(form.dueDate, form.dueTime);
+    if (!from) return setMsg({ text: "Enter a valid 'available from' date and time.", kind: "error" });
+    if (!due) return setMsg({ text: "Enter a valid submission deadline date and time.", kind: "error" });
+    if (due <= from) {
+      return setMsg({ text: "The submission deadline must be later than the available-from date and time.", kind: "error" });
+    }
+    const hasStarter = form.starterCode.trim() !== "";
+    const starterExt = form.starterFilename.trim().toLowerCase().match(/\.[a-z0-9]+$/)?.[0] ?? "";
+    if (hasStarter && !CODE_EXTENSIONS.includes(starterExt)) {
+      return setMsg({
+        text: `Give the starter code a file name with a code extension (${CODE_EXTENSIONS.join(", ")}), e.g. starter.py.`,
+        kind: "error",
+      });
+    }
+
+    if (form.types.length === 0) return setMsg({ text: "Choose at least one submission type.", kind: "error" });
+    // Both empty = no release date (marks show as soon as they are saved).
+    const releaseSet = form.releaseDate !== "" || form.releaseTime !== "";
+    const release = releaseSet ? combineLocal(form.releaseDate, form.releaseTime) : null;
+    if (releaseSet && !release) {
+      return setMsg({ text: "Enter both a date and a time to release the marks, or leave both empty.", kind: "error" });
+    }
+    // Tasks and test cases belong to code challenges only, and every task needs at least one test case.
+    const questionsPayload = challenge ? questionRowsPayload(form.questions) : { questions: [], tests: [], error: null };
+    if (questionsPayload.error !== null) return setMsg({ text: questionsPayload.error, kind: "error" });
+    const body = {
+      name: form.name.trim(),
+      description: form.description,
+      available_from: from.toISOString(),
+      deadline: due.toISOString(),
+      // A code challenge has no rubric (null also detaches one from an older challenge).
+      rubric_id: !challenge && form.rubricId ? parseInt(form.rubricId, 10) : null,
+      assignment_type: form.kind,
+      // A code challenge is code only: set when creating, left alone when editing.
+      submission_types: challenge ? (savedId === null ? ["code"] : undefined) : form.types,
+      starter_code: hasStarter ? form.starterCode : "",
+      starter_code_filename: hasStarter ? form.starterFilename.trim() : "",
+      // Only meaningful when students submit code; otherwise no restriction.
+      code_languages: form.types.includes("code") ? form.languages : [],
+      student_similarity_check: form.selfSimilarity,
+      student_ai_check: form.selfAi,
+      ignore_common_code: form.ignoreCommon,
+      // null also clears an earlier date, releasing the marks straight away.
+      marks_release_at: release ? release.toISOString() : null,
+      test_cases: questionsPayload.tests,
+      questions: questionsPayload.questions,
+      // Only a challenge with one task runs a named file; with several, each task has its own file.
+      test_main_file: challenge && form.questions.length === 1 ? form.testMainFile.trim() : "",
+    };
+    setSaving(true);
+    try {
+      const creating = savedId === null;
+      const saved = creating
+        ? await apiFetch<Assignment | null>("/assignments", { method: "POST", json: { ...body, subject_id: subjectId } })
+        : await apiFetch<Assignment | null>(`/assignments/${savedId}`, { method: "PUT", json: body });
+      // A server running an older version of the code saves the assignment but silently drops the tasks it does
+      // not know about: say so, and keep the form as typed (an assignment that now exists is saved over, not twice).
+      if (challenge && !Array.isArray(saved?.questions)) {
+        if (creating && typeof saved?.id === "number") setSavedId(saved.id);
+        setMsg({
+          text: "Saved, but the server did not keep the tasks and their questions: it is running an older version of the code. Restart the backend, then press Save again to store them.",
+          kind: "error",
+        });
+        return;
+      }
+      onSaved(creating ? "Assignment saved." : "Assignment updated.");
+    } catch (err) {
+      setMsg({ text: `Failed to save assignment: ${err instanceof Error ? err.message : err}`, kind: "error" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const selectedRubric = rubrics.find((r) => String(r.id) === form.rubricId);
+  // Once any student has submitted, the accepted types are fixed (the API refuses changes).
+  const typesLocked = (assignment?.submission_count ?? 0) > 0;
+  const editing = assignment !== undefined;
+
+  return (
+    <form onSubmit={handleSave} noValidate>
+      <p className="text-sm" data-testid="assignment-type">
+        <span className="font-semibold">Type:</span> {kindTitle(form.kind)}{" "}
+        {editing && <span className="text-xs text-gray-500">(fixed once created)</span>}
+      </p>
+      <label className="mt-2 block text-sm font-semibold" htmlFor="assignment-name">
+        Assignment name
+      </label>
+      <input
+        id="assignment-name"
+        required
+        maxLength={200}
+        value={form.name}
+        onChange={(e) => set("name", e.target.value)}
+        placeholder="Assignment 1"
+        className={input}
+      />
+
+      <label className="mt-3 block text-sm font-semibold" htmlFor="assignment-description">
+        Instructions{" "}
+        {form.kind === "code_challenge" && <span className="font-normal text-red-600">(required)</span>}
+      </label>
+      <RichTextEditor
+        id="assignment-description"
+        rows={6}
+        maxLength={10000}
+        value={form.description}
+        onChange={(text) => set("description", text)}
+        placeholder="Enter assignment instructions here..."
+      />
+
+      {form.kind === "submission" && (
+        <fieldset className="mt-3">
+          <legend className="text-sm font-semibold">Students can submit</legend>
+          <div className="mt-1 flex flex-wrap gap-4">
+            {TYPE_OPTIONS.map((t) => (
+              <label key={t.value} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.types.includes(t.value)}
+                  disabled={typesLocked}
+                  onChange={() => set("types", toggleType(form.types, t.value))}
+                />
+                {t.label} <span className="text-xs text-gray-500">({t.hint})</span>
+              </label>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-gray-500">
+            {typesLocked
+              ? "Locked: students have already submitted to this assignment."
+              : "Students can upload only the kinds you tick. Pick at least one."}
+          </p>
+        </fieldset>
+      )}
+
+      {form.types.includes("code") && (
+        <fieldset className="mt-3">
+          <legend className="text-sm font-semibold">
+            Programming language <span className="font-normal text-gray-500">(optional)</span>
+          </legend>
+          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+            {CODE_LANGUAGES.map((l) => (
+              <label key={l.id} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.languages.includes(l.id)}
+                  disabled={typesLocked}
+                  onChange={() =>
+                    set(
+                      "languages",
+                      form.languages.includes(l.id)
+                        ? form.languages.filter((x) => x !== l.id)
+                        : [...form.languages, l.id],
+                    )
+                  }
+                />
+                {l.name}
+              </label>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-gray-500">
+            {typesLocked
+              ? "Locked: students have already submitted to this assignment."
+              : form.languages.length
+                ? `Students must submit code in ${languageNames(form.languages)}; code in any other language is refused.`
+                : "None ticked: students can submit code in any supported language."}
+          </p>
+        </fieldset>
+      )}
+
+      {form.kind === "code_challenge" && (
+        <>
+          <QuestionsEditor rows={form.questions} onChange={(rows) => set("questions", rows)} locked={typesLocked} />
+          {form.questions.length === 1 && form.questions[0].tests.length > 0 && (
+            <div className="mt-3">
+              <label className="block text-sm font-semibold" htmlFor="test-main-file">
+                Main file to run <span className="font-normal text-gray-500">(optional)</span>
+              </label>
+              <input
+                id="test-main-file"
+                value={form.testMainFile}
+                maxLength={200}
+                placeholder="student_management.rb"
+                onChange={(e) => set("testMainFile", e.target.value)}
+                className={input}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                The file name (or path) the tests run: Python (.py) and Ruby (.rb) only. Empty: the only Python or Ruby
+                file in the submission, or one named main, app, run, program or index. Code that students type in the
+                editor is always saved and run as main.py or main.rb, so leave this empty for it.
+              </p>
+            </div>
+          )}
+        </>
+      )}
+
+      {form.types.includes("code") && (
+        <fieldset className="mt-3">
+          <legend className="text-sm font-semibold">Code similarity</legend>
+          <label className="mt-1 flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={form.ignoreCommon}
+              onChange={(e) => set("ignoreCommon", e.target.checked)}
+            />
+            <span>
+              Ignore code most of the class shares <span className="text-xs text-gray-500">(recommended)</span>
+            </span>
+          </label>
+          <p className="mt-1 text-xs text-gray-500">
+            Code patterns found in more than half of the submissions (menu loops, input helpers, file saving) are left
+            out before comparing, so honest solutions to the same task don&apos;t look alike. Copies still match.
+            Applies to your Similarity Code Check and to students&apos; self-checks; you can change it at any time.
+          </p>
+        </fieldset>
+      )}
+
+      <fieldset className="mt-3">
+        <legend className="text-sm font-semibold">Student self-checks before the deadline</legend>
+        <div className="mt-1 flex flex-wrap gap-4">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.selfSimilarity}
+              onChange={(e) => set("selfSimilarity", e.target.checked)}
+            />
+            Similarity check <span className="text-xs text-gray-500">(code and report)</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={form.selfAi} onChange={(e) => set("selfAi", e.target.checked)} />
+            AI-content detection
+          </label>
+        </div>
+        <p className="mt-1 text-xs text-gray-500">
+          Students see Low / Moderate / High bands and their own matching passages, never other students&apos; work.
+          You can change these at any time, even after students have submitted.
+        </p>
+      </fieldset>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <fieldset>
+          <legend className="text-sm font-semibold">Available from</legend>
+          <div className="flex gap-2">
+            <input
+              type="date"
+              aria-label="Available from date"
+              value={form.fromDate}
+              onChange={(e) => set("fromDate", e.target.value)}
+              className={input}
+            />
+            <input
+              type="time"
+              aria-label="Available from time"
+              value={form.fromTime}
+              onChange={(e) => set("fromTime", e.target.value)}
+              className={input}
+            />
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend className="text-sm font-semibold">Submission deadline</legend>
+          <div className="flex gap-2">
+            <input
+              type="date"
+              aria-label="Deadline date"
+              value={form.dueDate}
+              onChange={(e) => set("dueDate", e.target.value)}
+              className={input}
+            />
+            <input
+              type="time"
+              aria-label="Deadline time"
+              value={form.dueTime}
+              onChange={(e) => set("dueTime", e.target.value)}
+              className={input}
+            />
+          </div>
+        </fieldset>
+      </div>
+      <p className="mt-1 text-xs text-gray-500">Times are in your local time zone.</p>
+
+      <fieldset className="mt-3">
+        <legend className="text-sm font-semibold">
+          Release marks to students <span className="font-normal text-gray-500">(optional)</span>
+        </legend>
+        <div className="flex flex-wrap items-center gap-2 sm:max-w-md">
+          <input
+            type="date"
+            aria-label="Marks release date"
+            value={form.releaseDate}
+            onChange={(e) => set("releaseDate", e.target.value)}
+            className={`${input} flex-1`}
+          />
+          <input
+            type="time"
+            aria-label="Marks release time"
+            value={form.releaseTime}
+            onChange={(e) => set("releaseTime", e.target.value)}
+            className={`${input} flex-1`}
+          />
+          {(form.releaseDate || form.releaseTime) && (
+            <button
+              type="button"
+              onClick={() => setForm((f) => ({ ...f, releaseDate: "", releaseTime: "" }))}
+              className="mt-1 rounded-md bg-gray-600 px-3 py-2 text-xs font-semibold text-white hover:bg-gray-700"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        <p className="mt-1 text-xs text-gray-500">
+          {form.releaseDate || form.releaseTime
+            ? "Students see no marks or feedback until then, so the whole class gets them at the same time."
+            : "Empty: students see each mark and their feedback as soon as you save the grade."}
+        </p>
+      </fieldset>
+
+      {form.kind === "code_challenge" ? (
+        <p className="mt-3 text-xs text-gray-600" data-testid="no-rubric-note">
+          No rubric: a code challenge is marked by its test cases (the points of the tests passed).
+        </p>
+      ) : (
+        <>
+          <label className="mt-3 block text-sm font-semibold" htmlFor="assignment-rubric">
+            Rubric
+          </label>
+          <select
+            id="assignment-rubric"
+            value={form.rubricId}
+            onChange={(e) => set("rubricId", e.target.value)}
+            className={input}
+          >
+            <option value="">— No rubric yet —</option>
+            {rubrics.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name} ({r.criteria.length} criteria, {r.max_total} pts)
+              </option>
+            ))}
+          </select>
+          {selectedRubric && (
+            <p className="mt-1 text-xs text-gray-600">
+              Criteria: {selectedRubric.criteria.map((c) => `${c.name} (${c.max_points})`).join(", ")} — total{" "}
+              {selectedRubric.max_total} points.
+            </p>
+          )}
+        </>
+      )}
+
+      <label className="mt-3 block text-sm font-semibold" htmlFor="assignment-starter-code">
+        Starter code (optional)
+      </label>
+      <p className="text-xs text-gray-600">
+        Code you give every student. It is left out of the token similarity check, so students aren&apos;t flagged for
+        sharing it. Only compared against submitted files with the same extension. Not shown to students.
+      </p>
+      <input
+        aria-label="Starter code file name"
+        maxLength={200}
+        value={form.starterFilename}
+        onChange={(e) => set("starterFilename", e.target.value)}
+        placeholder="starter.py"
+        className={input}
+      />
+      <textarea
+        id="assignment-starter-code"
+        rows={6}
+        maxLength={200000}
+        value={form.starterCode}
+        onChange={(e) => set("starterCode", e.target.value)}
+        placeholder="Paste the starter code here..."
+        spellCheck={false}
+        className={`${input} font-mono`}
+      />
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="submit"
+          disabled={saving}
+          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+        >
+          {saving ? "Saving..." : editing ? "Update assignment" : "Save assignment"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+        >
+          Cancel
+        </button>
+      </div>
+      <Message state={msg} />
+    </form>
+  );
+}

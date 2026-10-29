@@ -208,7 +208,11 @@ export default function InstructorPage() {
 
   useEffect(() => {
     if (!ready || !user) return;
-    if (user.subjects.length && subjectId === null) setSubjectId(user.subjects[0].id);
+    if (user.subjects.length && subjectId === null) {
+      // Coming back from an assignment page: ?subject=<id> is the subject that was open there.
+      const wanted = Number(new URLSearchParams(window.location.search).get("subject"));
+      setSubjectId(user.subjects.find((s) => s.id === wanted)?.id ?? user.subjects[0].id);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, user]);
 
@@ -609,7 +613,6 @@ export default function InstructorPage() {
               <AssignmentsSection
                 subjectId={subjectId}
                 assignments={assignments}
-                rubrics={rubrics}
                 onChanged={reloadCourseSetup}
               />
               <RubricsSection subjectId={subjectId} rubrics={rubrics} onChanged={reloadCourseSetup} />
