@@ -112,7 +112,7 @@ from .common import (
     on_flag as _on,
     utcnow_naive as _utcnow_naive,
 )
-from .similarity_runs import code_similarity_run, report_similarity_text
+from .similarity_runs import code_similarity_run, report_similarity_run
 from .similarity.semantic import MODEL_NAME as _SEMANTIC_MODEL, get_semantic_service
 
 
@@ -2462,34 +2462,17 @@ def check_report_similarity(
         .all()
     )
     names = {str(s.id): s.student_name for s in submissions}
-    texts: dict[str, str] = {}
-    skipped: list[ReportSkippedOut] = []
-    for submission in submissions:
-        def skip(reason: str) -> None:
-            skipped.append(ReportSkippedOut(submission_id=submission.id, student=submission.student_name,
-                                            reason=reason))
-
-        text, reason = report_similarity_text(submission)
-        if text is None:
-            skip(reason)
-            continue
-        texts[str(submission.id)] = text
-
-    if len(texts) < 2:
+    run = report_similarity_run(db, subject_id, assignment_name, submissions)
+    if run.comparison is None:
         raise HTTPException(400, "Need at least 2 readable PDF reports for this assignment to compare")
-
-    assignment = next(
-        (a for a in db.query(Assignment).filter(Assignment.subject_id == subject_id).all()
-         if _norm_name(a.name) == _norm_name(assignment_name)),
-        None,
-    )
+    result, assignment = run.comparison, run.assignment
     template = assignment.report_template_text if assignment else None
-    result = _report_sim.compare_reports(texts, get_consistency_service(), template_text=template)
     return ReportSimilarityOut(
         subject_id=subject_id,
         assignment_name=assignment_name,
-        compared=len(texts),
-        skipped=skipped,
+        compared=len(run.texts),
+        skipped=[ReportSkippedOut(submission_id=s.id, student=s.student_name, reason=reason)
+                 for s, reason in run.skipped],
         common_fingerprints_excluded=result.common_fingerprints_excluded,
         template_filename=(assignment.report_template_filename if template else None),
         template_words_removed=result.template_words_removed,

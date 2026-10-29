@@ -61,6 +61,24 @@ def display_name(code_dir: Path, path: Path, name: str) -> str:
     return rel + name[len(path.name):] if name.startswith(path.name) else rel
 
 
+def find_assignment(db: Session, subject_id: int, assignment_name: str,
+                    submissions: list) -> Optional[Assignment]:
+    """The assignment these submissions were made to (its settings: starter
+    code, template PDF, ignore common code), or None. Read from the
+    submissions' own ``assignment_id``; by name only for submissions made
+    before assignments existed, which have none."""
+    ids = Counter(s.assignment_id for s in submissions if s.assignment_id is not None)
+    for assignment_id, _ in ids.most_common():
+        assignment = db.get(Assignment, assignment_id)
+        if assignment is not None and assignment.subject_id == subject_id:
+            return assignment
+    return next(
+        (a for a in db.query(Assignment).filter(Assignment.subject_id == subject_id).all()
+         if norm_name(a.name) == norm_name(assignment_name)),
+        None,
+    )
+
+
 def code_similarity_run(db: Session, subject_id: int, assignment_name: str,
                         submissions: list) -> CodeSimilarityRun:
     """Token (Winnowing) + semantic (UniXcoder) comparison of every pair of
@@ -70,11 +88,7 @@ def code_similarity_run(db: Session, subject_id: int, assignment_name: str,
     # Starter code every student was given is subtracted from each file's
     # fingerprint (same extension only) so shared boilerplate can't flag a
     # pair on its own. The semantic path below still sees the full files.
-    assignment = next(
-        (a for a in db.query(Assignment).filter(Assignment.subject_id == subject_id).all()
-         if norm_name(a.name) == norm_name(assignment_name)),
-        None,
-    )
+    assignment = find_assignment(db, subject_id, assignment_name, submissions)
     starter_fp = None
     if assignment and assignment.starter_code and assignment.starter_code_filename:
         starter_fp = fingerprint_source("starter", assignment.starter_code_filename, assignment.starter_code)
@@ -170,3 +184,35 @@ def report_text_for_path(path: Path) -> tuple[Optional[str], Optional[str]]:
         return None, (f"Too little text to compare (under {_report_sim.MIN_REPORT_WORDS} words; "
                       "a scanned PDF has no extractable text)")
     return text, None
+
+
+@dataclass
+class ReportSimilarityRun:
+    texts: dict                 # submission id -> report text, for the reports that can be compared
+    skipped: list               # (submission, why its report can't be compared)
+    assignment: Optional[Assignment]
+    comparison: Optional[object] = None  # report_similarity.ReportComparison; None with under 2 reports
+
+
+def report_similarity_run(db: Session, subject_id: int, assignment_name: str,
+                          submissions: list) -> ReportSimilarityRun:
+    """Word (Winnowing) + semantic (MiniLM) comparison of every pair of
+    readable reports, with the assignment's template PDF cut out first: what
+    both the instructor's report check and a student's report self-check
+    run, so the two can't drift apart. Stores nothing."""
+    from .evaluator.semantic_consistency import get_consistency_service
+
+    texts: dict[str, str] = {}
+    skipped: list = []
+    for submission in sorted(submissions, key=lambda s: s.id):
+        text, reason = report_similarity_text(submission)
+        if text is None:
+            skipped.append((submission, reason))
+        else:
+            texts[str(submission.id)] = text
+    assignment = find_assignment(db, subject_id, assignment_name, submissions)
+    run = ReportSimilarityRun(texts=texts, skipped=skipped, assignment=assignment)
+    if len(texts) >= 2:
+        template = assignment.report_template_text if assignment else None
+        run.comparison = _report_sim.compare_reports(texts, get_consistency_service(), template_text=template)
+    return run
