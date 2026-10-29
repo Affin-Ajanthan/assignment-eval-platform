@@ -165,6 +165,9 @@ export default function AssignmentsSection({
     const challenge = form.kind === "code_challenge";
     // Same checks the API enforces, so the instructor gets a clear message early.
     if (!form.name.trim()) return setMsg({ text: "Assignment name is required.", kind: "error" });
+    if (challenge && !form.description.trim()) {
+      return setMsg({ text: "Description / instructions are required for a code challenge.", kind: "error" });
+    }
     const from = combineLocal(form.fromDate, form.fromTime);
     const due = combineLocal(form.dueDate, form.dueTime);
     if (!from) return setMsg({ text: "Enter a valid 'available from' date and time.", kind: "error" });
@@ -330,7 +333,8 @@ export default function AssignmentsSection({
         />
 
         <label className="mt-3 block text-sm font-semibold" htmlFor="assignment-description">
-          Description / instructions
+          Description / instructions{" "}
+          {form.kind === "code_challenge" && <span className="font-normal text-red-600">(required)</span>}
         </label>
         <textarea
           id="assignment-description"

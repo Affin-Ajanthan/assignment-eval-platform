@@ -41,6 +41,8 @@ export function questionRowsPayload(rows: QuestionRow[]): QuestionsPayload {
   const tests: (TestCasePayload & Pick<TestCase, "question">)[] = [];
   for (const [i, row] of rows.entries()) {
     const where = many ? `Task ${i + 1}: ` : "";
+    if (!row.title.trim()) return { questions: null, tests: null, error: `${where}Enter a title for the task.` };
+    if (!row.statement.trim()) return { questions: null, tests: null, error: `${where}Enter the question for the task.` };
     if (row.tests.length === 0) {
       const error = many ? `Task ${i + 1} needs at least one test case.` : "Add at least one test case to a code challenge.";
       return { questions: null, tests: null, error };
@@ -59,8 +61,8 @@ const field = "mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm
 const button = "rounded-md bg-gray-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-700 disabled:opacity-60";
 
 /**
- * The tasks of a code challenge. Each has an optional title, its own question (what the student must write) and
- * its own test cases (input and expected output). The student sees the questions only after pressing Do
+ * The tasks of a code challenge. At least one is required, and each needs a title, its own question (what the
+ * student must write) and its own test cases (input and expected output). The student sees the questions only after pressing Do
  * assignment, then hands the tasks in one at a time, each marked as soon as it is submitted; the mark is the
  * points of all the test cases passed, over all the tasks.
  */
@@ -82,8 +84,8 @@ export default function QuestionsEditor({
     <fieldset className="mt-3" data-testid="questions-editor">
       <legend className="text-sm font-semibold">Tasks and test cases</legend>
       <p className="text-xs text-gray-500">
-        A code challenge can have one task or several. Each task has its own question and its own test cases (input and
-        expected output). Students see the questions only after they press Do assignment, and they hand the tasks in one
+        A code challenge needs at least one task. Each task has a title, its own question and its own test cases (input
+        and expected output), all required. Students see the questions only after they press Do assignment, and they hand the tasks in one
         at a time; the mark is the points of all the test cases passed, over all the tasks. Each test runs the
         student&apos;s program with the input below (as if typed on the keyboard) and compares its output. Use
         &ldquo;Output contains&rdquo; for menu-driven programs that print prompts. Hidden tests are never shown to
@@ -116,19 +118,19 @@ export default function QuestionsEditor({
             </div>
 
             <label className="mt-2 block text-xs font-semibold" htmlFor={`question-${i}-title`}>
-              Title <span className="font-normal text-gray-500">(optional)</span>
+              Title <span className="font-normal text-red-600">(required)</span>
             </label>
             <input
               id={`question-${i}-title`}
               value={row.title}
               maxLength={200}
-              placeholder={many ? `Task ${i + 1}` : "Palindrome checker"}
+              placeholder="Palindrome checker"
               onChange={(e) => update(i, { title: e.target.value })}
               className={field}
             />
 
             <label className="mt-2 block text-xs font-semibold" htmlFor={`question-${i}-statement`}>
-              Question <span className="font-normal text-gray-500">(optional)</span>
+              Question <span className="font-normal text-red-600">(required)</span>
             </label>
             <textarea
               id={`question-${i}-statement`}
