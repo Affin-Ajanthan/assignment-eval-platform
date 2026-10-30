@@ -23,7 +23,7 @@ app/
     core.py             tokenize -> normalize -> k-gram winnowing fingerprints
     ai_heuristics.py     experimental AI-generated-code style heuristic
     semantic.py          UniXcoder semantic similarity (extra review signal)
-    cli.py               standalone CLI: python -m app.similarity.cli check <dir>
+    cli.py               standalone CLI: python -m app.similarity.cli check <dir> (the website's comparison)
   evaluator/            the multi-modal evaluator
     report_analysis.py   PDF/DOCX text+image extraction, AI-text heuristic
     code_analysis.py     static analysis (complexity, docstrings, style)

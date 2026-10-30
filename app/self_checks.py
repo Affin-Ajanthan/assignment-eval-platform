@@ -39,31 +39,20 @@ and the Moderate lines change where measured evidence (scripts/evaluate_self_che
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
+
+from .settings import env_float, env_int
 
 KINDS = ("code_similarity", "report_similarity", "ai_content")
 KIND_LABELS = {"code_similarity": "Code similarity", "report_similarity": "Report similarity",
                "ai_content": "AI-content detection"}
 
 
-def _env_float(name: str, default: float) -> float:
-    try:
-        return float(os.environ.get(name, default))
-    except ValueError:
-        return default
-
-
-def _env_int(name: str, default: int) -> int:
-    try:
-        return int(os.environ.get(name, default))
-    except ValueError:
-        return default
 
 
 # Checks a student may start per analysis type in a rolling hour.
-LIMIT_PER_HOUR = _env_int("SELF_CHECK_LIMIT_PER_HOUR", 5)
+LIMIT_PER_HOUR = env_int("SELF_CHECK_LIMIT_PER_HOUR", 5)
 # A "running" check older than this is treated as failed (e.g. the server restarted).
 STALE_AFTER_MINUTES = 15
 
@@ -71,23 +60,23 @@ STALE_AFTER_MINUTES = 15
 # the check cannot say what is normal, and reports use fixed floors. Same cutoff
 # as the meaning checks: SemanticThresholds.min_cohort_pairs and
 # report_similarity.SEMANTIC_MIN_COHORT_PAIRS (a test keeps them equal).
-MIN_CLASS_PAIRS = _env_int("SELF_CHECK_MIN_CLASS_PAIRS", 10)
+MIN_CLASS_PAIRS = env_int("SELF_CHECK_MIN_CLASS_PAIRS", 10)
 # Code uses the class median from this many pairs on (3 submissions); a single
 # pair has no median. Set it to MIN_CLASS_PAIRS for fixed floors in every small class.
-MIN_PAIRS_FOR_MEDIAN = _env_int("SELF_CHECK_MIN_PAIRS_FOR_MEDIAN", 3)
+MIN_PAIRS_FOR_MEDIAN = env_int("SELF_CHECK_MIN_PAIRS_FOR_MEDIAN", 3)
 
 # Moderate band: a pair must be at least MARGIN above the class median AND at
 # least the floor. ("high" is the instructor's own flag rule.) In a small class
 # (fewer than MIN_CLASS_PAIRS pairs) the floors alone apply.
-CODE_MODERATE_JACCARD = _env_float("SELF_CHECK_CODE_MODERATE_JACCARD", 0.45)
-CODE_MODERATE_CONTAINMENT = _env_float("SELF_CHECK_CODE_MODERATE_CONTAINMENT", 0.70)
-CODE_MODERATE_MARGIN = _env_float("SELF_CHECK_CODE_MODERATE_MARGIN", 0.15)
-REPORT_MODERATE_COVERAGE = _env_float("SELF_CHECK_REPORT_MODERATE_COVERAGE", 0.10)
-REPORT_MODERATE_JACCARD = _env_float("SELF_CHECK_REPORT_MODERATE_JACCARD", 0.15)
-REPORT_MODERATE_MARGIN = _env_float("SELF_CHECK_REPORT_MODERATE_MARGIN", 0.10)
+CODE_MODERATE_JACCARD = env_float("SELF_CHECK_CODE_MODERATE_JACCARD", 0.45)
+CODE_MODERATE_CONTAINMENT = env_float("SELF_CHECK_CODE_MODERATE_CONTAINMENT", 0.70)
+CODE_MODERATE_MARGIN = env_float("SELF_CHECK_CODE_MODERATE_MARGIN", 0.15)
+REPORT_MODERATE_COVERAGE = env_float("SELF_CHECK_REPORT_MODERATE_COVERAGE", 0.10)
+REPORT_MODERATE_JACCARD = env_float("SELF_CHECK_REPORT_MODERATE_JACCARD", 0.15)
+REPORT_MODERATE_MARGIN = env_float("SELF_CHECK_REPORT_MODERATE_MARGIN", 0.10)
 # Small classes cannot remove common text, and honest report pairs there reach
 # ~17% coverage (90th percentile ~9%), so the floor is higher than REPORT_MODERATE_COVERAGE.
-REPORT_SMALL_CLASS_COVERAGE = _env_float("SELF_CHECK_REPORT_SMALL_CLASS_COVERAGE", 0.20)
+REPORT_SMALL_CLASS_COVERAGE = env_float("SELF_CHECK_REPORT_SMALL_CLASS_COVERAGE", 0.20)
 # A code pair flagged by the meaning check alone ("review") is Moderate for the
 # student only from this UniXcoder score on. The instructor's review flag keeps
 # its 0.80 floor (SemanticThresholds.review): there a person looks, and rewritten
@@ -95,7 +84,7 @@ REPORT_SMALL_CLASS_COVERAGE = _env_float("SELF_CHECK_REPORT_SMALL_CLASS_COVERAGE
 # labelled sets (486 pairs), and below 5 submissions there is no cohort bar, so
 # at 0.80 honest students saw "Moderate" for their own code (classes of 4:
 # 100 of 1,748 honest pairs flagged; 4 at 0.85, with the same copies caught).
-CODE_SEMANTIC_MODERATE = _env_float("SELF_CHECK_CODE_SEMANTIC_MODERATE", 0.85)
+CODE_SEMANTIC_MODERATE = env_float("SELF_CHECK_CODE_SEMANTIC_MODERATE", 0.85)
 
 # How much of the student's own work is shown back.
 MAX_HIGHLIGHTS = 15

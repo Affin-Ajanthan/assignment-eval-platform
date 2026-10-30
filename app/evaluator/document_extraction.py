@@ -35,7 +35,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import threading
 import zipfile
@@ -44,6 +43,8 @@ from concurrent.futures import TimeoutError as FutureTimeout
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+
+from ..settings import env_int
 
 log = logging.getLogger(__name__)
 
@@ -68,18 +69,12 @@ EXTRACTION_META_NAME = "report_extraction.json"
 
 
 def report_max_bytes() -> int:
-    return _env_int("REPORT_MAX_BYTES", 25 * 1024 * 1024)
+    return env_int("REPORT_MAX_BYTES", 25 * 1024 * 1024)
 
 
 def extraction_timeout() -> float:
-    return float(_env_int("REPORT_EXTRACTION_TIMEOUT", 60))
+    return float(env_int("REPORT_EXTRACTION_TIMEOUT", 60))
 
-
-def _env_int(name: str, default: int) -> int:
-    try:
-        return int(os.environ.get(name, default))
-    except ValueError:
-        return default
 
 
 # --------------------------------------------------------------------------
