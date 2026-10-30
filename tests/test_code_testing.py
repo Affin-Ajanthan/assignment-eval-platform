@@ -105,9 +105,9 @@ def test_several_files_need_a_conventional_name_or_an_explicit_choice(tmp_path):
 
 def test_no_runnable_file_and_hidden_or_cache_folders(tmp_path):
     _files(tmp_path, "Program.cs", "__MACOSX/x.py", ".hidden/y.py", "__pycache__/z.py")
-    with pytest.raises(ct.CodeTestError, match="No Python, Ruby, Java, JavaScript, C or C++ file"):
+    with pytest.raises(ct.CodeTestError, match=r"No Python, Ruby, Java, JavaScript, C or C\+\+ file"):
         ct.pick_main_file(tmp_path)
-    with pytest.raises(ct.CodeTestError, match="Python, Ruby, Java, JavaScript, C or C++ programs only"):
+    with pytest.raises(ct.CodeTestError, match=r"Python, Ruby, Java, JavaScript, C or C\+\+ programs only"):
         ct.language_of_file("Program.cs")
     assert ct.language_of_file("a/b.rb").id == "ruby"
 

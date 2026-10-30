@@ -844,7 +844,9 @@ def test_the_answer_is_checked_before_anything_is_saved(fake):
     assert post({"question": 3, "code": "x"}).status_code == 404      # no such question
     assert post({"question": 1, "code": ""}).status_code == 422
     assert post({"question": 0, "code": "x"}).status_code == 422
-    assert post({"question": 1, "code": "x", "language": "java"}).status_code == 422
+    assert post({"question": 1, "code": "x", "language": "go"}).status_code == 422  # a language tests cannot run
+    refused = post({"question": 1, "code": "x", "language": "java"})  # one they can, but this assignment is Python only
+    assert refused.status_code == 400 and "doesn't accept java" in refused.json()["detail"]
     wrong = post({"question": 1, "code": "x", "language": "ruby"})    # a language the assignment does not accept
     assert wrong.status_code == 400 and "doesn't accept ruby" in wrong.json()["detail"]
     assert fake.calls == [] and client.get("/submissions", headers=auth_headers(stok)).json() == []
