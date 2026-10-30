@@ -11,12 +11,23 @@ import { CodeLanguageId, languagesFor } from "@/lib/codeLanguages";
 import { taskName } from "@/lib/tasks";
 
 /** The languages the server can run tests for: must match LANGUAGES in app/evaluator/code_testing.py. */
-const RUNNABLE: CodeLanguageId[] = ["python", "ruby"];
+const RUNNABLE: CodeLanguageId[] = ["python", "ruby", "java", "javascript", "c", "cpp"];
 const MAX_CODE_CHARS = 50_000; // must match MAX_CODE_CHARS in app/routers/student_runs.py
-const INDENT: Partial<Record<CodeLanguageId, string>> = { python: "    ", ruby: "  " };
+const INDENT: Partial<Record<CodeLanguageId, string>> = {
+  python: "    ",
+  ruby: "  ",
+  java: "    ",
+  javascript: "  ",
+  c: "    ",
+  cpp: "    ",
+};
 const PLACEHOLDER: Partial<Record<CodeLanguageId, string>> = {
   python: "# Read the input with input() and print the answer with print()",
   ruby: "# Read the input with gets and print the answer with puts",
+  java: "// Read the input with Scanner and print the answer with System.out.println. Put it in a class with a main method.",
+  javascript: "// Read the input with require('fs').readFileSync(0, 'utf8') and print the answer with console.log",
+  c: "// Read the input with scanf and print the answer with printf. Put it in int main(void).",
+  cpp: "// Read the input with std::cin and print the answer with std::cout. Put it in int main().",
 };
 
 const pre =

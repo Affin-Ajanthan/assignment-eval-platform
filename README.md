@@ -253,8 +253,8 @@ Creating an assignment starts with a choice, fixed once the assignment exists:
 output (trailing spaces, line-ending style and surrounding blank lines are
 ignored); `contains` looks for the expected text anywhere in the output, which
 suits menu programs that print prompts. The instructor can name the **main
-file** to run (e.g. `student_management.rb`); left empty, the only Python/Ruby
-file in the submission is used, or one named `main`, `app`, `run`, `program` or
+file** to run (e.g. `student_management.rb`); left empty, the only runnable
+(Python, Ruby, Java, JavaScript, C or C++) file in the submission is used, or one named `main`, `app`, `run`, `program` or
 `index`.
 
 **Tasks.** A challenge has **one task or several** (up to 20), all in the one
@@ -271,8 +271,19 @@ submitted, because their code is saved per task; the wording and the test cases
 can always be fixed. A challenge with several tasks is answered on its code page
 only (a plain file upload is refused), and "Main file to run" is ignored for it.
 
-**Languages: Python and Ruby only, for now.** Other languages can be submitted
-to a normal assignment, but a challenge cannot run them yet.
+**Languages: Python, Ruby, Java, JavaScript, C and C++, for now.** Other
+languages can be submitted to a normal assignment, but a challenge cannot run them
+yet. Java runs with the JDK's single-file launcher (`java main.java`: compiled in
+memory, then run, so the file name need not match the class, and the first class
+needs a `public static void main`); JavaScript runs with Node (`node main.js`).
+C (`gcc -std=c17`) and C++ (`g++ -std=c++17`) are compiled inside the test's
+container and then run; only the one main file is compiled, so a challenge in C or
+C++ is a single source file (headers from the standard library only). Pull
+`eclipse-temurin:21-jdk`, `node:20-slim` and `gcc:13` once (see `.env.example`). A
+Java test gets 5 extra seconds for the JVM to start and compile. A program that
+does not compile or crashes is shown to the student as **Compiler error. Error on
+line N.**, whatever the language (a C/C++ crash such as a segfault has no line, so
+it shows **Compiler error.**).
 
 **Students** do a code challenge on **its own page** (`/student/code/{id}`). The
 assignment card shows **no question and no description**: it has a **Do
@@ -280,7 +291,7 @@ assignment** button (**Continue assignment** once some tasks are handed in), and
 the questions are first shown on the page it opens. (This only keeps them off the
 card: `GET /assignments` still carries the text, because the page needs it and
 nothing records a "start".) On the page the student does **one task at a time**.
-The typed code is saved as `main.py` / `main.rb`, or `q1.py`, `q2.rb`, ... when
+The typed code is saved as `main.py` / `main.rb` / `main.java` / `main.js` / `main.c` / `main.cpp`, or `q1.py`, `q2.rb`, ... when
 there are several tasks. With several tasks the page shows a **tab for each**, with
 the task's question; every task has its own code and language, and they can be
 done in any order. Each task has two buttons:
@@ -756,7 +767,7 @@ rejection), covering the same flow the automated backend tests cover.
   a keyword baseline; `eval/results/models_20261020_182000/`). That run
   used temperature 0, before the sampling settings above; keep
   instructor override as the final word.
-- Code challenges run **Python and Ruby only**; each test starts its own
+- Code challenges run **Python, Ruby, Java, JavaScript, C and C++ only**; each test starts its own
   Docker container (about 1-3 seconds), so a long test list takes a while;
   `exact` matching is strict about inner spaces and wording; and the mark
   measures only what the tests check, not code quality, style or a report. A
