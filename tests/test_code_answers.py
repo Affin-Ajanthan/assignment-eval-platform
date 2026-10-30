@@ -145,3 +145,101 @@ def test_points_are_added_without_float_noise():
     code_answers.record_runs(assignment, submission, [
         _run(1, [_result(1, 1, True, points=0.1), _result(2, 1, True, points=0.2)])], now=NOW)
     assert (submission.test_earned, submission.test_total) == (0.3, 0.3)
+
+
+# --------------------------------------------------------------------------
+# The compiler error a student sees, per language
+# --------------------------------------------------------------------------
+
+JAVA_DOES_NOT_COMPILE = """\
+main.java:7: error: ';' expected
+        System.out.println("hi")
+                                ^
+1 error
+error: compilation failed
+"""
+
+JAVA_EXCEPTION = """\
+NOTE: Picked up JDK_JAVA_OPTIONS: -XX:+UseSerialGC -Xmx128m
+Exception in thread "main" java.lang.NumberFormatException: For input string: "x"
+\tat java.base/java.lang.NumberFormatException.forInputString(NumberFormatException.java:67)
+\tat java.base/java.lang.Integer.parseInt(Integer.java:661)
+\tat Main.main(main.java:6)
+\tat java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+\tat jdk.compiler/com.sun.tools.javac.launcher.Main.execute(Main.java:484)
+"""
+
+NODE_SYNTAX_ERROR = """\
+/run/main.js:2
+let y = ;
+        ^
+
+SyntaxError: Unexpected token ';'
+    at wrapSafe (node:internal/modules/cjs/loader:1469:18)
+"""
+
+NODE_EXCEPTION = """\
+/run/sub/main.js:5
+  throw new Error("boom");
+  ^
+
+Error: boom
+    at Object.<anonymous> (/run/sub/main.js:5:9)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+"""
+
+
+def test_java_is_told_the_line_of_the_compile_error_or_of_its_own_frame_in_a_crash():
+    assert code_answers.compiler_error(JAVA_DOES_NOT_COMPILE, "java") == "Compiler error. Error on line 7."
+    # The JDK's own frames (java.base/..., jdk.compiler/...) are skipped: the line is the student's.
+    assert code_answers.compiler_error(JAVA_EXCEPTION, "java") == "Compiler error. Error on line 6."
+    assert code_answers.compiler_error("Exception in thread \"main\" java.lang.Error", "java") == "Compiler error."
+    assert code_answers.compiler_error("java.lang.OutOfMemoryError: Java heap space", "java") == (
+        "The program ran out of memory.")
+
+
+def test_javascript_is_told_the_line_node_names_in_the_students_own_file():
+    assert code_answers.compiler_error(NODE_SYNTAX_ERROR, "javascript") == "Compiler error. Error on line 2."
+    assert code_answers.compiler_error(NODE_EXCEPTION, "javascript") == "Compiler error. Error on line 5."
+    only_node = "Error: x\n    at Module._compile (node:internal/modules/cjs/loader.js:1554:14)\n"
+    assert code_answers.compiler_error(only_node, "javascript") == "Compiler error."
+    assert code_answers.compiler_error("FATAL ERROR: JavaScript heap out of memory", "javascript") == (
+        "The program ran out of memory.")
+
+
+def test_a_java_crash_in_a_visible_test_shows_only_the_compiler_error_and_its_line():
+    crash = ct.TestResult(test_id=1, name="t", visible=True, points=1, match="exact", status="error", passed=False,
+                          expected_output="want", actual_output="partial", stderr=JAVA_EXCEPTION, input="x")
+    report = code_answers.student_report([crash], "java")
+    assert report["language"] == "java"
+    assert report["failures"] == [{"sample": 1, "name": "t", "status": "error", "input": "x",
+                                   "expected_output": "want", "actual_output": "",
+                                   "error": "Compiler error. Error on line 6."}]
+    assert "java.base" not in json.dumps(report) and "NumberFormatException" not in json.dumps(report)
+
+
+GCC_DOES_NOT_COMPILE = """\
+main.c: In function 'main':
+main.c:3:5: warning: implicit declaration of function 'foo' [-Wimplicit-function-declaration]
+main.c:4:13: error: 'undefined_name' undeclared (first use in this function)
+main.c:4:13: note: each undeclared identifier is reported only once
+"""
+
+GCC_MISSING_HEADER = "main.cpp:1:10: fatal error: nothing.h: No such file or directory\ncompilation terminated.\n"
+
+GCC_LINKER_ERROR = """\
+/usr/bin/ld: /tmp/ccAbC123.o: in function `main':
+main.c:(.text+0x9): undefined reference to `missing'
+collect2: error: ld returned 1 exit status
+"""
+
+
+def test_c_and_cpp_are_told_the_line_of_the_first_compiler_error_never_a_warning():
+    assert code_answers.compiler_error(GCC_DOES_NOT_COMPILE, "c") == "Compiler error. Error on line 4."
+    assert code_answers.compiler_error(GCC_MISSING_HEADER, "cpp") == "Compiler error. Error on line 1."
+    # A linker error, a crash with no message and a compile that only warned have no line of the student's.
+    assert code_answers.compiler_error(GCC_LINKER_ERROR, "c") == "Compiler error."
+    assert code_answers.compiler_error("", "cpp") == "Compiler error."
+    assert code_answers.compiler_error("main.c:3:5: warning: unused variable 'x'\n", "c") == "Compiler error."
+    assert code_answers.compiler_error("terminate called after throwing an instance of 'int'", "cpp") == (
+        "Compiler error.")

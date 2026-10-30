@@ -187,7 +187,7 @@ class Assignment(Base):
     # (every challenge made before tasks existed). Read it through `questions`.
     code_questions = Column(JSON, nullable=True)
     # The file the tests run, e.g. "student_management.rb" (a name or a path
-    # inside the submission). NULL: the only Python/Ruby file, or a main.* one.
+    # inside the submission). NULL: the only runnable (Python, Ruby, Java, JavaScript, C, C++) file, or a main.* one.
     # Only used by a challenge with a single task.
     test_main_file = Column(String, nullable=True)
     # A code challenge's access password: students must enter it (POST /assignments/{id}/unlock-tasks) before
