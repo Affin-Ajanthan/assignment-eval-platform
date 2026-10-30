@@ -298,7 +298,10 @@ def test_student_sees_open_and_past_assignments_but_not_upcoming_ones():
     assert set(open_one) == {"id", "subject_id", "subject_name", "name", "description", "available_from",
                              "deadline", "status", "submission_types", "code_languages",
                              "student_similarity_check", "student_ai_check", "marks_release_at",
-                             "assignment_type", "questions", "my_submission"}
+                             "assignment_type", "questions", "my_submission",
+                             # a code challenge's task password: only whether there is one, never the password
+                             "has_task_password", "tasks_unlocked", "tasks_in_order"}
+    assert "task_password" not in open_one
     assert open_one["questions"] == []  # only a code challenge has questions
 
 
