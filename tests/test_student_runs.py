@@ -244,11 +244,43 @@ def test_the_language_follows_the_assignment_and_is_checked(fake):
     python_asked = _run(ruby, stok, language="python")
     assert python_asked.status_code == 400 and "doesn't accept python" in python_asked.json()["detail"]
 
-    java = _challenge(itok, subject, "Java only", TESTS, code_languages=["java"])
-    assert "Python and Ruby code only" in _run(java, stok).json()["detail"]
+    go = _challenge(itok, subject, "Go only", TESTS, code_languages=["go"])
+    assert "Python, Ruby, Java, JavaScript, C or C++ code only" in _run(go, stok).json()["detail"]
 
     either = _challenge(itok, subject, "Either", TESTS, code_languages=["python", "ruby"])
     assert _run(either, stok, language="ruby").status_code == 200 and fake.calls[-1]["file"] == "main.rb"
+
+
+def test_java_and_javascript_challenges_run_and_save_their_answers_under_the_right_file_names(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    java = _challenge(itok, subject, "Java only", TESTS, code_languages=["java"])
+    assert _run(java, stok, code="class Main {}").status_code == 200
+    assert fake.calls[-1]["file"] == "main.java"                       # chosen from the assignment
+    wrong = _run(java, stok, language="javascript")
+    assert wrong.status_code == 400 and "doesn't accept javascript" in wrong.json()["detail"]
+
+    js = _challenge(itok, subject, "JavaScript only", TESTS, code_languages=["javascript"])
+    assert _run(js, stok, code="console.log(42)").status_code == 200
+    assert fake.calls[-1]["file"] == "main.js"
+
+    both = _challenge(itok, subject, "Java or JavaScript", TESTS, code_languages=["java", "javascript"])
+    assert _run(both, stok, language="javascript").status_code == 200 and fake.calls[-1]["file"] == "main.js"
+    assert _run(both, stok, language="java").status_code == 200 and fake.calls[-1]["file"] == "main.java"
+    assert _run(both, stok, language="php").status_code == 422          # not a language the endpoint knows
+
+
+def test_each_task_can_be_handed_in_in_java_or_javascript_and_is_marked_on_its_own(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _two_questions(itok, subject, "Java and JavaScript", code_languages=["java", "javascript"])
+    first = _submit_question(assignment, stok, 1, "class Main {}", language="java")
+    second = _submit_question(assignment, stok, 2, "console.log(2)", language="javascript")
+    assert first.status_code == 200 and second.status_code == 200, (first.text, second.text)
+    one, two = second.json()["questions"]
+    assert (one["language"], one["code"], two["language"], two["code"]) == (
+        "java", "class Main {}", "javascript", "console.log(2)")
+    assert [c["file"] for c in fake.calls] == ["q1.java", "q2.js"]
+    saved = client.get(f"/submissions/{second.json()['submission_id']}", headers=auth_headers(itok)).json()
+    assert sorted(p.name for p in (BASE_DIR / saved["code_path"]).iterdir()) == ["q1.java", "q2.js"]
 
 
 def test_only_enrolled_students_can_run_and_only_on_open_code_challenges(fake):
@@ -812,7 +844,9 @@ def test_the_answer_is_checked_before_anything_is_saved(fake):
     assert post({"question": 3, "code": "x"}).status_code == 404      # no such question
     assert post({"question": 1, "code": ""}).status_code == 422
     assert post({"question": 0, "code": "x"}).status_code == 422
-    assert post({"question": 1, "code": "x", "language": "java"}).status_code == 422
+    assert post({"question": 1, "code": "x", "language": "go"}).status_code == 422  # a language tests cannot run
+    refused = post({"question": 1, "code": "x", "language": "java"})  # one they can, but this assignment is Python only
+    assert refused.status_code == 400 and "doesn't accept java" in refused.json()["detail"]
     wrong = post({"question": 1, "code": "x", "language": "ruby"})    # a language the assignment does not accept
     assert wrong.status_code == 400 and "doesn't accept ruby" in wrong.json()["detail"]
     assert fake.calls == [] and client.get("/submissions", headers=auth_headers(stok)).json() == []
@@ -1150,3 +1184,20 @@ def test_without_the_order_the_tasks_can_be_done_in_any_order(fake):
     assignment = _two_questions(itok, subject, "Any order")
     assert _submit_question(assignment, stok, 2, "print(2)").status_code == 200
     assert _submit_question(assignment, stok, 1, "print(1)").status_code == 200
+
+
+def test_c_and_cpp_challenges_run_and_save_their_answers_under_the_right_file_names(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    c_only = _challenge(itok, subject, "C only", TESTS, code_languages=["c"])
+    assert _run(c_only, stok, code="int main(void) { return 0; }").status_code == 200
+    assert fake.calls[-1]["file"] == "main.c"
+    cpp_only = _challenge(itok, subject, "C++ only", TESTS, code_languages=["cpp"])
+    assert _run(cpp_only, stok, code="int main() {}").status_code == 200
+    assert fake.calls[-1]["file"] == "main.cpp"
+    wrong = _run(c_only, stok, language="cpp")
+    assert wrong.status_code == 400 and "doesn't accept cpp" in wrong.json()["detail"]
+
+    assignment = _two_questions(itok, subject, "C and C++", code_languages=["c", "cpp"])
+    assert _submit_question(assignment, stok, 1, "int main(void) { return 0; }", language="c").status_code == 200
+    assert _submit_question(assignment, stok, 2, "int main() {}", language="cpp").status_code == 200
+    assert [c["file"] for c in fake.calls[-2:]] == ["q1.c", "q2.cpp"]

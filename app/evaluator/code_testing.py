@@ -2,7 +2,7 @@
 
 Each test runs the student's program in its own throw-away Docker container:
 the test's input goes to the program's standard input and the output is
-compared with the expected output. Python and Ruby are supported.
+compared with the expected output. Python, Ruby, Java, JavaScript, C and C++ are supported.
 
 Student code is untrusted, so every container has no network, a memory cap
 (no swap), a CPU cap, a process cap, a read-only root filesystem, all Linux
@@ -48,13 +48,40 @@ class Language:
     extensions: tuple
     interpreter: str
     image: str
+    env: tuple = ()  # (name, value) pairs set inside the container
+    pids: int = 64  # processes and threads the container may have: a JVM starts many threads
+    extra_seconds: int = 0  # start-up time added to the time limit, so a slow start is not the student's fault
+    # C and C++ are compiled first (inside the same container, see _COMPILED_SCRIPT): `interpreter` is then the
+    # compiler (gcc, g++) and `flags` its language standard.
+    compiled: bool = False
+    flags: str = ""
 
+
+# Java is run with the JDK's single-file launcher (`java main.java`), which compiles in memory and runs the
+# first class: no separate compile step, and the file name need not match the class. The options keep the
+# JVM small enough for the 256 MB container.
+_JAVA_OPTIONS = "-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:-UsePerfData -Xmx128m"
+_GCC_IMAGE = os.environ.get("CODE_SANDBOX_GCC_IMAGE", "gcc:13")  # has both gcc and g++
 
 LANGUAGES: dict = {
     "python": Language("python", (".py",), "python", DEFAULT_IMAGE),
     "ruby": Language("ruby", (".rb",), "ruby", os.environ.get("CODE_SANDBOX_RUBY_IMAGE", "ruby:3.3-slim")),
+    "java": Language("java", (".java",), "java", os.environ.get("CODE_SANDBOX_JAVA_IMAGE", "eclipse-temurin:21-jdk"),
+                     env=(("JDK_JAVA_OPTIONS", _JAVA_OPTIONS),), pids=128, extra_seconds=5),
+    "javascript": Language("javascript", (".js",), "node", os.environ.get("CODE_SANDBOX_NODE_IMAGE", "node:20-slim")),
+    "c": Language("c", (".c",), "gcc", _GCC_IMAGE, compiled=True, flags="-std=c17"),
+    "cpp": Language("cpp", (".cpp", ".cc", ".cxx"), "g++", _GCC_IMAGE, compiled=True, flags="-std=c++17"),
 }
 _RUNNABLE = {ext: lang for lang in LANGUAGES.values() for ext in lang.extensions}
+_NAMES = {"python": "Python", "ruby": "Ruby", "java": "Java", "javascript": "JavaScript", "c": "C", "cpp": "C++"}
+
+
+def language_names() -> str:
+    """'Python, Ruby, Java, JavaScript, C or C++': the languages tests can run, for messages."""
+    names = [_NAMES[lang] for lang in LANGUAGES]
+    return ", ".join(names[:-1]) + " or " + names[-1]
+
+
 # Used to pick the main file when a submission has several and none is named.
 _CONVENTIONAL_STEMS = ("main", "app", "run", "program", "index")
 
@@ -153,7 +180,7 @@ def pick_main_file(code_dir: Path, preferred: str = "") -> str:
     """The file to run, relative to code_dir, as a posix path.
 
     The instructor's `preferred` name wins (a path or just a file name).
-    Otherwise a single Python/Ruby file is used, or a conventionally named one
+    Otherwise a single runnable file (see LANGUAGES) is used, or a conventionally named one
     (main, app, run, program, index) when there are several."""
     code_dir = Path(code_dir).resolve()
     files = _code_files(code_dir)
@@ -168,7 +195,7 @@ def pick_main_file(code_dir: Path, preferred: str = "") -> str:
 
     runnable = [p for p in files if p.suffix.lower() in _RUNNABLE]
     if not runnable:
-        raise CodeTestError("No Python or Ruby file was found in the submission.")
+        raise CodeTestError(f"No {language_names()} file was found in the submission.")
     if len(runnable) == 1:
         return runnable[0].relative_to(code_dir).as_posix()
     conventional = [p for p in runnable if p.stem.lower() in _CONVENTIONAL_STEMS]
@@ -181,7 +208,7 @@ def pick_main_file(code_dir: Path, preferred: str = "") -> str:
 def language_of_file(relative_file: str) -> Language:
     lang = _RUNNABLE.get(PurePosixPath(relative_file).suffix.lower())
     if lang is None:
-        raise CodeTestError(f"Tests can run Python and Ruby programs only; '{relative_file}' is neither.")
+        raise CodeTestError(f"Tests can run {language_names()} programs only; '{relative_file}' is none of them.")
     return lang
 
 
@@ -193,20 +220,36 @@ def language_of_file(relative_file: str) -> Language:
 # into the script, so odd file names cannot inject commands.
 _SCRIPT = 'cp -r /code/. /run/ && cd "/run/$1" && exec timeout "$2" "$3" "$4"'
 
+# C and C++: the same copy, then compile the main file to /run/prog (the compiler gets 30 seconds and its
+# messages go to stderr, so stdout stays the program's alone), then run it with the time limit. A program
+# that does not compile exits with 1 and the compiler's messages as its stderr. $1..$4 are as above and $5 is
+# the language standard, again separate arguments.
+_COMPILED_SCRIPT = (
+    'cp -r /code/. /run/ && cd "/run/$1" '
+    '&& { timeout 30 "$3" "$5" -O1 -o /run/prog "$4" -lm 1>&2 || exit 1; } '
+    '&& exec timeout "$2" /run/prog'
+)
+
 
 def build_test_command(name: str, code_dir: Path, relative_file: str, language: Language, timeout: int) -> list:
     rel = PurePosixPath(relative_file)
+    env = [arg for key, value in language.env for arg in ("-e", f"{key}={value}")]
+    # The compiled program is run from the scratch folder, which a tmpfs mounts without permission to run
+    # programs unless asked to.
+    scratch = "/run:rw,size=64m,mode=1777" + (",exec" if language.compiled else "")
     return [
         "docker", "run", "--rm", "-i", "--name", name,
         "--network", "none",
-        "--memory", MEMORY_LIMIT, "--memory-swap", MEMORY_LIMIT, "--cpus", "0.5", "--pids-limit", "64",
-        "--read-only", "--tmpfs", "/tmp", "--tmpfs", "/run:rw,size=64m,mode=1777",
+        "--memory", MEMORY_LIMIT, "--memory-swap", MEMORY_LIMIT, "--cpus", "0.5", "--pids-limit", str(language.pids),
+        "--read-only", "--tmpfs", "/tmp", "--tmpfs", scratch,
         "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
         "--user", "65534",
-        "-e", "PYTHONDONTWRITEBYTECODE=1",
+        "-e", "PYTHONDONTWRITEBYTECODE=1", *env,
         "-v", f"{code_dir}:/code:ro",
         language.image,
-        "sh", "-c", _SCRIPT, "sh", rel.parent.as_posix(), str(timeout), language.interpreter, rel.name,
+        "sh", "-c", _COMPILED_SCRIPT if language.compiled else _SCRIPT, "sh",
+        rel.parent.as_posix(), str(timeout + language.extra_seconds), language.interpreter, rel.name,
+        *([language.flags] if language.compiled else []),
     ]
 
 
@@ -301,7 +344,7 @@ class QuestionRun:
 
 
 def answer_filename(question_count: int, question: int, language: str) -> str:
-    """The name a typed answer is saved under: main.py (or main.rb) for a challenge with one
+    """The name a typed answer is saved under: main.py (main.rb, main.java, main.js, main.c, main.cpp) for a challenge with one
     question, q1.py, q2.rb, ... for one with several."""
     stem = "main" if question_count == 1 else f"q{question}"
     return f"{stem}{LANGUAGES[language].extensions[0]}"

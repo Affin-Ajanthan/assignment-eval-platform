@@ -104,12 +104,26 @@ def test_several_files_need_a_conventional_name_or_an_explicit_choice(tmp_path):
 
 
 def test_no_runnable_file_and_hidden_or_cache_folders(tmp_path):
-    _files(tmp_path, "Program.java", "__MACOSX/x.py", ".hidden/y.py", "__pycache__/z.py")
-    with pytest.raises(ct.CodeTestError, match="No Python or Ruby file"):
+    _files(tmp_path, "Program.cs", "__MACOSX/x.py", ".hidden/y.py", "__pycache__/z.py")
+    with pytest.raises(ct.CodeTestError, match=r"No Python, Ruby, Java, JavaScript, C or C\+\+ file"):
         ct.pick_main_file(tmp_path)
-    with pytest.raises(ct.CodeTestError, match="Python and Ruby programs only"):
-        ct.language_of_file("Program.java")
+    with pytest.raises(ct.CodeTestError, match=r"Python, Ruby, Java, JavaScript, C or C\+\+ programs only"):
+        ct.language_of_file("Program.cs")
     assert ct.language_of_file("a/b.rb").id == "ruby"
+
+
+def test_java_and_javascript_files_are_runnable_and_found_like_the_others(tmp_path):
+    assert ct.language_of_file("src/Main.java").id == "java"
+    assert ct.language_of_file("app.JS").id == "javascript"
+    assert (ct.language_of_file("a/main.c").id, ct.language_of_file("main.cpp").id, ct.language_of_file("x.cc").id) == (
+        "c", "cpp", "cpp")
+    with pytest.raises(ct.CodeTestError, match="none of them"):
+        ct.language_of_file("util.h")                                  # a header is never the file to run
+    _files(tmp_path, "sub/Main.java", "README.md")
+    assert ct.pick_main_file(tmp_path) == "sub/Main.java"
+    other = tmp_path / "two"
+    _files(other, "a.js", "main.js")
+    assert ct.pick_main_file(other) == "main.js"  # a conventional name wins among several
 
 
 # --------------------------------------------------------------------------
@@ -127,6 +141,47 @@ def test_the_container_has_every_safety_limit_and_odd_file_names_stay_arguments(
     assert cmd[-5:] == ["sh", "My Dir", "7", "python", "it's; rm -rf.py"]
     script = cmd[cmd.index("-c") + 1]
     assert "My Dir" not in script and "rm -rf" not in script
+    assert pairs["--pids-limit"] == "64" and "JDK_JAVA_OPTIONS" not in " ".join(cmd)  # Python keeps the plain limits
+
+
+def test_java_runs_with_the_source_launcher_a_bigger_process_cap_and_extra_start_up_time(tmp_path):
+    java = ct.LANGUAGES["java"]
+    cmd = ct.build_test_command("n1", tmp_path, "src/main.java", java, 7)
+    pairs = {cmd[i]: cmd[i + 1] for i in range(len(cmd) - 1)}
+    assert java.image in cmd and pairs["--pids-limit"] == "128" and pairs["--memory"] == "256m"
+    assert cmd[-5:] == ["sh", "src", "12", "java", "main.java"]  # 7 seconds + 5 for the JVM to start and compile
+    options = next(a for a in cmd if a.startswith("JDK_JAVA_OPTIONS="))
+    assert "-Xmx128m" in options and "-XX:+UseSerialGC" in options
+    assert cmd[cmd.index(options) - 1] == "-e"
+    assert cmd.index(options) < cmd.index(java.image)  # an option of docker run, not of the program
+
+
+@pytest.mark.parametrize("language_id,filename,compiler,standard", [
+    ("c", "src/main.c", "gcc", "-std=c17"), ("cpp", "main.cpp", "g++", "-std=c++17")])
+def test_c_and_cpp_are_compiled_in_the_container_then_run_with_the_time_limit(
+        tmp_path, language_id, filename, compiler, standard):
+    language = ct.LANGUAGES[language_id]
+    cmd = ct.build_test_command("n1", tmp_path, filename, language, 7)
+    pairs = {cmd[i]: cmd[i + 1] for i in range(len(cmd) - 1)}
+    folder, _, name = filename.rpartition("/")
+    # Folder, time limit, compiler, file and standard follow the script as separate arguments.
+    assert cmd[-6:] == ["sh", folder or ".", "7", compiler, name, standard]
+    script = cmd[cmd.index("-c") + 1]
+    assert script == ct._COMPILED_SCRIPT and "-o /run/prog" in script and 'exec timeout "$2" /run/prog' in script
+    assert name not in script and compiler not in script                # still only arguments, never spliced in
+    assert language.image in cmd and pairs["--memory"] == "256m" and pairs["--network"] == "none"
+    # The program is run from the scratch folder, so only there may programs be run.
+    assert "/run:rw,size=64m,mode=1777,exec" in cmd and "/run:rw,size=64m,mode=1777" not in cmd
+    plain = ct.build_test_command("n1", tmp_path, "main.py", ct.LANGUAGES["python"], 7)
+    assert "/run:rw,size=64m,mode=1777" in plain and ",exec" not in " ".join(plain)
+
+
+def test_javascript_runs_with_node_and_the_plain_limits(tmp_path):
+    js = ct.LANGUAGES["javascript"]
+    cmd = ct.build_test_command("n1", tmp_path, "main.js", js, 7)
+    pairs = {cmd[i]: cmd[i + 1] for i in range(len(cmd) - 1)}
+    assert js.image in cmd and pairs["--pids-limit"] == "64"
+    assert cmd[-5:] == ["sh", ".", "7", "node", "main.js"]
 
 
 # --------------------------------------------------------------------------
@@ -163,6 +218,21 @@ def test_each_test_gets_its_input_and_is_marked_by_its_outcome(tmp_path):
     assert [stdin for _cmd, _t, stdin in docker.calls][:2] == ["21\n", "1\n"]
     assert len({c[0][c[0].index("--name") + 1] for c in docker.calls}) == len(docker.calls)
     assert all(timeout == 35 for _cmd, timeout, _stdin in docker.calls)  # time limit + start-up slack
+
+
+@pytest.mark.parametrize("filename,language", [
+    ("main.java", "java"), ("main.js", "javascript"), ("main.c", "c"), ("main.cpp", "cpp")])
+def test_java_javascript_c_and_cpp_tests_are_run_and_marked_like_python_ones(tmp_path, filename, language):
+    _files(tmp_path, filename)
+    docker = FakeDocker({"21\n": (0, "42\n", ""), "1\n": (0, "3\n", ""), "boom\n": (1, "", "boom")})
+    tests = [_test(1, "42", input="21"), _test(2, "2", input="1"), _test(3, "x", input="boom")]
+    run = ct.run_tests(tmp_path, tests, runner=docker, timeout=5)
+
+    assert (run.file, run.language) == (filename, language)
+    assert [(r.test_id, r.status) for r in run.results] == [(1, "passed"), (2, "failed"), (3, "error")]
+    command = docker.calls[0][0]
+    assert ct.LANGUAGES[language].image in command
+    assert filename in command[-2:]  # the file is the last argument, or just before the compiler's standard
 
 
 def test_docker_failing_to_start_a_container_is_not_a_failed_test(tmp_path):
@@ -270,6 +340,12 @@ def test_a_typed_answer_is_saved_as_main_for_one_question_and_by_number_for_seve
     assert ct.answer_filename(1, 1, "ruby") == "main.rb"
     assert ct.answer_filename(3, 2, "python") == "q2.py"
     assert ct.answer_filename(3, 3, "ruby") == "q3.rb"
+    assert ct.answer_filename(1, 1, "java") == "main.java"
+    assert ct.answer_filename(2, 2, "java") == "q2.java"
+    assert ct.answer_filename(1, 1, "javascript") == "main.js"
+    assert ct.answer_filename(2, 1, "javascript") == "q1.js"
+    assert ct.answer_filename(1, 1, "c") == "main.c"
+    assert ct.answer_filename(3, 3, "cpp") == "q3.cpp"
 
 
 def test_the_file_that_answers_a_question_is_found_by_its_number(tmp_path):
@@ -280,8 +356,15 @@ def test_the_file_that_answers_a_question_is_found_by_its_number(tmp_path):
     assert ct.answer_file(tmp_path, 1) == "q1.py"  # not q10.py
     assert ct.answer_file(tmp_path, 2) == "q2.rb"
     assert ct.answer_file(tmp_path, 10) == "q10.py"
-    assert ct.answer_file(tmp_path, 3) == ""  # only Python and Ruby files answer a question
+    assert ct.answer_file(tmp_path, 3) == ""  # only files of a language tests can run answer a question
     assert ct.answer_file(tmp_path, 4) == ""
+    (tmp_path / "q4.java").write_text("class Main {}")
+    (tmp_path / "q5.js").write_text("console.log(5)")
+    (tmp_path / "q6.go").write_text("package main")
+    (tmp_path / "q7.c").write_text("int main(void) { return 0; }")
+    (tmp_path / "q8.cpp").write_text("int main() { return 0; }")
+    assert (ct.answer_file(tmp_path, 4), ct.answer_file(tmp_path, 5), ct.answer_file(tmp_path, 6)) == ("q4.java", "q5.js", "")
+    assert (ct.answer_file(tmp_path, 7), ct.answer_file(tmp_path, 8)) == ("q7.c", "q8.cpp")
 
 
 def test_each_question_runs_its_own_file_and_its_own_tests(tmp_path, monkeypatch):
@@ -515,6 +598,138 @@ def test_real_docker_runs_a_ruby_menu_program(tmp_path):
     run = ct.run_tests(tmp_path, tests, main_file="menu.rb")
     assert run.file == "Source/menu.rb" and run.language == "ruby"
     assert [r.passed for r in run.results] == [True, False]  # exact fails: the menu text is part of the output
+
+
+JAVA_PROGRAM = """\
+import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        String cmd = new Scanner(System.in).nextLine();
+        if (cmd.equals("loop")) {
+            while (true) { }
+        } else if (cmd.equals("crash")) {
+            throw new IllegalStateException("boom");
+        } else {
+            System.out.println(Integer.parseInt(cmd) * 2);
+        }
+    }
+}
+"""
+
+JAVASCRIPT_PROGRAM = """\
+const cmd = require("fs").readFileSync(0, "utf8").trim();
+if (cmd === "loop") {
+  while (true) { }
+} else if (cmd === "crash") {
+  throw new Error("boom");
+} else {
+  console.log(Number(cmd) * 2);
+}
+"""
+
+
+C_PROGRAM = """\
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int main(void) {
+    char cmd[64];
+    fgets(cmd, sizeof cmd, stdin);
+    if (strncmp(cmd, "loop", 4) == 0) {
+        for (;;) { }
+    } else if (strncmp(cmd, "crash", 5) == 0) {
+        int *p = NULL;
+        return *p;
+    }
+    printf("%d\\n", atoi(cmd) * 2);
+    return 0;
+}
+"""
+
+CPP_PROGRAM = """\
+#include <iostream>
+#include <string>
+
+int main() {
+    std::string cmd;
+    std::getline(std::cin, cmd);
+    if (cmd == "loop") {
+        for (;;) { }
+    } else if (cmd == "crash") {
+        throw 1;
+    }
+    std::cout << std::stoi(cmd) * 2 << std::endl;
+    return 0;
+}
+"""
+
+
+def _skip_without_image(language_id):
+    """Skip a slow test when Docker is off or the language's image has not been pulled."""
+    if not ct._docker_ready(ct._docker_runner):
+        pytest.skip("Docker is not available")
+    image = ct.LANGUAGES[language_id].image
+    if subprocess.run(["docker", "image", "inspect", image], capture_output=True).returncode != 0:
+        pytest.skip(f"the {language_id} image is not pulled (docker pull {image})")
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("language_id,filename,program,broken,crash_line,syntax_line", [
+    ("java", "main.java", JAVA_PROGRAM, 'public class Main {\n    public static void main(String[] a) {\n'
+                                        '        System.out.println("hi")\n    }\n}\n', 9, 3),
+    ("javascript", "main.js", JAVASCRIPT_PROGRAM, "let x = 1;\nlet y = ;\n", 5, 2),
+])
+def test_real_docker_runs_java_and_javascript_and_reports_the_error_line(
+        tmp_path, language_id, filename, program, broken, crash_line, syntax_line):
+    from app import code_answers
+
+    _skip_without_image(language_id)
+    (tmp_path / filename).write_text(program)
+    tests = [_test(1, "42", input="21"), _test(2, "99", input="1"), _test(3, "x", input="crash"),
+             _test(4, "x", input="loop")]
+    run = ct.run_tests(tmp_path, tests, timeout=3)
+    assert run.language == language_id
+    assert [(r.test_id, r.status) for r in run.results] == [
+        (1, "passed"), (2, "failed"), (3, "error"), (4, "timeout")]
+    assert code_answers.compiler_error(run.results[2].stderr, language_id) == f"Compiler error. Error on line {crash_line}."
+
+    bad = tmp_path / "bad"
+    bad.mkdir()
+    (bad / filename).write_text(broken)
+    result = ct.run_tests(bad, [_test(1, "hi")], timeout=3).results[0]
+    assert result.status == "error"
+    assert code_answers.compiler_error(result.stderr, language_id) == f"Compiler error. Error on line {syntax_line}."
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("language_id,filename,program,broken", [
+    ("c", "main.c", C_PROGRAM, "int main(void) {\n    int x = undefined_name;\n    return x;\n}\n"),
+    ("cpp", "main.cpp", CPP_PROGRAM, "int main() {\n    int x = undefined_name;\n    return x;\n}\n"),
+])
+def test_real_docker_compiles_and_runs_c_and_cpp_and_reports_the_error_line(
+        tmp_path, language_id, filename, program, broken):
+    from app import code_answers
+
+    _skip_without_image(language_id)
+    (tmp_path / filename).write_text(program)
+    tests = [_test(1, "42", input="21"), _test(2, "99", input="1"), _test(3, "x", input="crash"),
+             _test(4, "x", input="loop")]
+    run = ct.run_tests(tmp_path, tests, timeout=3)
+    assert run.language == language_id
+    assert [(r.test_id, r.status) for r in run.results] == [
+        (1, "passed"), (2, "failed"), (3, "error"), (4, "timeout")]
+    assert run.results[0].actual_output == "42"        # the compiler's messages never reach stdout
+    # A crash that compiled has no line of the student's to name.
+    assert code_answers.compiler_error(run.results[2].stderr, language_id) == "Compiler error."
+
+    bad = tmp_path / "bad"
+    bad.mkdir()
+    (bad / filename).write_text(broken)
+    result = ct.run_tests(bad, [_test(1, "hi")], timeout=3).results[0]
+    assert result.status == "error" and result.actual_output == ""
+    assert code_answers.compiler_error(result.stderr, language_id) == "Compiler error. Error on line 2."
 
 
 # --------------------------------------------------------------------------

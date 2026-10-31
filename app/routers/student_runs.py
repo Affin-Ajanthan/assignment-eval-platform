@@ -185,7 +185,7 @@ class AnswerIn(BaseModel):
 
     code: str = Field(min_length=1, max_length=MAX_CODE_CHARS)
     # Left out: the assignment's language (its first one when it allows several).
-    language: Optional[Literal["python", "ruby"]] = None
+    language: Optional[Literal["python", "ruby", "java", "javascript", "c", "cpp"]] = None  # = code_testing.LANGUAGES
     # The task it answers (1 is the first). Left out: the first, the only task of most challenges.
     question: int = Field(default=1, ge=1)
 
@@ -217,7 +217,7 @@ def _pick_language(requested: Optional[str], assignment: Assignment) -> str:
     supported = list(code_testing.LANGUAGES)
     allowed = [lang for lang in (assignment.code_languages or supported) if lang in supported]
     if not allowed:
-        raise HTTPException(400, "This can run Python and Ruby code only.")
+        raise HTTPException(400, f"This can run {code_testing.language_names()} code only.")
     if requested is None:
         return allowed[0]
     if requested not in allowed:

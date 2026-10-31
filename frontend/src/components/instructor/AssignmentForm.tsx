@@ -333,6 +333,12 @@ export default function AssignmentForm({
                 ? `Students must submit code in ${languageNames(form.languages)}; code in any other language is refused.`
                 : "None ticked: students can submit code in any supported language."}
           </p>
+          {form.kind === "code_challenge" && (
+            <p className="mt-1 text-xs text-gray-500" data-testid="runnable-languages-note">
+              A code challenge can run Python, Ruby, Java, JavaScript, C and C++. With none ticked, students choose
+              among those six; the other languages cannot be run yet.
+            </p>
+          )}
         </fieldset>
       )}
 
@@ -389,9 +395,10 @@ export default function AssignmentForm({
                 className={input}
               />
               <p className="mt-1 text-xs text-gray-500">
-                The file name (or path) the tests run: Python (.py) and Ruby (.rb) only. Empty: the only Python or Ruby
-                file in the submission, or one named main, app, run, program or index. Code that students type in the
-                editor is always saved and run as main.py or main.rb, so leave this empty for it.
+                The file name (or path) the tests run: Python (.py), Ruby (.rb), Java (.java), JavaScript (.js), C (.c)
+                and C++ (.cpp) only. Empty: the only such file in the submission, or one named main, app, run, program
+                or index. Code that students type in the editor is always saved and run as main.py, main.rb, main.java,
+                main.js, main.c or main.cpp, so leave this empty for it.
               </p>
             </div>
           )}
