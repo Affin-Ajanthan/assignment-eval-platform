@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from itertools import combinations
 from pathlib import Path
 
-from .core import _stable_hash, containment_similarity, jaccard_similarity
+from .core import _stable_hash, common_hashes, containment_similarity, jaccard_similarity
 
 # Winnowing over words: k-grams of 6 words, window of 5, so every identical
 # run of at least k + w - 1 = 10 words is guaranteed to share a fingerprint.
@@ -44,14 +44,11 @@ SEMANTIC_REVIEW_FLOOR = 0.85
 SEMANTIC_OUTLIER_Z = 2.0
 SEMANTIC_MIN_COHORT_PAIRS = 10
 
-# Without a template PDF, fingerprints found in MORE than half of the reports
-# (and in at least COMMON_MIN_REPORTS of them) are taken to be the assignment's
-# own text (question brief, template headings) rather than copying. "At least
-# half" was too loose: in a class of 6, three students sharing their answers
-# counted as "half" and hid each other. With a template uploaded this rule is
-# off -- the template is the exact list of what to ignore.
-COMMON_MIN_REPORTS = 4
-COMMON_SHARE = 0.5
+# Without a template PDF, fingerprints found in most reports are taken to be
+# the assignment's own text (question brief, template headings) rather than
+# copying: core.common_hashes, the same rule the code check uses. With a
+# template uploaded this rule is off -- the template is the exact list of what
+# to ignore.
 
 # Instructor's template PDF (question paper, report template): every run of at
 # least this many consecutive words in a report that also appears in the
@@ -177,14 +174,9 @@ def winnow_words(words: list[str], k: int = WORD_K, window: int = WINDOW) -> dic
 
 
 def remove_common_fingerprints(reports: list[ReportText]) -> int:
-    """Drop fingerprints present in more than half of the reports, and in at
-    least COMMON_MIN_REPORTS of them (the assignment brief everyone pasted).
-    Returns how many distinct ones were dropped."""
-    n = len(reports)
-    if n < COMMON_MIN_REPORTS:
-        return 0
-    counts = Counter(h for r in reports for h in r.fingerprints)
-    common = {h for h, c in counts.items() if c > n * COMMON_SHARE and c >= COMMON_MIN_REPORTS}
+    """Drop the fingerprints most reports share (core.common_hashes: the
+    assignment brief everyone pasted). Returns how many distinct ones went."""
+    common = common_hashes([set(r.fingerprints) for r in reports])
     for r in reports:
         for h in common:
             r.fingerprints.pop(h, None)

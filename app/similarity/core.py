@@ -317,6 +317,30 @@ def subtract_starter(fp: Fingerprint, starter: Fingerprint | None) -> Fingerprin
     )
 
 
+# Fingerprints found in MORE than half of the submissions (and in at least
+# COMMON_MIN_SUBMISSIONS of them) are what the task makes everyone write --
+# menu loops, input helpers, the brief pasted into every report -- rather than
+# copying. One rule for code (similarity_runs.remove_common_code) and reports
+# (report_similarity.remove_common_fingerprints). "At least half" was too
+# loose: in a class of 6, three students sharing their answers counted as
+# "half" and hid each other.
+COMMON_MIN_SUBMISSIONS = 4
+COMMON_SHARE = 0.5
+
+
+def common_hashes(hash_sets: list) -> set[int]:
+    """The fingerprints shared by most of `hash_sets` (one set per
+    submission), by the rule above; empty below COMMON_MIN_SUBMISSIONS."""
+    n = len(hash_sets)
+    if n < COMMON_MIN_SUBMISSIONS:
+        return set()
+    counts: dict[int, int] = {}
+    for hashes in hash_sets:
+        for h in hashes:
+            counts[h] = counts.get(h, 0) + 1
+    return {h for h, c in counts.items() if c > n * COMMON_SHARE and c >= COMMON_MIN_SUBMISSIONS}
+
+
 # --------------------------------------------------------------------------
 # Similarity scoring
 # --------------------------------------------------------------------------

@@ -11,6 +11,7 @@ import io
 import re
 from datetime import datetime, timezone
 
+from fastapi.responses import Response
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
@@ -95,6 +96,12 @@ def filename(kind: str, assignment_name: str) -> str:
     """e.g. code-similarity_Assignment-3_2026-10-13.xlsx (ASCII only)."""
     slug = re.sub(r"[^A-Za-z0-9]+", "-", assignment_name).strip("-")[:60] or "assignment"
     return f"{kind}_{slug}_{datetime.now(timezone.utc):%Y-%m-%d}.xlsx"
+
+
+def xlsx_response(content: bytes, kind: str, assignment_name: str) -> Response:
+    """The workbook as a download named by `filename`."""
+    return Response(content=content, media_type=XLSX_MEDIA_TYPE, headers={
+        "Content-Disposition": f'attachment; filename="{filename(kind, assignment_name)}"'})
 
 
 # --------------------------------------------------------------------------

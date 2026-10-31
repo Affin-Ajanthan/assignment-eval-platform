@@ -12,7 +12,7 @@ from pydantic import AfterValidator
 from sqlalchemy.orm import Session
 
 from .auth import instructor_subject_ids
-from .models import Assignment, User
+from .models import Assignment, Subject, User
 from .notebook import NOTEBOOK_SUFFIX
 
 # Source files the similarity check and code analysis read. Includes C# and
@@ -58,3 +58,12 @@ def instructor_assignment(db: Session, instructor: User, assignment_id: int) -> 
     if assignment.subject_id not in instructor_subject_ids(db, instructor):
         raise HTTPException(403, "You are not assigned to this subject")
     return assignment
+
+
+def instructor_subject(db: Session, instructor: User, subject_id: int) -> Subject:
+    if subject_id not in instructor_subject_ids(db, instructor):
+        raise HTTPException(403, "You are not assigned to this subject")
+    subject = db.get(Subject, subject_id)
+    if subject is None:
+        raise HTTPException(404, "Subject not found")
+    return subject

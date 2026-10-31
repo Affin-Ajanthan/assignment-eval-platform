@@ -63,6 +63,8 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Callable, Protocol
 
+from ..settings import env_float
+
 log = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "Qwen/Qwen2.5-1.5B"
@@ -73,12 +75,6 @@ DEFAULT_MAX_CHUNKS = 8
 DEFAULT_MEDIUM = 1.0
 DEFAULT_HIGH = 2.0
 
-
-def _env_float(name: str, default: float) -> float:
-    try:
-        return float(os.environ.get(name, default))
-    except ValueError:
-        return default
 
 
 def _enabled() -> bool:
@@ -232,7 +228,7 @@ class AITextDetector:
             if self._scorer.token_count(text) < MIN_TOKENS:
                 result = DetectionResult(None, 0, self._scorer.token_count(text), name, "insufficient_text")
             else:
-                max_chunks = int(_env_float("AI_TEXT_MAX_CHUNKS", DEFAULT_MAX_CHUNKS))
+                max_chunks = int(env_float("AI_TEXT_MAX_CHUNKS", DEFAULT_MAX_CHUNKS))
                 scores, total = self._scorer.chunk_curvatures(text, CHUNK_TOKENS, max(1, max_chunks))
                 if not scores or not all(math.isfinite(s) for s in scores):
                     raise ValueError("model returned no usable scores")
@@ -248,7 +244,7 @@ class AITextDetector:
 
 
 def thresholds() -> tuple[float, float]:
-    return _env_float("AI_TEXT_MEDIUM", DEFAULT_MEDIUM), _env_float("AI_TEXT_HIGH", DEFAULT_HIGH)
+    return env_float("AI_TEXT_MEDIUM", DEFAULT_MEDIUM), env_float("AI_TEXT_HIGH", DEFAULT_HIGH)
 
 
 def to_score(result: DetectionResult):

@@ -19,7 +19,7 @@ from .evaluator.document_extraction import extract_report_text, load_extraction
 from .models import Assignment, Submission
 from .notebook import read_code
 from .similarity import report_similarity as _report_sim
-from .similarity.core import Fingerprint, compare_all, fingerprint_source, subtract_starter
+from .similarity.core import Fingerprint, common_hashes, compare_all, fingerprint_source, subtract_starter
 from .similarity.python_cleanup import names_in
 from .similarity.semantic import (apply_semantic_signal, get_semantic_service, normalize_code, strip_junk,
                                   submissions_needing_semantic)
@@ -37,15 +37,11 @@ class CodeSimilarityRun:
 
 
 def remove_common_code(fingerprints: dict, files_by_submission: dict) -> int:
-    """Drop fingerprints present in more than half of the submissions, and in at
-    least COMMON_MIN_REPORTS of them -- the patterns every solution to the task
-    shares (menu loops, input helpers, file saving). Same rule as the report
-    check's remove_common_fingerprints. Returns how many distinct ones went."""
-    n = len(fingerprints)
-    if n < _report_sim.COMMON_MIN_REPORTS:
-        return 0
-    counts = Counter(h for fp in fingerprints.values() for h in fp.hashes)
-    common = {h for h, c in counts.items() if c > n * _report_sim.COMMON_SHARE and c >= _report_sim.COMMON_MIN_REPORTS}
+    """Drop the fingerprints most submissions share (core.common_hashes, the
+    rule the report check uses too) -- the patterns every solution to the task
+    shares (menu loops, input helpers, file saving). Returns how many distinct
+    ones went."""
+    common = common_hashes([fp.hashes for fp in fingerprints.values()])
     for fp in fingerprints.values():
         fp.hashes -= common
     for files in files_by_submission.values():

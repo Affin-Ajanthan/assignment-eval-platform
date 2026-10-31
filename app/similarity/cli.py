@@ -3,7 +3,7 @@ Command-line entry point for the pre-submission similarity checker.
 
 Usage:
     python -m app.similarity.cli check <submissions_dir> \\
-        [--threshold 0.6] [--out report.html] [--json report.json] [--no-semantic]
+        [--threshold 0.6] [--out report.html] [--json report.json] [--no-semantic] [--keep-common]
 
 <submissions_dir> layout -- one subfolder per student, containing their
 source files (any nesting), e.g.:
@@ -13,30 +13,25 @@ source files (any nesting), e.g.:
       bob/src/main.py
       carol/app.js
 
-Semantic (UniXcoder) similarity is added as an extra signal when
-torch/transformers are installed and the model can be loaded; pass
---no-semantic to skip it.
+The comparison is the one the website runs (app/similarity_runs.py): the same
+file types, junk code removed before fingerprinting, code most of the class
+shares left out (as the assignment option does by default; --keep-common to
+compare all code), and UniXcoder semantic similarity as an extra signal when
+torch/transformers are installed and the model can be loaded (--no-semantic
+to skip it).
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
-from .ai_heuristics import score_source
-from .core import Fingerprint, compare_all, fingerprint_source
-from .python_cleanup import names_in
+from ..common import ANALYZED_EXTENSIONS
 from ..notebook import read_code
-from .semantic import (
-    apply_semantic_signal,
-    get_semantic_service,
-    normalize_code,
-    submissions_needing_semantic,
-)
-
-CODE_EXTENSIONS = {".py", ".java", ".js", ".ts", ".c", ".cpp", ".h", ".hpp", ".cs", ".go", ".rb", ".ipynb"}
+from .ai_heuristics import score_source
 
 
 def _iter_student_dirs(root: Path):
@@ -47,33 +42,8 @@ def _iter_student_dirs(root: Path):
 
 def _iter_code_files(student_dir: Path):
     for path in sorted(student_dir.rglob("*")):
-        if path.is_file() and path.suffix.lower() in CODE_EXTENSIONS:
+        if path.is_file() and path.suffix.lower() in ANALYZED_EXTENSIONS:
             yield path
-
-
-def build_fingerprints(submissions_dir: Path) -> dict[str, Fingerprint]:
-    fingerprints: dict[str, Fingerprint] = {}
-    for student_dir in _iter_student_dirs(submissions_dir):
-        merged = Fingerprint(submission_id=student_dir.name, filename="(all files)", token_count=0)
-        for file_path in _iter_code_files(student_dir):
-            name, source = read_code(file_path)
-            fp = fingerprint_source(student_dir.name, name, source)
-            merged.hashes |= fp.hashes
-            merged.token_count += fp.token_count
-        fingerprints[student_dir.name] = merged
-    return fingerprints
-
-
-def build_semantic_sources(submissions_dir: Path) -> dict[str, str]:
-    out = {}
-    for student_dir in _iter_student_dirs(submissions_dir):
-        files = [(p, *read_code(p)) for p in _iter_code_files(student_dir)]
-        py_names = {p: names_in(src) for p, _, src in files}
-        out[student_dir.name] = "\n".join(
-            normalize_code(src, name, set().union(*(n for other, n in py_names.items() if other != p)))
-            for p, name, src in files
-        )
-    return out
 
 
 def build_ai_scores(submissions_dir: Path):
@@ -99,31 +69,36 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("--json", type=Path, default=None)
     check.add_argument("--no-semantic", action="store_true",
                        help="skip the UniXcoder semantic-similarity signal")
+    check.add_argument("--keep-common", action="store_true",
+                       help="compare all code, including code most of the class shares")
 
     args = parser.parse_args(argv)
 
     if not args.submissions_dir.is_dir():
         parser.error(f"{args.submissions_dir} is not a directory")
 
-    fingerprints = build_fingerprints(args.submissions_dir)
-    if len(fingerprints) < 2:
+    dirs = {d.name: d for d in _iter_student_dirs(args.submissions_dir)}
+    if len(dirs) < 2:
         print("Need at least 2 student submissions to compare.", file=sys.stderr)
         return 1
 
-    pairs = compare_all(fingerprints)
+    if args.no_semantic:
+        os.environ["SEMANTIC_SIMILARITY"] = "0"  # read when the semantic service is first created
+    from ..similarity_runs import code_similarity_for_dirs
+
+    run = code_similarity_for_dirs(dirs, remove_common=not args.keep_common)
+    pairs, batch = run.pairs, run.batch
     scores = build_ai_scores(args.submissions_dir)
 
-    semantic_note = "disabled (--no-semantic)"
-    if not args.no_semantic:
-        needed = submissions_needing_semantic(pairs)
-        sources = {k: v for k, v in build_semantic_sources(args.submissions_dir).items() if k in needed}
-        batch = get_semantic_service().embed_submissions(sources)
-        if batch.status == "ok":
-            apply_semantic_signal(pairs, batch.embeddings)
-            semantic_note = f"{batch.encoded} submission(s) encoded with UniXcoder"
-        else:
-            semantic_note = batch.warning or batch.status
-            print(f"Warning: {semantic_note}", file=sys.stderr)
+    if args.no_semantic:
+        semantic_note = "disabled (--no-semantic)"
+    elif batch.status == "ok":
+        semantic_note = f"{batch.encoded} submission(s) encoded with UniXcoder"
+    else:
+        semantic_note = batch.warning or batch.status
+        print(f"Warning: {semantic_note}", file=sys.stderr)
+    if run.common_removed:
+        semantic_note += f"; {run.common_removed} fingerprint(s) shared by most of the class left out"
 
     from .report import render_html
     args.out.write_text(render_html(pairs, scores, args.threshold, semantic_note), encoding="utf-8")
@@ -133,6 +108,7 @@ def main(argv: list[str] | None = None) -> int:
         payload = {
             "pairs": [{**p.__dict__, "token_flagged": p.token_flagged, "flagged": p.flagged} for p in pairs],
             "semantic": semantic_note,
+            "common_removed": run.common_removed,
             "ai_scores": [s.__dict__ for s in scores],
         }
         args.json.write_text(json.dumps(payload, indent=2), encoding="utf-8")
