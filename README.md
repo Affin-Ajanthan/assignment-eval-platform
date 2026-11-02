@@ -481,6 +481,13 @@ moves the folder (`off` keeps everything in memory) and
 `SEMANTIC_CACHE_MAX_MB` (default 500) caps it, deleting the oldest files
 first. The folder is safe to delete: it is rebuilt on demand.
 
+The report check's MiniLM vectors are kept the same way, in `cache/minilm/`
+(one file per report, keyed by its text and the downloaded model's
+revision), so the first report check after a restart doesn't re-encode
+every report: about 0.5 s per long report saved (5 long reports: 3.0 s ->
+0.1 s). `MINILM_CACHE_DIR` and `MINILM_CACHE_MAX_MB` (default 200) work
+like the two settings above. Both caches share `app/embedding_cache.py`.
+
 Thresholds were calibrated by hand on a small sample (renamed or
 restructured copies scored 0.82-0.91; five independently written
 solutions to the same task scored up to 0.78), so check them against

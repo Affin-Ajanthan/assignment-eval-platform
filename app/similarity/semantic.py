@@ -48,14 +48,13 @@ import logging
 import os
 import re
 import statistics
-import tempfile
 import threading
-import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable, Protocol
 
+from ..embedding_cache import MISSING as _MISSING, DiskArrayCache, cache_dir_setting, max_bytes_setting
 from .core import _GENERIC_KEYWORDS, PairResult
 from .python_cleanup import strip_python_dead_code
 from .ts_cleanup import LANGUAGE_BY_EXTENSION, strip_dead_code
@@ -66,7 +65,6 @@ log = logging.getLogger(__name__)
 # stop matching (the version is part of every cache key) and age out by size.
 CACHE_FORMAT = 1
 DEFAULT_CACHE_MAX_BYTES = 500 * 1024 * 1024
-_MISSING = object()
 
 # The nine-language UniXcoder (Python, Java, JavaScript, PHP, Ruby, Go, C,
 # C++, C#), pinned to one revision so a re-download can never silently change
@@ -427,14 +425,12 @@ class SemanticSimilarityService:
         self._encode_lock = threading.Lock()   # one inference pass at a time; never taken while holding _lock
         self._cache: OrderedDict[str, SubmissionEmbedding | None] = OrderedDict()
         self._cache_size = cache_size
-        self._cache_dir = Path(cache_dir) if cache_dir else None
-        self._cache_max_bytes = cache_max_bytes
+        # one .npz file per submission (app/embedding_cache.py); pruned to the cap now
+        self._disk = DiskArrayCache(cache_dir, cache_max_bytes, "semantic") if cache_dir else None
         self.min_tokens = min_tokens
         self.enabled = _semantic_enabled() if enabled is None else enabled
         self.status = "not_loaded" if self.enabled else "disabled"  # | ready | unavailable
         self.error: str | None = None
-        if self._cache_dir is not None:
-            self._prune_disk_cache()
 
     def load(self) -> bool:
         if not self.enabled:
@@ -476,96 +472,32 @@ class SemanticSimilarityService:
 
     # ---- the disk cache (best effort: any failure just means a cache miss) ----
 
-    def _disk_path(self, key: str) -> Path:
-        # 32 hex characters (128 bits of the SHA-256) keep the file name short: with the full 64
-        # a deeply nested project folder can pass Windows' 260-character path limit and every write fails.
-        return self._cache_dir / f"{key[:32]}.npz"
-
     def _disk_get(self, key: str):
-        """(embedding or None, True) when stored, _MISSING when not. A damaged
-        or invalid file is deleted and reported as missing."""
-        if self._cache_dir is None:
+        """The stored embedding (None = stored "nothing to embed"), or _MISSING.
+        An invalid one is deleted and reported as missing."""
+        if self._disk is None:
             return _MISSING
-        path = self._disk_path(key)
+        arrays = self._disk.get(key)
+        if arrays is _MISSING or arrays is None:
+            return arrays
         try:
-            import numpy as np
-
-            with np.load(path, allow_pickle=False) as stored:  # closed promptly: an open npz locks the file on Windows
-                if "empty" in stored.files:
-                    result = None
-                else:
-                    result = SubmissionEmbedding(vectors=stored["vectors"], weights=[int(w) for w in stored["weights"]],
-                                                 token_count=int(stored["token_count"]))
-            if result is not None:
-                _validate_embedding(result, key[:8])
-            try:
-                os.utime(path)  # a hit keeps the file young for oldest-first pruning
-            except OSError:
-                pass
-            return result
-        except FileNotFoundError:
-            return _MISSING
+            emb = SubmissionEmbedding(vectors=arrays["vectors"], weights=[int(w) for w in arrays["weights"]],
+                                      token_count=int(arrays["token_count"]))
+            _validate_embedding(emb, key[:8])
+            return emb
         except Exception as exc:
-            log.warning("Ignoring unreadable semantic cache file %s (%s: %s)", path.name, exc.__class__.__name__, exc)
-            try:
-                path.unlink()
-            except OSError:
-                pass
+            log.warning("Ignoring an invalid semantic cache entry %s (%s: %s)", key[:8], exc.__class__.__name__, exc)
+            self._disk.discard(key)
             return _MISSING
 
     def _disk_put(self, key: str, emb: SubmissionEmbedding | None) -> None:
-        if self._cache_dir is None:
+        if self._disk is None:
             return
-        tmp_name = None
-        try:
-            import numpy as np
+        import numpy as np
 
-            self._cache_dir.mkdir(parents=True, exist_ok=True)
-            with tempfile.NamedTemporaryFile(dir=self._cache_dir, suffix=".tmp", delete=False) as tmp:
-                tmp_name = tmp.name
-                if emb is None:
-                    np.savez(tmp, empty=np.array(1))
-                else:
-                    np.savez(tmp, vectors=np.asarray(emb.vectors), weights=np.asarray(emb.weights, dtype=np.int64),
-                             token_count=np.array(int(emb.token_count)))
-            os.replace(tmp_name, self._disk_path(key))  # atomic: a reader never sees half a file
-            tmp_name = None
-        except Exception as exc:  # disk full, permissions, a reader holding the file open on Windows...
-            log.warning("Could not write the semantic cache (%s: %s); continuing without it", exc.__class__.__name__, exc)
-        finally:
-            if tmp_name:
-                try:
-                    os.unlink(tmp_name)
-                except OSError:
-                    pass
-
-    def _prune_disk_cache(self) -> None:
-        """Delete the oldest cached files until the folder fits the byte cap
-        (and any leftover temp file from a crashed write)."""
-        try:
-            self._cache_dir.mkdir(parents=True, exist_ok=True)
-            entries = []
-            for p in self._cache_dir.iterdir():
-                try:
-                    st = p.stat()
-                except OSError:
-                    continue
-                if p.suffix == ".tmp":
-                    if time.time() - st.st_mtime > 3600:
-                        p.unlink(missing_ok=True)
-                elif p.suffix == ".npz":
-                    entries.append((st.st_mtime, st.st_size, p))
-            total = sum(size for _, size, _ in entries)
-            for _, size, p in sorted(entries):
-                if total <= self._cache_max_bytes:
-                    break
-                try:
-                    p.unlink()
-                    total -= size
-                except OSError:
-                    pass
-        except Exception as exc:
-            log.warning("Could not prune the semantic cache (%s: %s)", exc.__class__.__name__, exc)
+        self._disk.put(key, None if emb is None else {
+            "vectors": np.asarray(emb.vectors), "weights": np.asarray(emb.weights, dtype=np.int64),
+            "token_count": np.array(int(emb.token_count))})
 
     # ---- lookups ------------------------------------------------------------
 
@@ -663,19 +595,11 @@ def default_cache_dir() -> Path | None:
     """Where the real service keeps embeddings between restarts: ``cache/unixcoder``
     next to the database (it follows PORTAL_DATA_DIR), or SEMANTIC_CACHE_DIR; set
     that to "off" to keep everything in memory."""
-    raw = os.environ.get("SEMANTIC_CACHE_DIR")
-    if raw is not None:
-        return None if raw.strip().lower() in {"", "0", "off", "false", "no", "none"} else Path(raw)
-    from ..db import BASE_DIR  # imported here: it creates the uploads folder, which this module otherwise never needs
-
-    return BASE_DIR / "cache" / "unixcoder"
+    return cache_dir_setting("SEMANTIC_CACHE_DIR", "unixcoder")
 
 
 def _cache_max_bytes() -> int:
-    try:
-        return int(float(os.environ.get("SEMANTIC_CACHE_MAX_MB", "")) * 1024 * 1024)
-    except ValueError:
-        return DEFAULT_CACHE_MAX_BYTES
+    return max_bytes_setting("SEMANTIC_CACHE_MAX_MB", DEFAULT_CACHE_MAX_BYTES)
 
 
 def get_semantic_service() -> SemanticSimilarityService:
