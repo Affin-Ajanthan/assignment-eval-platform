@@ -286,6 +286,22 @@ line N.**, and one that crashes while running as **Runtime error. Error on line 
 whatever the language (a C/C++ crash such as a segfault has no line, so it shows
 **Runtime error.**). The traceback is never shown.
 
+**Time limit per task** (optional). The instructor can give each task its own limit in
+minutes and seconds (`time_limit_seconds` on the task, at most 24 hours; empty or 0: no
+limit). A timed task shows a **Start** button instead of its question: pressing it
+(`POST /assignments/{id}/start-task`) starts that student's clock **on the server, once**
+(a reload or a second press restarts nothing). Run and Submit are refused for a timed
+task that was not started or whose time is up. While the clock runs the page shows a
+countdown and saves the typed code every few seconds (`PUT /assignments/{id}/task-draft`);
+at 0:00 it hands the task in as it stands, marked like any Submit. If the student has closed
+the page, the server hands in the saved code itself the next time they (or the page) ask for
+their work (a task with nothing saved is handed in empty and earns nothing), so the limit
+holds whatever the browser does. A submit that arrives up to 15 seconds after the clock
+ran out is still taken (`TIME_GRACE_SECONDS`). The assignment's deadline cuts a task short.
+With "tasks in order" the next task opens once the one before is handed in or timed out. A
+challenge with a time limit cannot be deleted and redone, because that would restart the
+clocks. Starts and drafts are kept in the `task_starts` table (created at startup).
+
 **Students** do a code challenge on **its own page** (`/student/code/{id}`). The
 assignment card shows **no question and no description**: it has a **Do
 assignment** button (**Continue assignment** once some tasks are handed in), and

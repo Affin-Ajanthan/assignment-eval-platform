@@ -184,7 +184,8 @@ class Assignment(Base):
     # The tasks of a code challenge: [{"id": 1, "title": str, "statement": str, "starter_code": str}, ...]
     # in the order students see them ("statement" is the task's question text, "starter_code" the code
     # their editor starts with; older rows have no such key). NULL: one task without a title
-    # (every challenge made before tasks existed). Read it through `questions`.
+    # (every challenge made before tasks existed). Read it through `questions`. A task may also have
+    # "time_limit_seconds" (absent or 0: no limit): how long a student has from opening it (see TaskStart).
     code_questions = Column(JSON, nullable=True)
     # The file the tests run, e.g. "student_management.rb" (a name or a path
     # inside the submission). NULL: the only runnable (Python, Ruby, Java, JavaScript, C, C++) file, or a main.* one.
@@ -230,6 +231,11 @@ class Assignment(Base):
         if self.kind != "code_challenge":
             return []
         return list(self.code_questions or [{"id": 1, "title": "", "statement": "", "starter_code": ""}])
+
+    @property
+    def is_timed(self) -> bool:
+        """Whether any task of a code challenge has a time limit."""
+        return any((q.get("time_limit_seconds") or 0) > 0 for q in self.questions)
 
     @property
     def requires_password(self) -> bool:
@@ -465,6 +471,24 @@ class TaskUnlock(Base):
     assignment_id = Column(Integer, ForeignKey("assignments.id"), nullable=False, index=True)
     student_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     unlocked_at = Column(DateTime, default=_utcnow)
+
+
+class TaskStart(Base):
+    """The moment a student opened one task of a code challenge that has a time limit (the task's own
+    ``time_limit_seconds``): its clock runs from here. One row per student and task. While the clock
+    runs the page also keeps the code they have typed here (a draft), so that when the time is up the server
+    can hand it in even if the student has closed the page. Naive UTC, like the deadlines."""
+
+    __tablename__ = "task_starts"
+    __table_args__ = (UniqueConstraint("assignment_id", "student_id", "question", name="uq_task_start"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    assignment_id = Column(Integer, ForeignKey("assignments.id"), nullable=False, index=True)
+    student_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    question = Column(Integer, nullable=False)
+    started_at = Column(DateTime, nullable=False)
+    draft_code = Column(String, nullable=True)
+    draft_language = Column(String, nullable=True)
 
 
 class BatchJob(Base):

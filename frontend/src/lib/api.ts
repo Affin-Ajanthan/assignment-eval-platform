@@ -124,6 +124,8 @@ export interface CodeQuestion {
   statement: string;
   /** Code the student's editor starts with for this task ("" = an empty box); missing from an older server. */
   starter_code?: string;
+  /** Seconds the student has from opening this task (0 or missing: no limit); missing from an older server. */
+  time_limit_seconds?: number;
 }
 
 /** One test for submitted code: `input` goes to standard input, the output is compared with `expected_output`. */
@@ -242,6 +244,12 @@ export interface CodeAnswer {
   /** What the answer earned: points of its test cases passed out of all its points. Null before the marks release date, or when not marked. */
   earned: number | null;
   total: number | null;
+  /** The task's time limit in seconds (0: none). */
+  time_limit_seconds: number;
+  /** A timed task: the student has opened it, which started the clock on the server. */
+  started: boolean;
+  /** A timed task opened but not handed in: seconds still left. Null otherwise. */
+  seconds_left: number | null;
 }
 
 /**

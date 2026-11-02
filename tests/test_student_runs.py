@@ -723,7 +723,8 @@ def _work(assignment, token):
 
 def _not_handed_in(question, title):
     return {"question": question, "title": title, "submitted": False, "marked": False, "language": None,
-            "code": None, "run": None, "earned": None, "total": None}
+            "code": None, "run": None, "earned": None, "total": None,
+            "time_limit_seconds": 0, "started": False, "seconds_left": None}
 
 
 def test_students_see_each_questions_title_and_statement_but_never_a_test_case(fake):
@@ -1226,3 +1227,147 @@ def test_php_and_go_challenges_run_and_save_their_answers_under_the_right_file_n
     assert _submit_question(assignment, stok, 1, "<?php echo 1;", language="php").status_code == 200
     assert _submit_question(assignment, stok, 2, "package main\nfunc main() {}", language="go").status_code == 200
     assert [c["file"] for c in fake.calls[-2:]] == ["q1.php", "q2.go"]
+
+
+# --------------------------------------------------------------------------
+# Time limits: a task's clock starts when the student opens it
+# --------------------------------------------------------------------------
+
+
+TIMED_QUESTIONS = [{**QUESTIONS[0], "time_limit_seconds": 600}, QUESTIONS[1]]  # only task 1 is timed
+
+
+def _timed(itok, subject, name, **extra):
+    return _challenge(itok, subject, name, Q1_TESTS + Q2_TESTS, questions=TIMED_QUESTIONS, **extra)
+
+
+def _start(assignment, token, question=1):
+    return client.post(f"/assignments/{assignment['id']}/start-task", headers=auth_headers(token),
+                       json={"question": question})
+
+
+def _draft(assignment, token, code, question=1):
+    return client.put(f"/assignments/{assignment['id']}/task-draft", headers=auth_headers(token),
+                      json={"question": question, "code": code})
+
+
+def _age(assignment, seconds, question=1):
+    """Make the student's clock for a task show `seconds` more time gone (as if they opened it earlier)."""
+    from app.models import TaskStart
+
+    db = SessionLocal()
+    try:
+        for row in db.query(TaskStart).filter(TaskStart.assignment_id == assignment["id"],
+                                               TaskStart.question == question):
+            row.started_at -= timedelta(seconds=seconds)
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_the_instructor_sets_a_time_limit_per_task_and_students_see_it(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _timed(itok, subject, "Timed")
+    seen = _seen_by(assignment, stok)["questions"]
+    assert [q["time_limit_seconds"] for q in seen] == [600, 0]
+    assert [q["time_limit_seconds"] for q in assignment["questions"]] == [600, 0]
+    r = client.put(f"/assignments/{assignment['id']}", headers=auth_headers(itok),
+                   json={"questions": [{**QUESTIONS[0], "time_limit_seconds": 90}, {**QUESTIONS[1]}]})
+    assert r.status_code == 200 and [q["time_limit_seconds"] for q in r.json()["questions"]] == [90, 0]
+    too_long = client.put(f"/assignments/{assignment['id']}", headers=auth_headers(itok),
+                          json={"questions": [{**QUESTIONS[0], "time_limit_seconds": 25 * 3600}, {**QUESTIONS[1]}]})
+    assert too_long.status_code == 422
+
+
+def test_a_timed_task_must_be_opened_before_it_can_be_run_or_handed_in_and_opening_starts_the_clock_once(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _timed(itok, subject, "Timed")
+    for refused in (_run(assignment, stok, question=1), _submit_question(assignment, stok, 1, "print(1)")):
+        assert refused.status_code == 409 and "open it first" in refused.json()["detail"]
+    assert fake.calls == []
+    assert _submit_question(assignment, stok, 2, "print(2)").status_code == 200  # an untimed task needs no start
+
+    first = _start(assignment, stok).json()["questions"][0]
+    assert first["started"] is True and first["time_limit_seconds"] == 600 and 590 <= first["seconds_left"] <= 600
+    _age(assignment, 100)
+    again = _start(assignment, stok).json()["questions"][0]                      # opening it again restarts nothing
+    assert 490 <= again["seconds_left"] <= 500
+    assert _run(assignment, stok, question=1).status_code == 200
+    done = _submit_question(assignment, stok, 1, "print(1)")
+    assert done.status_code == 200 and done.json()["questions"][0]["seconds_left"] is None
+    assert _start(assignment, stok).status_code == 409                            # already handed in
+
+
+def test_when_the_time_is_up_the_saved_code_is_handed_in_and_marked_even_if_the_page_is_gone(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _timed(itok, subject, "Timed")
+    _start(assignment, stok)
+    assert _draft(assignment, stok, "print(int(input()) * 2)").status_code == 200
+    _age(assignment, 600 + sr.TIME_GRACE_SECONDS + 5)
+
+    work = _work(assignment, stok).json()                                         # the student just comes back
+    first = work["questions"][0]
+    assert first["submitted"] is True and first["marked"] is True
+    assert first["code"] == "print(int(input()) * 2)" and first["seconds_left"] is None
+    assert any(c["code"] == "print(int(input()) * 2)" for c in fake.calls)
+    late = _submit_question(assignment, stok, 1, "print('too late')")
+    assert late.status_code == 409
+    assert _run(assignment, stok, question=1).status_code == 409
+
+
+def test_a_timed_task_with_nothing_saved_is_handed_in_empty_when_the_time_is_up(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _timed(itok, subject, "Timed")
+    _start(assignment, stok)
+    _age(assignment, 700)
+    first = _work(assignment, stok).json()["questions"][0]
+    assert first["submitted"] is True and (first["code"] or "").strip() == ""
+
+
+def test_code_sent_as_the_clock_runs_out_is_accepted_but_not_much_later(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _timed(itok, subject, "Timed")
+    _start(assignment, stok)
+    _draft(assignment, stok, "print('draft')")
+    _age(assignment, 605)                                                         # 5 s past the limit, inside the grace
+    ok = _submit_question(assignment, stok, 1, "print('final')")
+    assert ok.status_code == 200 and ok.json()["questions"][0]["code"] == "print('final')"
+
+    other = _timed(itok, subject, "Timed too")
+    _start(other, stok)
+    _draft(other, stok, "print('draft')")
+    _age(other, 600 + sr.TIME_GRACE_SECONDS + 5)
+    late = _submit_question(other, stok, 1, "print('final')")
+    assert late.status_code == 409 and "Time was up" in late.json()["detail"]
+    assert _work(other, stok).json()["questions"][0]["code"] == "print('draft')"  # the saved draft stood in
+
+
+def test_a_task_in_order_opens_after_the_one_before_times_out(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _timed(itok, subject, "Timed in order", tasks_in_order=True)
+    _start(assignment, stok)
+    assert _submit_question(assignment, stok, 2, "print(2)").status_code == 409
+    _age(assignment, 700)
+    assert _work(assignment, stok).json()["questions"][0]["submitted"] is True
+    assert _submit_question(assignment, stok, 2, "print(2)").status_code == 200
+
+
+def test_drafts_need_an_opened_timed_task_that_is_still_running(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _timed(itok, subject, "Timed")
+    assert _draft(assignment, stok, "print(1)").status_code == 409                # not opened yet
+    assert _draft(assignment, stok, "print(1)", question=2).status_code == 400    # task 2 has no limit
+    _start(assignment, stok)
+    assert _draft(assignment, stok, "print(1)").status_code == 200
+    _age(assignment, 700)
+    assert _draft(assignment, stok, "print(2)").status_code == 409
+
+
+def test_a_timed_challenge_submission_cannot_be_deleted(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    assignment = _timed(itok, subject, "Timed")
+    assert _submit_question(assignment, stok, 2, "print(2)").status_code == 200
+    mine = _my_submission(assignment, stok)
+    assert mine["can_delete"] is False
+    r = client.delete(f"/submissions/{mine['id']}", headers=auth_headers(stok))
+    assert r.status_code == 409 and "time limits" in r.json()["detail"]

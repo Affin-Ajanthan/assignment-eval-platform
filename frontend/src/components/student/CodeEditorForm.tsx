@@ -1,6 +1,6 @@
 "use client";
 
-import { KeyboardEvent, useRef, useState } from "react";
+import { KeyboardEvent, useEffect, useRef, useState } from "react";
 import { apiFetch, CodeAnswer, CodeQuestion, CodeRun, CodeWork, StudentAssignment } from "@/lib/api";
 import { formatDateTime, formatMark } from "@/lib/datetime";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
@@ -222,6 +222,37 @@ function HandedIn({
 /** What a student has typed for one task that is not handed in yet. */
 type Answer = { code: string; language: CodeLanguageId };
 
+/** The clock reading of a timed task: 9:05, or 1:02:03 from an hour up. */
+function clockText(seconds: number): string {
+  const s = Math.max(0, seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const rest = String(s % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${rest}` : `${m}:${rest}`;
+}
+
+/** A time limit in words: "10 minutes", "1 minute 30 seconds", "45 seconds". */
+function limitText(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  const parts = [];
+  if (m > 0) parts.push(`${m} minute${m === 1 ? "" : "s"}`);
+  if (s > 0) parts.push(`${s} second${s === 1 ? "" : "s"}`);
+  return parts.join(" ");
+}
+
+/** When (this browser's clock, in ms) each timed task that is open and not handed in runs out, from the seconds the server says are left. */
+function endsFrom(work: CodeWork): Record<number, number> {
+  const now = Date.now();
+  const ends: Record<number, number> = {};
+  for (const r of work.questions) {
+    if (!r.submitted && r.seconds_left !== null && r.seconds_left !== undefined) ends[r.question] = now + r.seconds_left * 1000;
+  }
+  return ends;
+}
+
+const DRAFT_EVERY_MS = 8000; // how often the code of a timed task is saved on the server, if it changed
+
 /**
  * The code editor of a code challenge, on the challenge's own page (app/student/code/[id]), which the
  * student reaches with "Do assignment": the questions are shown here and nowhere before. The student does
@@ -290,6 +321,59 @@ export default function CodeEditorForm({
   const after = position < questions.length - 1 ? questions[position + 1] : null;
   const afterWaiting = after ? waitingFor(after.id) !== null : false; // in order: not open until this one is handed in
 
+  // Tasks with a time limit. The clock runs on the server from the moment the student opens the task (Start); this
+  // page counts down the seconds the server said were left, saves the typed code now and then (so the server can
+  // hand it in if this page goes away), and hands the task in itself when the time is up.
+  const [ends, setEnds] = useState<Record<number, number>>(() => endsFrom(work));
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [starting, setStarting] = useState(false);
+  const autoHandedIn = useRef<Set<number>>(new Set()); // tasks this page has already handed in because time ran out
+  const draftSent = useRef<Record<number, string>>({}); // the code last saved on the server, per task
+  const limit = question.time_limit_seconds ?? 0;
+  const started = work.questions.find((r) => r.question === question.id)?.started ?? false;
+  const gated = open && limit > 0 && saved === null && !started && waitingFor(question.id) === null;
+  const live = questions.filter((q) => ends[q.id] !== undefined && handedIn(q.id) === null);
+  const secondsLeft = ends[question.id] !== undefined ? Math.max(0, Math.ceil((ends[question.id] - nowMs) / 1000)) : null;
+  const latest = useRef({ live: [] as number[], answerOf });
+  latest.current = { live: live.map((q) => q.id), answerOf };
+
+  useEffect(() => setEnds(endsFrom(work)), [work]); // the server's reading is the truth: take it after every answer
+  useEffect(() => {
+    if (live.length === 0) return;
+    setNowMs(Date.now());
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live.length > 0]);
+  useEffect(() => {
+    if (live.length === 0) return;
+    const timer = setInterval(() => {
+      for (const id of latest.current.live) {
+        const a = latest.current.answerOf(id);
+        const key = `${a.language}\n${a.code}`;
+        if (!a.code.trim() || draftSent.current[id] === key) continue;
+        draftSent.current[id] = key;
+        apiFetch(`/assignments/${assignment.id}/task-draft`, {
+          method: "PUT",
+          json: { question: id, code: a.code, language: a.language },
+        }).catch(() => {
+          delete draftSent.current[id]; // try again at the next round
+        });
+      }
+    }, DRAFT_EVERY_MS);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live.length > 0, assignment.id]);
+  useEffect(() => {
+    // Every render (cheap): a timed task whose time is up is handed in once, with the code in its box.
+    for (const q of live) {
+      if (nowMs >= ends[q.id] && !autoHandedIn.current.has(q.id)) {
+        autoHandedIn.current.add(q.id);
+        void submit(q.id, true);
+      }
+    }
+  });
+
   /** A change to a task's code or language makes its last Run's result stale: drop it. */
   function change(id: number, patch: Partial<Answer>) {
     setAnswers((all) => ({ ...all, [id]: { ...(all[id] ?? blankFor(id)), ...patch } }));
@@ -354,7 +438,7 @@ export default function CodeEditorForm({
       title: many ? `Submit ${taskName(question)}?` : "Submit your code?",
       message: lines.join("\n"),
       confirmLabel: "Submit",
-      onConfirm: submit,
+      onConfirm: () => submit(),
     });
   }
 
@@ -367,23 +451,48 @@ export default function CodeEditorForm({
     }
   }
 
-  async function submit() {
-    const id = question.id;
+  /** Hands in a task with the code in its box. `auto`: its time ran out, so it goes in as it stands, even empty. */
+  async function submit(id: number = question.id, auto = false) {
+    const { code: text, language: lang } = answerOf(id);
+    const name = taskName(questions.find((q) => q.id === id) ?? question);
     setConfirm(null);
     setMsg(null);
     setSubmitting(true);
     try {
       const updated = await apiFetch<CodeWork>(`/assignments/${assignment.id}/submit-code`, {
         method: "POST",
-        json: { question: id, code, language },
+        json: { question: id, code: auto && !text.trim() ? "\n" : text, language: lang },
       });
       setRuns((all) => ({ ...all, [id]: null }));
       onWork(updated);
+      if (auto) setMsg({ text: `Time is up for ${name}: your code was handed in as it was.`, kind: "success" });
     } catch (err) {
-      setMsg({ text: `Submission failed: ${err instanceof Error ? err.message : err}`, kind: "error" });
-      await reload();
+      await reload(); // the server may have handed it in itself
+      setMsg(
+        auto
+          ? { text: `Time is up for ${name}: it was handed in as it was.`, kind: "success" }
+          : { text: `Submission failed: ${err instanceof Error ? err.message : err}`, kind: "error" },
+      );
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  /** Opens a task that has a time limit: its clock starts on the server now, and the page gets the seconds it has. */
+  async function startTask() {
+    setStarting(true);
+    setMsg(null);
+    try {
+      onWork(
+        await apiFetch<CodeWork>(`/assignments/${assignment.id}/start-task`, {
+          method: "POST",
+          json: { question: question.id },
+        }),
+      );
+    } catch (err) {
+      setMsg({ text: err instanceof Error ? err.message : String(err), kind: "error" });
+    } finally {
+      setStarting(false);
     }
   }
 
@@ -480,11 +589,46 @@ export default function CodeEditorForm({
         </>
       )}
 
+      {secondsLeft !== null && !saved && (
+        <p
+          role="timer"
+          className={`mb-3 rounded-md px-3 py-2 text-sm font-semibold ${
+            secondsLeft <= 60 ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-900"
+          }`}
+          data-testid="task-timer"
+        >
+          ⏱ Time left for {heading}: <span className="tabular-nums">{clockText(secondsLeft)}</span>
+          <span className="ml-2 text-xs font-normal">
+            When it reaches 0:00 your code is handed in as it is and marked.
+          </span>
+        </p>
+      )}
+
       <div
         id={`${editorId}-panel`}
         role={many ? "tabpanel" : undefined}
         aria-labelledby={many ? `${editorId}-tab-${question.id}` : undefined}
       >
+        {gated ? (
+          <div className="mb-3 rounded-md bg-gray-50 p-3" data-testid="start-task">
+            <p className="text-sm font-bold">{heading}</p>
+            <p className="mt-2 text-sm text-gray-700">
+              This task has a time limit of <strong>{limitText(limit)}</strong>. The clock starts when you press Start and
+              does not stop, even if you close this page. When it runs out, the code in your box is handed in as it is and
+              marked. You see the question only after you start.
+            </p>
+            <button
+              type="button"
+              onClick={startTask}
+              disabled={starting}
+              className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+              data-testid="start-task-button"
+            >
+              {starting ? "Starting…" : `Start ${heading}`}
+            </button>
+          </div>
+        ) : (
+        <>
         <div className="mb-3 rounded-md bg-gray-50 p-3" data-testid="question-statement">
           <p className="text-sm font-bold">{heading}</p>
           {hasQuestion && (
@@ -548,9 +692,11 @@ export default function CodeEditorForm({
             Tab indents; press Esc then Tab to move to the next control. {code.length} / {MAX_CODE_CHARS} characters.
           </p>
         )}
+        </>
+        )}
       </div>
 
-      {!locked && (
+      {!locked && !gated && (
         <>
           <div className="mt-3 flex flex-wrap gap-2">
             <button

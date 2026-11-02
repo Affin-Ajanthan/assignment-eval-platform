@@ -32,6 +32,13 @@ unmarked. The student can then ask for the mark with POST /assignments/{id}/mark
 (it runs the same marking on the saved code of every answer that has no result yet,
 which cannot have changed), or the instructor can mark it with "Run and save as mark".
 
+A task can have a time limit (its "time_limit_seconds"). The student opens it with POST
+/assignments/{id}/start-task, which starts its clock on the server (once). Run and Submit are refused for a
+task that was not opened, or whose time is up. While the clock runs the page keeps the typed code with
+PUT /assignments/{id}/task-draft, and sends it with Submit when the time runs out. If the page is gone,
+the server hands in the saved draft itself (nothing earns no points) the next time it hears from the
+student (_close_expired), so a time limit holds whatever the page does. A deadline cuts a task's time short.
+
 A challenge can have a task password (Assignment.task_password) and can require its tasks in order
 (Assignment.tasks_in_order). Until the student has entered the password (POST /assignments/{id}/unlock-tasks,
 once, with a limit on wrong tries) the questions are not sent and running or submitting code is refused.
@@ -60,12 +67,14 @@ import threading
 import time
 import uuid
 from collections import deque
+from datetime import timedelta
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import code_answers
@@ -74,7 +83,7 @@ from ..common import utcnow_naive
 from ..db import BASE_DIR, UPLOAD_DIR, get_db
 from ..evaluator import code_testing
 from ..evaluator.code_execution import SandboxUnavailable, sandbox_enabled
-from ..models import Assignment, Submission, TaskUnlock, User
+from ..models import Assignment, Submission, TaskStart, TaskUnlock, User
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -84,6 +93,8 @@ MAX_PARALLEL_RUNS = int(os.environ.get("CODE_SAMPLE_MAX_PARALLEL", "2"))
 MAX_CODE_CHARS = 50_000  # per task
 # How long a submission waits for a free place to be marked before it is left unmarked.
 SUBMIT_WAIT_SECONDS = 120
+# A task with a time limit: code the page sends just as the clock runs out may reach the server a little late.
+TIME_GRACE_SECONDS = 15
 _HOUR = 3600
 
 
@@ -239,6 +250,11 @@ class QuestionResultOut(BaseModel):
     # before the assignment's marks release date, and when it is not marked.
     earned: Optional[float] = None
     total: Optional[float] = None
+    # A task with a time limit (0: none): whether the student has opened it, which starts the clock, and how many
+    # seconds it still has. None once it is handed in, or while it is not opened.
+    time_limit_seconds: int = 0
+    started: bool = False
+    seconds_left: Optional[int] = None
 
 
 class CodeWorkOut(BaseModel):
@@ -343,7 +359,9 @@ def run_code(
     """Run the typed code against every test case of its task."""
     assignment = _challenge_for(db, student, assignment_id, "Running code")
     question = _question_of(assignment, payload.question)
-    _require_turn(assignment, _latest_submission(db, student, assignment), question["id"])
+    submission, _ = _close_expired(db, student, assignment)
+    _require_turn(assignment, submission, question["id"])
+    _require_started(db, student, assignment, question, grace=0)
     language = _pick_language(payload.language, assignment)
     if not sandbox_enabled():
         raise HTTPException(503, "Running code is not available right now.")
@@ -432,6 +450,53 @@ def _mark_answers(db: Session, assignment: Assignment, submission: Submission, q
     return True
 
 
+def _close_expired(db: Session, student: User, assignment: Assignment) -> tuple[Optional[Submission], set[int]]:
+    """Hand in, as it stands, every timed task whose clock has run out (a little grace after it) and that the
+    student has not handed in: the code the page last saved for it (a draft), or nothing, which earns no points.
+    This is what makes the time limit hold even when the student has closed the page. Returns the student's
+    submission and the tasks that were just closed this way. Never raises: a task that cannot be marked now
+    stays handed in without a result, like any other (mark_my_code)."""
+    submission = _latest_submission(db, student, assignment)
+    if not assignment.is_timed or (submission is not None and submission.question_results is None):
+        return submission, set()
+    now = utcnow_naive()
+    done = {a["question"] for a in code_answers.answers_of(assignment, submission)}
+    late, starts = [], {}
+    for q in assignment.questions:
+        if q["id"] in done:
+            continue
+        start = code_answers.task_start(db, student.id, assignment.id, q["id"]) if code_answers.time_limit(q) else None
+        ends = code_answers.task_ends_at(assignment, start, q)
+        if ends is not None and now > ends + timedelta(seconds=TIME_GRACE_SECONDS):
+            late.append(q)
+            starts[q["id"]] = start
+    for q in late:
+        start = starts[q["id"]]
+        try:
+            language = _pick_language(start.draft_language, assignment)
+        except HTTPException:
+            language = _pick_language(None, assignment)
+        filename = code_testing.answer_filename(len(assignment.questions), q["id"], language)
+        code = (start.draft_code or "").replace("\r\n", "\n")
+        submission = _save_answer(db, student, assignment, submission, q["id"], filename, language, code or "\n")
+    if late:
+        _mark_answers(db, assignment, submission, late)
+    return submission, {q["id"] for q in late}
+
+
+def _require_started(db: Session, student: User, assignment: Assignment, question: dict, *, grace: int) -> None:
+    """A task with a time limit can be run or handed in only after the student opened it (which starts its clock)
+    and while the clock has not run out (plus `grace` seconds). Any other task: always."""
+    if not code_answers.time_limit(question):
+        return
+    start = code_answers.task_start(db, student.id, assignment.id, question["id"])
+    if start is None:
+        raise HTTPException(409, "This task has a time limit: open it first, which starts the clock.")
+    ends = code_answers.task_ends_at(assignment, start, question)
+    if ends is not None and utcnow_naive() > ends + timedelta(seconds=grace):
+        raise HTTPException(409, "Time is up for this task.")
+
+
 def _read_code(submission: Submission, file: Optional[str]) -> Optional[str]:
     """The text of a saved answer, or None when its file is not there."""
     if not file or not submission.code_path:
@@ -444,22 +509,30 @@ def _read_code(submission: Submission, file: Optional[str]) -> Optional[str]:
         return handle.read(MAX_CODE_CHARS)
 
 
-def _work_out(student: User, assignment: Assignment, submission: Optional[Submission]) -> CodeWorkOut:
+def _work_out(db: Session, student: User, assignment: Assignment, submission: Optional[Submission]) -> CodeWorkOut:
     """What the student has handed in for the challenge, with each answer's report and the mark so far.
     A mark (a task's or the whole) is left out before the assignment's marks release date; the
-    report of a task's test cases is not."""
-    released = assignment.marks_released_at(utcnow_naive())
+    report of a task's test cases is not. For a task with a time limit that is not handed in: whether
+    the student has opened it and how long it has left."""
+    now = utcnow_naive()
+    released = assignment.marks_released_at(now)
     runs_left = limiter.remaining(student.id)
     answers = {a["question"]: a for a in code_answers.answers_of(assignment, submission)}
     questions = []
     for q in assignment.questions:
         answer = answers.get(q["id"])
+        limit = code_answers.time_limit(q)
         if answer is None:
-            questions.append(QuestionResultOut(question=q["id"], title=q["title"], submitted=False))
+            start = code_answers.task_start(db, student.id, assignment.id, q["id"]) if limit else None
+            ends = code_answers.task_ends_at(assignment, start, q)
+            questions.append(QuestionResultOut(
+                question=q["id"], title=q["title"], submitted=False, time_limit_seconds=limit, started=start is not None,
+                seconds_left=max(0, math.ceil((ends - now).total_seconds())) if ends else None))
             continue
         marked = bool(answer["marked"])
         questions.append(QuestionResultOut(
             question=q["id"], title=q["title"], submitted=True, marked=marked, language=answer.get("language"),
+            time_limit_seconds=limit, started=limit > 0,
             code=_read_code(submission, answer.get("file")),
             run=RunOut(**answer["report"], remaining_runs=runs_left) if marked and answer.get("report") else None,
             earned=answer.get("earned") if marked and released else None,
@@ -480,7 +553,61 @@ def my_code(
     """What the student has handed in so far for a code challenge, task by task, with the
     report each answer got and the mark so far. It works after the deadline too."""
     assignment = _visible_challenge(db, student, assignment_id, "Your code answers are")
-    return _work_out(student, assignment, _latest_submission(db, student, assignment))
+    submission, _ = _close_expired(db, student, assignment)  # a timed task whose time ran out is handed in now
+    return _work_out(db, student, assignment, submission)
+
+
+class StartIn(BaseModel):
+    question: int = Field(default=1, ge=1)
+
+
+@router.post("/assignments/{assignment_id}/start-task", response_model=CodeWorkOut)
+def start_task(
+    assignment_id: int, payload: StartIn,
+    student: User = Depends(require_student), db: Session = Depends(get_db),
+):
+    """Open a task that has a time limit: its clock starts now, once (opening it again does not restart it).
+    The clock runs on the server whatever the page does. When it runs out the code the page last saved
+    (PUT task-draft) is handed in as it stands. A task without a time limit needs no start. Returns the
+    student's work, as my_code does, with the seconds this task has left."""
+    assignment = _challenge_for(db, student, assignment_id, "Starting a task")
+    question = _question_of(assignment, payload.question)
+    submission, _ = _close_expired(db, student, assignment)
+    if any(a["question"] == question["id"] for a in code_answers.answers_of(assignment, submission)):
+        raise HTTPException(409, "You have already handed in this task.")
+    _require_turn(assignment, submission, question["id"])
+    if code_answers.time_limit(question) and code_answers.task_start(
+            db, student.id, assignment.id, question["id"]) is None:
+        db.add(TaskStart(assignment_id=assignment.id, student_id=student.id, question=question["id"],
+                         started_at=utcnow_naive()))
+        try:
+            db.commit()
+        except IntegrityError:  # opened twice at once: the first start stands
+            db.rollback()
+    return _work_out(db, student, assignment, submission)
+
+
+@router.put("/assignments/{assignment_id}/task-draft")
+def save_task_draft(
+    assignment_id: int, payload: AnswerIn,
+    student: User = Depends(require_student), db: Session = Depends(get_db),
+):
+    """Keep the code the student has typed so far for a task with a time limit, so that the server can hand
+    it in when the time is up even if the page is gone. Replaces the last draft. Practice only: it is not a
+    submission and changes no mark."""
+    assignment = _challenge_for(db, student, assignment_id, "Saving a draft")
+    question = _question_of(assignment, payload.question)
+    submission, _ = _close_expired(db, student, assignment)
+    if any(a["question"] == question["id"] for a in code_answers.answers_of(assignment, submission)):
+        raise HTTPException(409, "You have already handed in this task.")
+    _require_started(db, student, assignment, question, grace=TIME_GRACE_SECONDS)
+    start = code_answers.task_start(db, student.id, assignment.id, question["id"])
+    if start is None:  # a task without a limit has no clock to keep a draft for
+        raise HTTPException(400, "This task has no time limit.")
+    start.draft_code = payload.code
+    start.draft_language = _pick_language(payload.language, assignment)
+    db.commit()
+    return {"saved": True}
 
 
 @router.post("/assignments/{assignment_id}/unlock-tasks", response_model=UnlockOut)
@@ -520,7 +647,9 @@ def submit_code(
     assignment = _challenge_for(db, student, assignment_id, "Submitting code")
     question = _question_of(assignment, payload.question)
     language = _pick_language(payload.language, assignment)
-    submission = _latest_submission(db, student, assignment)
+    submission, closed = _close_expired(db, student, assignment)
+    if question["id"] in closed:
+        raise HTTPException(409, f"Time was up for task {question['id']}, so the code you had saved was handed in.")
     _require_turn(assignment, submission, question["id"])
     if submission is not None:
         if submission.question_results is None:
@@ -531,11 +660,12 @@ def submit_code(
                 f"You have already submitted task {question['id']}. A submission can't be changed."
                 if len(assignment.questions) > 1 else
                 "You have already submitted this code challenge. A submission can't be changed."))
+    _require_started(db, student, assignment, question, grace=TIME_GRACE_SECONDS)
     filename = code_testing.answer_filename(len(assignment.questions), question["id"], language)
     submission = _save_answer(db, student, assignment, submission, question["id"], filename, language,
                               payload.code.replace("\r\n", "\n"))
     _mark_answers(db, assignment, submission, [question])
-    return _work_out(student, assignment, submission)
+    return _work_out(db, student, assignment, submission)
 
 
 @router.post("/assignments/{assignment_id}/mark-my-code", response_model=CodeWorkOut)
@@ -558,4 +688,4 @@ def mark_my_code(
     if not waiting:
         raise HTTPException(409, "Your code is already marked.")
     _mark_answers(db, assignment, submission, [q for q in assignment.questions if q["id"] in waiting])
-    return _work_out(student, assignment, submission)
+    return _work_out(db, student, assignment, submission)

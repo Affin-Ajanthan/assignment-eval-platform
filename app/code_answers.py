@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import hmac
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -35,7 +35,7 @@ from sqlalchemy.orm import Session
 
 from .db import BASE_DIR
 from .evaluator import code_testing
-from .models import Assignment, Submission, TaskUnlock
+from .models import Assignment, Submission, TaskStart, TaskUnlock
 
 
 def tasks_unlocked(db: Session, student_id: int, assignment: Assignment) -> bool:
@@ -59,6 +59,27 @@ def unfinished_before(assignment: Assignment, submission: Optional[Submission], 
         return None
     done = {a["question"] for a in answers_of(assignment, submission)}
     return next((q["id"] for q in assignment.questions if q["id"] < question and q["id"] not in done), None)
+
+
+def time_limit(question: dict) -> int:
+    """A task's time limit in seconds; 0 when it has none (also for a task saved before limits existed)."""
+    return int(question.get("time_limit_seconds") or 0)
+
+
+def task_start(db: Session, student_id: int, assignment_id: int, question: int) -> Optional[TaskStart]:
+    """When the student opened this timed task (and the code they last had there), or None if they have not."""
+    return db.query(TaskStart).filter(
+        TaskStart.assignment_id == assignment_id, TaskStart.student_id == student_id,
+        TaskStart.question == question).first()
+
+
+def task_ends_at(assignment: Assignment, start: Optional[TaskStart], question: dict) -> Optional[datetime]:
+    """When the student's clock for a timed task runs out: its time limit after they opened it, or the
+    assignment's deadline if that comes first. None for a task with no limit or one not opened yet."""
+    limit = time_limit(question)
+    if not limit or start is None:
+        return None
+    return min(start.started_at + timedelta(seconds=limit), assignment.deadline)
 
 
 def points_of(tests: list) -> float:

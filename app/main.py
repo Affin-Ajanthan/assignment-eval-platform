@@ -94,6 +94,7 @@ from .models import (
     SimilarityFlag,
     Subject,
     Submission,
+    TaskStart,
     TaskUnlock,
     User,
 )
@@ -263,6 +264,7 @@ _STATEMENT_MAX = 10_000
 _TASK_STARTER_MAX = 50_000  # the student editor's limit (MAX_CODE_CHARS in app/routers/student_runs.py)
 _TEST_TEXT_MAX = 10_000
 _TASK_PASSWORD_MAX = 100
+_TASK_TIME_MAX = 24 * 3600  # a task's time limit, in seconds
 
 
 class QuestionIn(BaseModel):
@@ -275,6 +277,9 @@ class QuestionIn(BaseModel):
     # Optional starting code: put in the student's code box when they open the task, for them to write on.
     # (The assignment's own starter_code is a different thing: instructor-only, left out of the similarity check.)
     starter_code: str = Field(default="", max_length=_TASK_STARTER_MAX)
+    # Optional time limit in seconds (the page takes minutes and seconds): the student's clock for this task
+    # starts when they open it, and when it runs out their code is handed in as it stands. 0: no limit.
+    time_limit_seconds: int = Field(default=0, ge=0, le=_TASK_TIME_MAX)
 
 
 class QuestionOut(QuestionIn):
@@ -899,6 +904,7 @@ def _delete_user(db: Session, user: User) -> dict:
         synchronize_session=False)
     db.query(Enrollment).filter(Enrollment.student_id == user.id).delete(synchronize_session=False)
     db.query(TaskUnlock).filter(TaskUnlock.student_id == user.id).delete(synchronize_session=False)
+    db.query(TaskStart).filter(TaskStart.student_id == user.id).delete(synchronize_session=False)
     db.delete(user)
     db.commit()
     for rel_path, kind in upload_parts:  # files only after the database change succeeded
@@ -1281,7 +1287,8 @@ def _clean_questions(questions: list[QuestionIn]) -> Optional[list[dict]]:
         return None
     return [
         {"id": n, "title": q.title.strip() or (f"Task {n}" if len(questions) > 1 else ""),
-         "statement": q.statement.strip(), "starter_code": q.starter_code if q.starter_code.strip() else ""}
+         "statement": q.statement.strip(), "starter_code": q.starter_code if q.starter_code.strip() else "",
+         "time_limit_seconds": q.time_limit_seconds}
         for n, q in enumerate(questions, start=1)
     ]
 
@@ -1386,7 +1393,10 @@ def _my_submission_out(submission: Submission, assignment_open: bool, now: datet
     # Other work can be changed or deleted until the deadline or until it is graded.
     challenge = _is_code_challenge(submission)
     can_edit = assignment_open and submission.status != "graded" and not challenge
-    can_delete = assignment_open and (submission.latest_grade is None if challenge else submission.status != "graded")
+    # A challenge with time limits is final: doing it again would start every clock over.
+    can_delete = assignment_open and (
+        submission.latest_grade is None and not submission.assignment.is_timed if challenge
+        else submission.status != "graded")
     common = dict(
         id=submission.id, submitted_at=_as_utc(submission.submitted_at),
         has_code=bool(submission.code_path), has_report=bool(submission.report_path),
@@ -1675,6 +1685,7 @@ def delete_assignment(assignment_id: int, instructor: User = Depends(require_ins
     kept = db.query(Submission).filter(Submission.assignment_id == assignment.id).update(
         {Submission.assignment_id: None})
     db.query(TaskUnlock).filter(TaskUnlock.assignment_id == assignment.id).delete(synchronize_session=False)
+    db.query(TaskStart).filter(TaskStart.assignment_id == assignment.id).delete(synchronize_session=False)
     db.delete(assignment)
     db.commit()
     return {"status": "deleted", "submissions_kept": kept}
@@ -1964,6 +1975,8 @@ def _own_changeable_submission(db: Session, student: User, submission_id: int, *
         if submission.latest_grade is not None:
             raise HTTPException(409, "This submission has already been graded by your instructor and can no "
                                      "longer be deleted.")
+        if submission.assignment.is_timed:
+            raise HTTPException(409, "This code challenge has time limits, so a submission to it can't be deleted.")
     elif submission.status == "graded":
         raise HTTPException(409, "This submission has already been graded and can no longer be changed.")
     _require_open(submission.assignment)
