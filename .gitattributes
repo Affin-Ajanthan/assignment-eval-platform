@@ -1,0 +1,26 @@
+# Every text file is stored with LF line endings, whoever commits it: Windows
+# editors and tools write CRLF, and a file switching between the two shows up
+# as a whole-file rewrite (the PR #22 conflicts). Git converts on commit, so a
+# CRLF file on someone's disk still commits as LF.
+* text=auto eol=lf
+
+# Never converted: binary files.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.docx binary
+*.xlsx binary
+*.pptx binary
+*.zip binary
+*.db binary
+*.npz binary
+*.mp3 binary
+*.mp4 binary
+*.wav binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
