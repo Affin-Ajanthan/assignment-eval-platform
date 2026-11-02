@@ -61,6 +61,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable, Protocol
 
+from ..embedding_cache import MISSING, DiskArrayCache, cache_dir_setting, max_bytes_setting
 from ..notebook import NOTEBOOK_SUFFIX, notebook_code, notebook_markdown
 
 log = logging.getLogger(__name__)
@@ -74,6 +75,11 @@ CHUNK_WORDS = 120
 MIN_WORDS = 5
 # After a failed model load, try again on the next request after this long.
 RETRY_AFTER_SECONDS = 60
+# Chunk vectors of each document are also kept on disk (one file per document,
+# app/embedding_cache.py), so a restart doesn't re-encode every report. Bump
+# CACHE_FORMAT when the stored layout changes: old files then stop matching.
+CACHE_FORMAT = 1
+DEFAULT_CACHE_MAX_BYTES = 200 * 1024 * 1024
 
 COMPONENT_LABELS = {
     "code": "code documentation",
@@ -370,6 +376,18 @@ class MiniLMEncoder:
                                  convert_to_numpy=True, show_progress_bar=False)
 
 
+def downloaded_revision(model_name: str = MODEL_NAME) -> str | None:
+    """The commit of the downloaded model (its snapshot folder's name), read
+    without loading it; None when it hasn't been downloaded. The model isn't
+    pinned to a revision, so the disk cache keys on the one actually in use."""
+    try:
+        from huggingface_hub import snapshot_download
+
+        return Path(snapshot_download(model_name, local_files_only=True)).name
+    except Exception:
+        return None
+
+
 @dataclass
 class DocumentEmbedding:
     vector: "object"  # numpy.ndarray (dim,), L2-normalized
@@ -380,10 +398,13 @@ class DocumentEmbedding:
 class SentenceEmbeddingService:
     """Process-wide owner of the sentence-embedding model: loaded at most
     once (thread-safe), chunk embeddings cached in an LRU keyed by a hash
-    of the chunk text."""
+    of the chunk text, and -- given ``cache_dir`` -- each document's chunk
+    vectors on disk too, so a restart doesn't re-encode them. A service
+    built without ``cache_dir`` (tests, fakes) is memory-only."""
 
     def __init__(self, encoder_factory: Callable[[], SentenceEncoder] | None = None,
-                 cache_size: int = 20_000, enabled: bool | None = None):
+                 cache_size: int = 20_000, enabled: bool | None = None, cache_dir: Path | str | None = None,
+                 cache_max_bytes: int = DEFAULT_CACHE_MAX_BYTES, model_revision: str | None = None):
         self._factory = encoder_factory or MiniLMEncoder
         self._encoder: SentenceEncoder | None = None
         self._lock = threading.Lock()
@@ -394,7 +415,11 @@ class SentenceEmbeddingService:
         self.error: str | None = None
         self.cache_hits = 0
         self.chunks_encoded = 0
+        self.disk_hits = 0  # documents read back from the disk cache
         self._failed_at: float | None = None
+        self._disk = DiskArrayCache(cache_dir, cache_max_bytes, "report embedding") \
+            if cache_dir and self.enabled else None
+        self._revision = model_revision  # None: read from the downloaded model when first needed
 
     def load(self) -> bool:
         """Load the model once. After a failure, later calls return False
@@ -437,6 +462,49 @@ class SentenceEmbeddingService:
     def _key(chunk: str) -> str:
         return hashlib.sha256(f"{MODEL_NAME}|{chunk}".encode()).hexdigest()
 
+    @staticmethod
+    def _document_key(text: str, revision: str) -> str:
+        """Disk-cache key of a whole document: its text, the model and its
+        revision, the chunk size and the format, so nothing stale is read."""
+        return hashlib.sha256(f"{CACHE_FORMAT}|{MODEL_NAME}|{revision}|{CHUNK_WORDS}|{text}".encode()).hexdigest()
+
+    def _read_from_disk(self, plans: dict[str, list[str]], texts: dict[str, str]) -> dict[str, str]:
+        """Put the chunk vectors of documents not already in memory into the
+        LRU from the disk cache. Returns {document: key} for the ones that
+        weren't there, to store once encoded."""
+        import numpy as np
+
+        if self._disk is None:
+            return {}
+        if self._revision is None:
+            self._revision = downloaded_revision()
+        if self._revision is None:  # not downloaded yet: nothing on disk can be trusted to match
+            return {}
+        to_store: dict[str, str] = {}
+        for name, chunks in plans.items():
+            if not chunks:
+                continue
+            with self._lock:
+                if all(self._key(c) in self._cache for c in chunks):
+                    continue
+            key = self._document_key(texts[name], self._revision)
+            stored = self._disk.get(key)
+            vectors = stored.get("vectors") if isinstance(stored, dict) else None
+            if (vectors is None or vectors.ndim != 2 or vectors.shape[0] != len(chunks)
+                    or not np.all(np.isfinite(vectors))):
+                if stored is not MISSING:
+                    self._disk.discard(key)  # damaged or from another chunking: recompute
+                to_store[name] = key
+                continue
+            with self._lock:
+                for chunk, vector in zip(chunks, vectors):
+                    self._cache[self._key(chunk)] = np.asarray(vector, dtype=float)
+                    self._cache.move_to_end(self._key(chunk))
+                while len(self._cache) > self._cache_size:
+                    self._cache.popitem(last=False)
+            self.disk_hits += 1
+        return to_store
+
     def embed_documents(self, texts: dict[str, str]) -> dict[str, DocumentEmbedding]:
         """Embed already-cleaned documents. All uncached chunks of all
         documents go through the model in one call. Raises on inference
@@ -460,6 +528,7 @@ class SentenceEmbeddingService:
         import numpy as np
 
         plans = {name: chunk_text(text) for name, text in texts.items()}
+        to_store = self._read_from_disk(plans, texts)
         missing: dict[str, str] = {}
         with self._lock:
             for chunks in plans.values():
@@ -489,6 +558,8 @@ class SentenceEmbeddingService:
                 vecs = list(np.asarray(self._encoder.encode(chunks), dtype=float))
             weights = np.asarray([len(c.split()) for c in chunks], dtype=float)
             out[name] = (np.stack(vecs), weights)
+        for name, key in to_store.items():
+            self._disk.put(key, {"vectors": out[name][0]})
         return out
 
 
@@ -500,7 +571,10 @@ def get_consistency_service() -> SentenceEmbeddingService:
     global _service
     with _service_lock:
         if _service is None:
-            _service = SentenceEmbeddingService()
+            # cache/minilm next to the database, or MINILM_CACHE_DIR ("off": memory only)
+            _service = SentenceEmbeddingService(
+                cache_dir=cache_dir_setting("MINILM_CACHE_DIR", "minilm"),
+                cache_max_bytes=max_bytes_setting("MINILM_CACHE_MAX_MB", DEFAULT_CACHE_MAX_BYTES))
         return _service
 
 
