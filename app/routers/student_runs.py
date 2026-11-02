@@ -185,7 +185,7 @@ class AnswerIn(BaseModel):
 
     code: str = Field(min_length=1, max_length=MAX_CODE_CHARS)
     # Left out: the assignment's language (its first one when it allows several).
-    language: Optional[Literal["python", "ruby", "java", "javascript", "c", "cpp"]] = None  # = code_testing.LANGUAGES
+    language: Optional[Literal["python", "ruby", "java", "javascript", "c", "cpp", "php", "go"]] = None  # = code_testing.LANGUAGES
     # The task it answers (1 is the first). Left out: the first, the only task of most challenges.
     question: int = Field(default=1, ge=1)
 

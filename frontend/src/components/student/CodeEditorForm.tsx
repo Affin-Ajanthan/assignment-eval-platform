@@ -11,7 +11,7 @@ import { CodeLanguageId, languagesFor } from "@/lib/codeLanguages";
 import { taskName } from "@/lib/tasks";
 
 /** The languages the server can run tests for: must match LANGUAGES in app/evaluator/code_testing.py. */
-const RUNNABLE: CodeLanguageId[] = ["python", "ruby", "java", "javascript", "c", "cpp"];
+const RUNNABLE: CodeLanguageId[] = ["python", "ruby", "java", "javascript", "c", "cpp", "php", "go"];
 const MAX_CODE_CHARS = 50_000; // must match MAX_CODE_CHARS in app/routers/student_runs.py
 const INDENT: Partial<Record<CodeLanguageId, string>> = {
   python: "    ",
@@ -20,6 +20,8 @@ const INDENT: Partial<Record<CodeLanguageId, string>> = {
   javascript: "  ",
   c: "    ",
   cpp: "    ",
+  php: "    ",
+  go: "\t", // gofmt indents with a tab
 };
 const PLACEHOLDER: Partial<Record<CodeLanguageId, string>> = {
   python: "# Read the input with input() and print the answer with print()",
@@ -28,6 +30,8 @@ const PLACEHOLDER: Partial<Record<CodeLanguageId, string>> = {
   javascript: "// Read the input with require('fs').readFileSync(0, 'utf8') and print the answer with console.log",
   c: "// Read the input with scanf and print the answer with printf. Put it in int main(void).",
   cpp: "// Read the input with std::cin and print the answer with std::cout. Put it in int main().",
+  php: "// Start the file with <?php. Read the input with fgets(STDIN) and print the answer with echo.",
+  go: "// Start with package main and import \"fmt\". Read the input with fmt.Scan and print the answer with fmt.Println. Put it in func main().",
 };
 
 const pre =

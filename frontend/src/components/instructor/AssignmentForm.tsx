@@ -395,10 +395,10 @@ export default function AssignmentForm({
                 className={input}
               />
               <p className="mt-1 text-xs text-gray-500">
-                The file name (or path) the tests run: Python (.py), Ruby (.rb), Java (.java), JavaScript (.js), C (.c)
-                and C++ (.cpp) only. Empty: the only such file in the submission, or one named main, app, run, program
-                or index. Code that students type in the editor is always saved and run as main.py, main.rb, main.java,
-                main.js, main.c or main.cpp, so leave this empty for it.
+                The file name (or path) the tests run: Python (.py), Ruby (.rb), Java (.java), JavaScript (.js), C (.c),
+                C++ (.cpp), PHP (.php) and Go (.go) only. Empty: the only such file in the submission, or one named main,
+                app, run, program or index. Code that students type in the editor is always saved and run as main.py,
+                main.rb, main.java, main.js, main.c, main.cpp, main.php or main.go, so leave this empty for it.
               </p>
             </div>
           )}

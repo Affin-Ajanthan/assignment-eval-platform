@@ -2,7 +2,7 @@
 
 Each test runs the student's program in its own throw-away Docker container:
 the test's input goes to the program's standard input and the output is
-compared with the expected output. Python, Ruby, Java, JavaScript, C and C++ are supported.
+compared with the expected output. Python, Ruby, Java, JavaScript, C, C++, PHP and Go are supported.
 
 Student code is untrusted, so every container has no network, a memory cap
 (no swap), a CPU cap, a process cap, a read-only root filesystem, all Linux
@@ -52,9 +52,11 @@ class Language:
     pids: int = 64  # processes and threads the container may have: a JVM starts many threads
     extra_seconds: int = 0  # start-up time added to the time limit, so a slow start is not the student's fault
     # C and C++ are compiled first (inside the same container, see _COMPILED_SCRIPT): `interpreter` is then the
-    # compiler (gcc, g++) and `flags` its language standard.
+    # compiler (gcc, g++) and `flags` its language standard. For an interpreted language `flags` is one option
+    # given to the interpreter before the file.
     compiled: bool = False
     flags: str = ""
+    compile_seconds: int = 0  # how long the compile step may take, when that is more than the usual wait allows
 
 
 # Java is run with the JDK's single-file launcher (`java main.java`), which compiles in memory and runs the
@@ -62,6 +64,18 @@ class Language:
 # JVM small enough for the 256 MB container.
 _JAVA_OPTIONS = "-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:-UsePerfData -Xmx128m"
 _GCC_IMAGE = os.environ.get("CODE_SANDBOX_GCC_IMAGE", "gcc:13")  # has both gcc and g++
+
+# Go is compiled first with `go build` (see _GO_SCRIPT). The container is read-only apart from /tmp and /run, so
+# the build cache and module folder go to /tmp. cgo is off (no C compiler needed), the toolchain is never
+# downloaded, and one package is built at a time to stay inside the memory cap. The standard library is built
+# from source into an empty cache for every test, so the compile gets a long limit.
+_GO_COMPILE_SECONDS = 90
+_GO_ENV = (("HOME", "/tmp"), ("GOCACHE", "/tmp/gocache"), ("GOPATH", "/tmp/go"), ("CGO_ENABLED", "0"),
+           ("GOTOOLCHAIN", "local"), ("GOFLAGS", "-p=1"))
+
+# PHP prints errors to standard output by default, which would be taken for the program's answer: send them to
+# standard error, where the line number is read from.
+_PHP_OPTIONS = "-ddisplay_errors=stderr"
 
 LANGUAGES: dict = {
     "python": Language("python", (".py",), "python", DEFAULT_IMAGE),
@@ -71,13 +85,18 @@ LANGUAGES: dict = {
     "javascript": Language("javascript", (".js",), "node", os.environ.get("CODE_SANDBOX_NODE_IMAGE", "node:20-slim")),
     "c": Language("c", (".c",), "gcc", _GCC_IMAGE, compiled=True, flags="-std=c17"),
     "cpp": Language("cpp", (".cpp", ".cc", ".cxx"), "g++", _GCC_IMAGE, compiled=True, flags="-std=c++17"),
+    "php": Language("php", (".php",), "php", os.environ.get("CODE_SANDBOX_PHP_IMAGE", "php:8.3-cli"),
+                    flags=_PHP_OPTIONS),
+    "go": Language("go", (".go",), "go", os.environ.get("CODE_SANDBOX_GO_IMAGE", "golang:1.22"), env=_GO_ENV,
+                   pids=128, compiled=True, compile_seconds=_GO_COMPILE_SECONDS),
 }
 _RUNNABLE = {ext: lang for lang in LANGUAGES.values() for ext in lang.extensions}
-_NAMES = {"python": "Python", "ruby": "Ruby", "java": "Java", "javascript": "JavaScript", "c": "C", "cpp": "C++"}
+_NAMES = {"python": "Python", "ruby": "Ruby", "java": "Java", "javascript": "JavaScript", "c": "C", "cpp": "C++",
+          "php": "PHP", "go": "Go"}
 
 
 def language_names() -> str:
-    """'Python, Ruby, Java, JavaScript, C or C++': the languages tests can run, for messages."""
+    """'Python, Ruby, Java, JavaScript, C, C++, PHP or Go': the languages tests can run, for messages."""
     names = [_NAMES[lang] for lang in LANGUAGES]
     return ", ".join(names[:-1]) + " or " + names[-1]
 
@@ -218,7 +237,7 @@ def language_of_file(relative_file: str) -> Language:
 # the main file's folder, run it with a time limit. The folder, time limit,
 # interpreter and file arrive as separate arguments ($1..$4), never spliced
 # into the script, so odd file names cannot inject commands.
-_SCRIPT = 'cp -r /code/. /run/ && cd "/run/$1" && exec timeout "$2" "$3" "$4"'
+_SCRIPT = 'cp -r /code/. /run/ && cd "/run/$1" && exec timeout "$2" "$3" ${5:+"$5"} "$4"'  # $5: an interpreter option, if any
 
 # C and C++: the same copy, then compile the main file to /run/prog (the compiler gets 30 seconds and its
 # messages go to stderr, so stdout stays the program's alone), then run it with the time limit. A program
@@ -230,6 +249,14 @@ _COMPILED_SCRIPT = (
     '&& exec timeout "$2" /run/prog'
 )
 
+# Go: the same copy, then `go build` the main file to /run/prog (the build gets _GO_COMPILE_SECONDS and its
+# messages go to stderr), then run it with the time limit. $1..$4 are as above ($3 is `go`); there is no $5.
+_GO_SCRIPT = (
+    'cp -r /code/. /run/ && cd "/run/$1" '
+    f'&& {{ timeout {_GO_COMPILE_SECONDS} "$3" build -o /run/prog "$4" 1>&2 || exit 1; }} '
+    '&& exec timeout "$2" /run/prog'
+)
+
 
 def build_test_command(name: str, code_dir: Path, relative_file: str, language: Language, timeout: int) -> list:
     rel = PurePosixPath(relative_file)
@@ -237,6 +264,7 @@ def build_test_command(name: str, code_dir: Path, relative_file: str, language: 
     # The compiled program is run from the scratch folder, which a tmpfs mounts without permission to run
     # programs unless asked to.
     scratch = "/run:rw,size=64m,mode=1777" + (",exec" if language.compiled else "")
+    script = _GO_SCRIPT if language.id == "go" else _COMPILED_SCRIPT if language.compiled else _SCRIPT
     return [
         "docker", "run", "--rm", "-i", "--name", name,
         "--network", "none",
@@ -247,9 +275,9 @@ def build_test_command(name: str, code_dir: Path, relative_file: str, language: 
         "-e", "PYTHONDONTWRITEBYTECODE=1", *env,
         "-v", f"{code_dir}:/code:ro",
         language.image,
-        "sh", "-c", _COMPILED_SCRIPT if language.compiled else _SCRIPT, "sh",
+        "sh", "-c", script, "sh",
         rel.parent.as_posix(), str(timeout + language.extra_seconds), language.interpreter, rel.name,
-        *([language.flags] if language.compiled else []),
+        *([language.flags] if language.flags else []),
     ]
 
 
@@ -281,15 +309,16 @@ def _run_one(test: dict, code_dir: Path, relative_file: str, language: Language,
     base = dict(test_id=test["id"], name=test["name"], visible=bool(test.get("visible")),
                 points=test.get("points", 1), match=test.get("match", "exact"), expected_output=expected,
                 input=test.get("input") or "")
+    wait = timeout + language.compile_seconds + 30  # slack for container start-up, and the compile step
     try:
-        code, out, err = runner(command, timeout + 30, _stdin_for(test))  # slack for container start-up
+        code, out, err = runner(command, wait, _stdin_for(test))
     except subprocess.TimeoutExpired:
         try:  # the CLI timed out, not necessarily the container: stop it
             runner(["docker", "kill", name], 10, "")
         except Exception:
             pass
         return TestResult(**base, status="timeout", passed=False, actual_output="",
-                          stderr=f"No result within {timeout + 30} seconds.")
+                          stderr=f"No result within {wait} seconds.")
 
     out = out[:MAX_CAPTURED_CHARS]
     if code == 125:
@@ -344,7 +373,7 @@ class QuestionRun:
 
 
 def answer_filename(question_count: int, question: int, language: str) -> str:
-    """The name a typed answer is saved under: main.py (main.rb, main.java, main.js, main.c, main.cpp) for a challenge with one
+    """The name a typed answer is saved under: main.py (main.rb, main.java, main.js, main.c, main.cpp, main.php, main.go) for a challenge with one
     question, q1.py, q2.rb, ... for one with several."""
     stem = "main" if question_count == 1 else f"q{question}"
     return f"{stem}{LANGUAGES[language].extensions[0]}"

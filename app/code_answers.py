@@ -76,14 +76,22 @@ _JAVA_FRAME = re.compile(r"^\s*at (?!java\.|jdk\.|sun\.|javax\.)[^\s(]+\([^()]*\
 _GCC_ERROR = re.compile(r"^[^\s:]+\.(?:c|cc|cpp|cxx):(\d+):(?:\d+:)? (?:fatal )?error", re.MULTILINE)
 # Node: `/run/main.js:7` heads a syntax error and an uncaught exception (the scratch folder is /run).
 _JS_LINE = re.compile(r"/run/\S*?\.js:(\d+)")
+# PHP: `PHP Parse error: syntax error, ... in /run/main.php on line 3`; an uncaught exception ends with
+# `thrown in /run/main.php on line 5`. Warnings and notices end the same way, but they do not stop the program.
+_PHP_LINE = re.compile(r"\bin /run/\S*?\.php on line (\d+)")
+# Go: `./main.go:7:2: "os" imported and not used` for code that does not build; a panic names its frames as
+# `\t/run/main.go:9 +0x1d` (frames of the Go runtime itself are under /usr/local/go and are not the student's).
+_GO_ERROR = re.compile(r"^(?:\./)?[^\s:]*\.go:(\d+):(?:\d+:)? ", re.MULTILINE)
+_GO_FRAME = re.compile(r"^\s+/run/\S*?\.go:(\d+)", re.MULTILINE)
 
 
 def compiler_error(stderr: str, language: str) -> str:
     """What a student is told when their program crashed before it could give an answer: just that it
     failed and on which line, never the traceback (which can show paths and the tester's own files).
     The line is the one in the student's own file: the last Python frame outside the standard library,
-    the first line Ruby names, the compile error or first own frame Java names, the line Node names, or the first error gcc/g++ names
-    (a program that compiled but crashed, say with a segfault, has none: the message then has no line)."""
+    the first line Ruby names, the compile error or first own frame Java names, the line Node names, the first error gcc/g++ names
+    (a program that compiled but crashed, say with a segfault, has none: the message then has no line), the first line PHP
+    names in the student's own file, or the build error or first own frame Go names."""
     if "out of memory" in stderr or "OutOfMemoryError" in stderr:
         return "The program ran out of memory."
     if language == "ruby":
@@ -97,6 +105,12 @@ def compiler_error(stderr: str, language: str) -> str:
         line = found.group(1) if found else None
     elif language in ("c", "cpp"):
         found = _GCC_ERROR.search(stderr)
+        line = found.group(1) if found else None
+    elif language == "php":
+        found = _PHP_LINE.search(stderr)
+        line = found.group(1) if found else None
+    elif language == "go":
+        found = _GO_ERROR.search(stderr) or _GO_FRAME.search(stderr)
         line = found.group(1) if found else None
     else:
         frames = [n for path, n in _PYTHON_FRAME.findall(stderr) if "/usr/" not in path and "/lib/" not in path]
