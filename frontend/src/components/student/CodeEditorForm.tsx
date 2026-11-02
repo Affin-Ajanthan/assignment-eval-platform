@@ -258,6 +258,9 @@ export default function CodeEditorForm({
   const waitingFor = (id: number): number | null =>
     assignment.tasks_in_order && open ? (questions.find((q) => q.id < id && handedIn(q.id) === null)?.id ?? null) : null;
 
+  /** Tasks in order: the student only moves forward, after handing in the one they are on. */
+  const forwardOnly = open && assignment.tasks_in_order === true;
+
   const [answers, setAnswers] = useState<Record<number, Answer>>({});
   const [runs, setRuns] = useState<Record<number, CodeRun | null>>({}); // the last Run of each task
   const [current, setCurrent] = useState(() => (questions.find((q) => handedIn(q.id) === null) ?? questions[0]).id);
@@ -281,6 +284,11 @@ export default function CodeEditorForm({
   const handedInCount = questions.filter((q) => handedIn(q.id) !== null).length;
   const todo = questions.filter((q) => q.id !== question.id && handedIn(q.id) === null);
   const next = open ? (todo.find((q) => q.id > question.id) ?? todo[0] ?? null) : null;
+  // The task before and after this one in the list, to walk through the tasks both ways.
+  const position = questions.findIndex((q) => q.id === question.id);
+  const before = position > 0 ? questions[position - 1] : null;
+  const after = position < questions.length - 1 ? questions[position + 1] : null;
+  const afterWaiting = after ? waitingFor(after.id) !== null : false; // in order: not open until this one is handed in
 
   /** A change to a task's code or language makes its last Run's result stale: drop it. */
   function change(id: number, patch: Partial<Answer>) {
@@ -430,6 +438,7 @@ export default function CodeEditorForm({
               // (the starting code alone does not count).
               const typedCode = answers[q.id]?.code.trim() ?? "";
               const waiting = waitingFor(q.id);
+              const behind = forwardOnly && q.id < question.id; // already passed: no way back
               const mark = waiting !== null
                 ? "🔒 "
                 : handedIn(q.id)
@@ -445,13 +454,19 @@ export default function CodeEditorForm({
                   id={`${editorId}-tab-${q.id}`}
                   aria-selected={selected}
                   aria-controls={`${editorId}-panel`}
-                  disabled={waiting !== null}
-                  title={waiting !== null ? `Hand in ${taskName(questions.find((x) => x.id === waiting) ?? q)} first` : undefined}
+                  disabled={waiting !== null || behind}
+                  title={
+                    waiting !== null
+                      ? `Hand in ${taskName(questions.find((x) => x.id === waiting) ?? q)} first`
+                      : behind
+                        ? "The tasks are done in order: you cannot go back"
+                        : undefined
+                  }
                   onClick={() => setCurrent(q.id)}
                   className={`-mb-px max-w-[16rem] truncate rounded-t-md border px-3 py-1.5 text-sm font-semibold ${
                     selected
                       ? "border-gray-200 border-b-white bg-white text-blue-700"
-                      : waiting !== null
+                      : waiting !== null || behind
                         ? "cursor-not-allowed border-transparent text-gray-400"
                         : "border-transparent text-gray-600 hover:text-gray-900"
                   }`}
@@ -586,6 +601,31 @@ export default function CodeEditorForm({
           onGetMarks={getMarks}
           gettingMarks={gettingMarks}
         />
+      )}
+      {many && (
+        <div className="mt-4 flex justify-between gap-2 border-t border-gray-200 pt-3" data-testid="task-nav">
+          {!forwardOnly && (
+            <button
+              type="button"
+              onClick={() => before && setCurrent(before.id)}
+              disabled={!before || busy}
+              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+              data-testid="previous-task"
+            >
+              ← {before ? taskName(before) : "Previous"}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => after && setCurrent(after.id)}
+            disabled={!after || afterWaiting || busy}
+            title={afterWaiting && after ? `Hand in ${taskName(question)} first` : undefined}
+            className="ml-auto rounded-md border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+            data-testid="following-task"
+          >
+            {after ? taskName(after) : "Next"} →
+          </button>
+        </div>
       )}
       <ConfirmDialog request={confirm} onCancel={() => setConfirm(null)} />
     </div>
