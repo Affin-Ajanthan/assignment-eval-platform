@@ -41,7 +41,9 @@ export default function StudentPage() {
   function askDelete(a: StudentAssignment) {
     setConfirm({
       title: "Delete your submission?",
-      message: `Are you sure you want to delete your submission for "${a.name}"? Your uploaded files will be removed. You can submit again before the deadline (${formatDateTime(a.deadline)}).`,
+      message: a.assignment_type === "code_challenge"
+        ? `Are you sure you want to delete your submission for "${a.name}"? Your answers and marks for every task will be removed, and you will have to hand the tasks in again before the deadline (${formatDateTime(a.deadline)}).`
+        : `Are you sure you want to delete your submission for "${a.name}"? Your uploaded files will be removed. You can submit again before the deadline (${formatDateTime(a.deadline)}).`,
       onConfirm: async () => {
         setConfirmBusy(true);
         try {
@@ -82,7 +84,7 @@ export default function StudentPage() {
         Open an assignment, upload your code, report and presentation video, and submit before the deadline. You can
         edit or delete your submission until the deadline or until it has been graded. A code challenge is the
         exception: press Do assignment and it opens on its own page with the instructions; press Do task there to see the
-        questions and do the tasks one at a time. Each task is marked as soon as you submit it, and cannot be changed afterwards.
+        questions and do the tasks one at a time. Each task is marked as soon as you submit it and cannot be changed afterwards, but you can delete your whole submission (until the deadline) and do the tasks again.
       </p>
 
       {user.subjects.length === 0 && (

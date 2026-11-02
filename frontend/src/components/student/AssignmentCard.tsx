@@ -185,22 +185,22 @@ export default function AssignmentCard({
             </button>
           )}
           {a.status === "open" && sub?.can_edit && (
-            <>
-              <button
-                type="button"
-                onClick={() => setOpenForm({ id: a.id, mode: "edit" })}
-                className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
-              >
-                Edit submission
-              </button>
-              <button
-                type="button"
-                onClick={() => askDelete(a)}
-                className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
-              >
-                Delete submission
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => setOpenForm({ id: a.id, mode: "edit" })}
+              className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+            >
+              Edit submission
+            </button>
+          )}
+          {a.status === "open" && sub?.can_delete && (
+            <button
+              type="button"
+              onClick={() => askDelete(a)}
+              className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+            >
+              Delete submission
+            </button>
           )}
         </div>
       )}

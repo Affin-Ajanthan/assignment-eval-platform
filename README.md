@@ -281,9 +281,10 @@ container and then run; only the one main file is compiled, so a challenge in C 
 C++ is a single source file (headers from the standard library only). Pull
 `eclipse-temurin:21-jdk`, `node:20-slim` and `gcc:13` once (see `.env.example`). A
 Java test gets 5 extra seconds for the JVM to start and compile. A program that
-does not compile or crashes is shown to the student as **Compiler error. Error on
-line N.**, whatever the language (a C/C++ crash such as a segfault has no line, so
-it shows **Compiler error.**).
+does not compile (or parse) is shown to the student as **Compiler error. Error on
+line N.**, and one that crashes while running as **Runtime error. Error on line N.**,
+whatever the language (a C/C++ crash such as a segfault has no line, so it shows
+**Runtime error.**). The traceback is never shown.
 
 **Students** do a code challenge on **its own page** (`/student/code/{id}`). The
 assignment card shows **no question and no description**: it has a **Do
@@ -331,10 +332,13 @@ closed and reopened, and still shows the results after the deadline. The reports
 are kept with the submission (`Submission.question_results`, see
 `app/code_answers.py`), so nothing is run again to show them.
 
-**A task that is handed in cannot be changed.** There is no Edit or Delete for
-a challenge's submission: `PUT` and `DELETE /submissions/{id}` are refused (409),
-and `can_edit` is always false. A second Submit of the same task is refused
-too (409); the other tasks can still be handed in until the deadline, and a
+**A task that is handed in cannot be changed.** There is no Edit for a
+challenge's submission: `PUT /submissions/{id}` is refused (409) and `can_edit`
+is always false. The student can **delete the whole submission** while the
+challenge is open (`DELETE /submissions/{id}`, `can_delete`): every task's
+answer and mark goes, and they start again. It is refused (409) once an
+instructor has graded the submission, and after the deadline. A second Submit
+of the same task is refused too (409); the other tasks can still be handed in until the deadline, and a
 task not handed in by then earns nothing. Submit uses **none of the student's
 hourly runs** (so a student who practised with every run can still submit), and
 when the server is busy it **waits for a free place** (up to 2 minutes) rather
@@ -404,7 +408,18 @@ the machine that runs the backend, not for browsers) and pull the images once:
 ```bash
 docker pull python:3.12-slim
 docker pull ruby:3.3-slim
+docker pull eclipse-temurin:21-jdk
+docker pull node:20-slim
+docker pull gcc:13
+docker pull php:8.3-cli
+docker pull golang:1.22
 ```
+
+Python, Ruby, Java, JavaScript, C, C++, PHP and Go can be run. C, C++ and Go are compiled first, inside
+the same container; a Go test is given up to 90 extra seconds to build, since the standard library is built
+from scratch each time. A program that does not compile is shown to the student as
+"Compiler error. Error on line N.", and one that crashes while running as
+"Runtime error. Error on line N.", and nothing else.
 
 Without it, students see "Running code is not available right now." and
 instructors see "Code execution is off. Set CODE_SANDBOX=docker...". Each test
@@ -418,7 +433,8 @@ start a test container (for example the image was never pulled and there is no
 internet), the tests count as *not run*, never as failed, so no mark of 0 is
 saved by mistake. Settings: `CODE_SANDBOX`,
 `CODE_TEST_TIMEOUT`, `CODE_SANDBOX_IMAGE`, `CODE_SANDBOX_RUBY_IMAGE`,
-`CODE_SAMPLE_RUNS_PER_HOUR`, `CODE_SAMPLE_MAX_PARALLEL` (see `.env.example`).
+`CODE_SANDBOX_JAVA_IMAGE`, `CODE_SANDBOX_NODE_IMAGE`, `CODE_SANDBOX_GCC_IMAGE`,
+`CODE_SANDBOX_PHP_IMAGE`, `CODE_SANDBOX_GO_IMAGE`, `CODE_SAMPLE_RUNS_PER_HOUR`, `CODE_SAMPLE_MAX_PARALLEL` (see `.env.example`).
 
 ### Token code similarity (Winnowing)
 
@@ -773,8 +789,8 @@ rejection), covering the same flow the automated backend tests cover.
   measures only what the tests check, not code quality, style or a report. A
   student's mark is saved when they submit; marking again after a test case
   changes is done one submission at a time ("Mark all" for a class is not
-  built). A submitted challenge is final, and an instructor cannot reopen it
-  for a student (not built). Marking a Submit waits at most 2 minutes for a free
+  built). A submitted challenge cannot be edited; the student can delete it and do it
+  again while it is open, and an instructor cannot reopen it for a student (not built). Marking a Submit waits at most 2 minutes for a free
   place when many students submit at once; after that the code is kept
   unmarked. The Run limits reset when the backend restarts. The editor is a
   plain code box, without syntax colouring.

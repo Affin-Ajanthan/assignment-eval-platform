@@ -6,7 +6,7 @@ import { combineLocal, splitLocal } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
 import AutoGrowTextarea from "@/components/AutoGrowTextarea";
 import RichTextEditor from "@/components/instructor/RichTextEditor";
-import { CODE_LANGUAGES, CodeLanguageId, languageNames } from "@/lib/codeLanguages";
+import { CODE_LANGUAGES, CodeLanguageId, languageNames, RUNNABLE_LANGUAGES } from "@/lib/codeLanguages";
 import QuestionsEditor, {
   emptyQuestionRow,
   QuestionRow,
@@ -307,7 +307,8 @@ export default function AssignmentForm({
             Programming language <span className="font-normal text-gray-500">(optional)</span>
           </legend>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-            {CODE_LANGUAGES.map((l) => (
+            {/* A code challenge offers only the languages the server can run. */}
+            {CODE_LANGUAGES.filter((l) => form.kind !== "code_challenge" || RUNNABLE_LANGUAGES.includes(l.id)).map((l) => (
               <label key={l.id} className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -335,8 +336,8 @@ export default function AssignmentForm({
           </p>
           {form.kind === "code_challenge" && (
             <p className="mt-1 text-xs text-gray-500" data-testid="runnable-languages-note">
-              A code challenge can run Python, Ruby, Java, JavaScript, C and C++. With none ticked, students choose
-              among those six; the other languages cannot be run yet.
+              A code challenge can run Python, Ruby, Java, JavaScript, C, C++, PHP and Go. With none ticked, students
+              choose among those eight; the other languages cannot be run yet.
             </p>
           )}
         </fieldset>

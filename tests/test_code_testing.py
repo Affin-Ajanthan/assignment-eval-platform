@@ -105,9 +105,9 @@ def test_several_files_need_a_conventional_name_or_an_explicit_choice(tmp_path):
 
 def test_no_runnable_file_and_hidden_or_cache_folders(tmp_path):
     _files(tmp_path, "Program.cs", "__MACOSX/x.py", ".hidden/y.py", "__pycache__/z.py")
-    with pytest.raises(ct.CodeTestError, match=r"No Python, Ruby, Java, JavaScript, C or C\+\+ file"):
+    with pytest.raises(ct.CodeTestError, match=r"No Python, Ruby, Java, JavaScript, C, C\+\+, PHP or Go file"):
         ct.pick_main_file(tmp_path)
-    with pytest.raises(ct.CodeTestError, match=r"Python, Ruby, Java, JavaScript, C or C\+\+ programs only"):
+    with pytest.raises(ct.CodeTestError, match=r"Python, Ruby, Java, JavaScript, C, C\+\+, PHP or Go programs only"):
         ct.language_of_file("Program.cs")
     assert ct.language_of_file("a/b.rb").id == "ruby"
 
@@ -115,6 +115,7 @@ def test_no_runnable_file_and_hidden_or_cache_folders(tmp_path):
 def test_java_and_javascript_files_are_runnable_and_found_like_the_others(tmp_path):
     assert ct.language_of_file("src/Main.java").id == "java"
     assert ct.language_of_file("app.JS").id == "javascript"
+    assert (ct.language_of_file("index.php").id, ct.language_of_file("cmd/Main.GO").id) == ("php", "go")
     assert (ct.language_of_file("a/main.c").id, ct.language_of_file("main.cpp").id, ct.language_of_file("x.cc").id) == (
         "c", "cpp", "cpp")
     with pytest.raises(ct.CodeTestError, match="none of them"):
@@ -184,6 +185,42 @@ def test_javascript_runs_with_node_and_the_plain_limits(tmp_path):
     assert cmd[-5:] == ["sh", ".", "7", "node", "main.js"]
 
 
+def test_php_runs_with_errors_sent_to_stderr_so_they_never_pass_for_the_answer(tmp_path):
+    php = ct.LANGUAGES["php"]
+    cmd = ct.build_test_command("n1", tmp_path, "src/main.php", php, 7)
+    pairs = {cmd[i]: cmd[i + 1] for i in range(len(cmd) - 1)}
+    assert php.image in cmd and pairs["--pids-limit"] == "64"
+    assert cmd[-6:] == ["sh", "src", "7", "php", "main.php", "-ddisplay_errors=stderr"]  # the option is $5
+    script = cmd[cmd.index("-c") + 1]
+    assert script == ct._SCRIPT and "php" not in script and "main.php" not in script
+    # The option is given to the interpreter before the file, and only when there is one.
+    assert script.index('${5:+"$5"}') < script.index('"$4"')
+    assert "/run:rw,size=64m,mode=1777" in cmd and ",exec" not in " ".join(cmd)
+
+
+def test_go_is_built_first_in_a_scratch_folder_that_may_run_programs_with_room_to_compile(tmp_path):
+    go = ct.LANGUAGES["go"]
+    cmd = ct.build_test_command("n1", tmp_path, "src/main.go", go, 7)
+    pairs = {cmd[i]: cmd[i + 1] for i in range(len(cmd) - 1)}
+    assert go.image in cmd and pairs["--pids-limit"] == "128" and pairs["--memory"] == "256m"
+    assert cmd[-5:] == ["sh", "src", "7", "go", "main.go"]               # no option after the file
+    script = cmd[cmd.index("-c") + 1]
+    assert script == ct._GO_SCRIPT and 'build -o /run/prog "$4"' in script and 'exec timeout "$2" /run/prog' in script
+    assert "main.go" not in script                                       # still only an argument
+    assert "/run:rw,size=64m,mode=1777,exec" in cmd                      # the built program is run from there
+    env = {a.split("=", 1)[0]: a.split("=", 1)[1] for a in cmd if "=" in a and cmd[cmd.index(a) - 1] == "-e"}
+    assert env["GOCACHE"].startswith("/tmp/") and env["HOME"] == "/tmp" and env["CGO_ENABLED"] == "0"
+    assert cmd.index("GOCACHE=/tmp/gocache") < cmd.index(go.image)       # options of docker run, not of the program
+
+
+def test_a_go_test_is_given_the_time_to_build_before_docker_is_given_up_on(tmp_path):
+    _files(tmp_path, "main.go")
+    docker = FakeDocker({"hang\n": subprocess.TimeoutExpired("docker", 125)})
+    result = ct.run_tests(tmp_path, [_test(1, "x", input="hang")], runner=docker, timeout=5).results[0]
+    assert result.status == "timeout" and "No result within 125 seconds" in result.stderr   # 5 + 90 to build + 30
+    assert docker.calls[0][1] == 125
+
+
 # --------------------------------------------------------------------------
 # Running the tests (fake Docker)
 # --------------------------------------------------------------------------
@@ -221,8 +258,9 @@ def test_each_test_gets_its_input_and_is_marked_by_its_outcome(tmp_path):
 
 
 @pytest.mark.parametrize("filename,language", [
-    ("main.java", "java"), ("main.js", "javascript"), ("main.c", "c"), ("main.cpp", "cpp")])
-def test_java_javascript_c_and_cpp_tests_are_run_and_marked_like_python_ones(tmp_path, filename, language):
+    ("main.java", "java"), ("main.js", "javascript"), ("main.c", "c"), ("main.cpp", "cpp"),
+    ("main.php", "php"), ("main.go", "go")])
+def test_every_other_language_is_run_and_marked_like_python(tmp_path, filename, language):
     _files(tmp_path, filename)
     docker = FakeDocker({"21\n": (0, "42\n", ""), "1\n": (0, "3\n", ""), "boom\n": (1, "", "boom")})
     tests = [_test(1, "42", input="21"), _test(2, "2", input="1"), _test(3, "x", input="boom")]
@@ -346,6 +384,10 @@ def test_a_typed_answer_is_saved_as_main_for_one_question_and_by_number_for_seve
     assert ct.answer_filename(2, 1, "javascript") == "q1.js"
     assert ct.answer_filename(1, 1, "c") == "main.c"
     assert ct.answer_filename(3, 3, "cpp") == "q3.cpp"
+    assert ct.answer_filename(1, 1, "php") == "main.php"
+    assert ct.answer_filename(2, 2, "php") == "q2.php"
+    assert ct.answer_filename(1, 1, "go") == "main.go"
+    assert ct.answer_filename(3, 1, "go") == "q1.go"
 
 
 def test_the_file_that_answers_a_question_is_found_by_its_number(tmp_path):
@@ -360,11 +402,14 @@ def test_the_file_that_answers_a_question_is_found_by_its_number(tmp_path):
     assert ct.answer_file(tmp_path, 4) == ""
     (tmp_path / "q4.java").write_text("class Main {}")
     (tmp_path / "q5.js").write_text("console.log(5)")
-    (tmp_path / "q6.go").write_text("package main")
+    (tmp_path / "q6.cs").write_text("class Program {}")
     (tmp_path / "q7.c").write_text("int main(void) { return 0; }")
     (tmp_path / "q8.cpp").write_text("int main() { return 0; }")
+    (tmp_path / "q9.php").write_text("<?php echo 9;")
+    (tmp_path / "q11.go").write_text("package main")
     assert (ct.answer_file(tmp_path, 4), ct.answer_file(tmp_path, 5), ct.answer_file(tmp_path, 6)) == ("q4.java", "q5.js", "")
     assert (ct.answer_file(tmp_path, 7), ct.answer_file(tmp_path, 8)) == ("q7.c", "q8.cpp")
+    assert (ct.answer_file(tmp_path, 9), ct.answer_file(tmp_path, 11)) == ("q9.php", "q11.go")
 
 
 def test_each_question_runs_its_own_file_and_its_own_tests(tmp_path, monkeypatch):
@@ -666,6 +711,45 @@ int main() {
 """
 
 
+PHP_PROGRAM = """\
+<?php
+$cmd = trim(fgets(STDIN));
+if ($cmd === "loop") {
+    while (true) { }
+} elseif ($cmd === "crash") {
+    throw new Exception("boom");
+} else {
+    echo intval($cmd) * 2, "\\n";
+}
+"""
+
+GO_PROGRAM = """\
+package main
+
+import (
+\t"bufio"
+\t"fmt"
+\t"os"
+\t"strconv"
+\t"strings"
+)
+
+func main() {
+\tline, _ := bufio.NewReader(os.Stdin).ReadString('\\n')
+\tcmd := strings.TrimSpace(line)
+\tswitch cmd {
+\tcase "loop":
+\t\tfor {
+\t\t}
+\tcase "crash":
+\t\tpanic("boom")
+\t}
+\tn, _ := strconv.Atoi(cmd)
+\tfmt.Println(n * 2)
+}
+"""
+
+
 def _skip_without_image(language_id):
     """Skip a slow test when Docker is off or the language's image has not been pulled."""
     if not ct._docker_ready(ct._docker_runner):
@@ -693,14 +777,14 @@ def test_real_docker_runs_java_and_javascript_and_reports_the_error_line(
     assert run.language == language_id
     assert [(r.test_id, r.status) for r in run.results] == [
         (1, "passed"), (2, "failed"), (3, "error"), (4, "timeout")]
-    assert code_answers.compiler_error(run.results[2].stderr, language_id) == f"Compiler error. Error on line {crash_line}."
+    assert code_answers.error_message(run.results[2].stderr, language_id) == f"Runtime error. Error on line {crash_line}."
 
     bad = tmp_path / "bad"
     bad.mkdir()
     (bad / filename).write_text(broken)
     result = ct.run_tests(bad, [_test(1, "hi")], timeout=3).results[0]
     assert result.status == "error"
-    assert code_answers.compiler_error(result.stderr, language_id) == f"Compiler error. Error on line {syntax_line}."
+    assert code_answers.error_message(result.stderr, language_id) == f"Compiler error. Error on line {syntax_line}."
 
 
 @pytest.mark.slow
@@ -722,14 +806,42 @@ def test_real_docker_compiles_and_runs_c_and_cpp_and_reports_the_error_line(
         (1, "passed"), (2, "failed"), (3, "error"), (4, "timeout")]
     assert run.results[0].actual_output == "42"        # the compiler's messages never reach stdout
     # A crash that compiled has no line of the student's to name.
-    assert code_answers.compiler_error(run.results[2].stderr, language_id) == "Compiler error."
+    assert code_answers.error_message(run.results[2].stderr, language_id) == "Runtime error."
 
     bad = tmp_path / "bad"
     bad.mkdir()
     (bad / filename).write_text(broken)
     result = ct.run_tests(bad, [_test(1, "hi")], timeout=3).results[0]
     assert result.status == "error" and result.actual_output == ""
-    assert code_answers.compiler_error(result.stderr, language_id) == "Compiler error. Error on line 2."
+    assert code_answers.error_message(result.stderr, language_id) == "Compiler error. Error on line 2."
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("language_id,filename,program,broken,crash_line,syntax_line", [
+    ("php", "main.php", PHP_PROGRAM, "<?php\necho 'hi'\necho 'x';\n", 6, 3),
+    ("go", "main.go", GO_PROGRAM, 'package main\n\nimport "os"\n\nfunc main() {}\n', 19, 3),
+])
+def test_real_docker_runs_php_and_go_and_reports_the_error_line(
+        tmp_path, language_id, filename, program, broken, crash_line, syntax_line):
+    from app import code_answers
+
+    _skip_without_image(language_id)
+    (tmp_path / filename).write_text(program)
+    tests = [_test(1, "42", input="21"), _test(2, "99", input="1"), _test(3, "x", input="crash"),
+             _test(4, "x", input="loop")]
+    run = ct.run_tests(tmp_path, tests, timeout=3)
+    assert run.language == language_id
+    assert [(r.test_id, r.status) for r in run.results] == [
+        (1, "passed"), (2, "failed"), (3, "error"), (4, "timeout")]
+    assert run.results[0].actual_output == "42"        # no error text or build messages in the answer
+    assert code_answers.error_message(run.results[2].stderr, language_id) == f"Runtime error. Error on line {crash_line}."
+
+    bad = tmp_path / "bad"
+    bad.mkdir()
+    (bad / filename).write_text(broken)
+    result = ct.run_tests(bad, [_test(1, "hi")], timeout=3).results[0]
+    assert result.status == "error" and result.actual_output == ""
+    assert code_answers.error_message(result.stderr, language_id) == f"Compiler error. Error on line {syntax_line}."
 
 
 # --------------------------------------------------------------------------

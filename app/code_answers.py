@@ -84,10 +84,32 @@ _PHP_LINE = re.compile(r"\bin /run/\S*?\.php on line (\d+)")
 _GO_ERROR = re.compile(r"^(?:\./)?[^\s:]*\.go:(\d+):(?:\d+:)? ", re.MULTILINE)
 _GO_FRAME = re.compile(r"^\s+/run/\S*?\.go:(\d+)", re.MULTILINE)
 
+# What tells a program that never started (it does not compile or parse) from one that crashed while running.
+_GCC_FAILURE = re.compile(
+    r"^[^\s:]+\.(?:c|cc|cpp|cxx):\d+:(?:\d+:)? (?:fatal )?error|collect2: error|undefined reference to", re.MULTILINE)
+_COMPILE_FAILURE = {
+    "python": re.compile(r"^(?:SyntaxError|IndentationError|TabError)\b", re.MULTILINE),
+    "ruby": re.compile(r"syntax error|SyntaxError"),
+    "javascript": re.compile(r"^SyntaxError\b", re.MULTILINE),
+    "java": re.compile(r"^\S+\.java:\d+: error|error: compilation failed", re.MULTILINE),
+    "c": _GCC_FAILURE,
+    "cpp": _GCC_FAILURE,
+    "php": re.compile(r"\bParse error\b"),
+    "go": re.compile(r"^(?:# command-line-arguments|(?:\./)?[^\s:]*\.go:\d+:)", re.MULTILINE),
+}
 
-def compiler_error(stderr: str, language: str) -> str:
-    """What a student is told when their program crashed before it could give an answer: just that it
-    failed and on which line, never the traceback (which can show paths and the tester's own files).
+
+def did_not_compile(stderr: str, language: str) -> bool:
+    """Whether the program failed before it ran: a syntax error, or a compiler that refused the code."""
+    pattern = _COMPILE_FAILURE.get(language)
+    return bool(pattern and pattern.search(stderr))
+
+
+def error_message(stderr: str, language: str) -> str:
+    """What a student is told when their program failed before it could give an answer: "Compiler error." when
+    it never started (it does not compile or parse) and "Runtime error." when it crashed while running, each
+    with the line it went wrong on when that is known, never the traceback (which can show paths and the
+    tester's own files).
     The line is the one in the student's own file: the last Python frame outside the standard library,
     the first line Ruby names, the compile error or first own frame Java names, the line Node names, the first error gcc/g++ names
     (a program that compiled but crashed, say with a segfault, has none: the message then has no line), the first line PHP
@@ -115,13 +137,14 @@ def compiler_error(stderr: str, language: str) -> str:
     else:
         frames = [n for path, n in _PYTHON_FRAME.findall(stderr) if "/usr/" not in path and "/lib/" not in path]
         line = frames[-1] if frames else None
-    return f"Compiler error. Error on line {line}." if line else "Compiler error."
+    kind = "Compiler error" if did_not_compile(stderr, language) else "Runtime error"
+    return f"{kind}. Error on line {line}." if line else f"{kind}."
 
 
 def student_report(results: list, language: str) -> dict:
     """What a student may see of one question's run: how many test cases passed, and for each VISIBLE test
     that failed either its input with the expected and actual output (the program ran) or just "Compiler
-    error. Error on line N." (it crashed). A HIDDEN test that failed is only counted: its name, input and
+    error. Error on line N." (it did not compile) or "Runtime error. Error on line N." (it crashed). A HIDDEN test that failed is only counted: its name, input and
     expected output never leave the server. The keys are those of RunOut, bar `remaining_runs`."""
     failures: list[dict] = []
     visible_seen = hidden_failed = 0
@@ -131,7 +154,7 @@ def student_report(results: list, language: str) -> dict:
             if not r.passed:
                 # A wrong answer is shown as expected vs actual only; a crash as the compiler error alone; a
                 # timeout keeps its note (the time limit), which says nothing about the code.
-                error = compiler_error(r.stderr, language) if r.status == "error" else (
+                error = error_message(r.stderr, language) if r.status == "error" else (
                     r.stderr if r.status == "timeout" else "")
                 failures.append({"sample": visible_seen, "name": r.name, "status": r.status,
                                  "input": r.input, "expected_output": r.expected_output,

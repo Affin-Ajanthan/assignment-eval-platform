@@ -204,7 +204,7 @@ def test_a_visible_test_that_crashes_or_times_out_shows_its_error_but_hidden_err
     body = _run(_challenge(itok, subject, "Crashes", TESTS), stok).json()
     assert body["failures"] == [
         {"sample": 1, "name": "Doubles", "status": "error", "input": "21", "expected_output": "42", "actual_output": "",
-         "error": "Compiler error."},  # the traceback itself is never shown to the student
+         "error": "Runtime error."},  # the traceback itself is never shown to the student
         {"sample": 2, "name": "Wrong on purpose", "status": "timeout", "input": "1", "expected_output": "99",
          "actual_output": "partial", "error": "Time limit of 10 seconds exceeded."},
     ]
@@ -212,20 +212,22 @@ def test_a_visible_test_that_crashes_or_times_out_shows_its_error_but_hidden_err
     assert "secret" not in json.dumps(body) and "HIDDEN" not in json.dumps(body)  # the hidden test's error is not shown
 
 
-def test_a_crash_is_reported_as_a_compiler_error_with_its_line_and_nothing_else():
-    from app.code_answers import compiler_error
+def test_a_failure_is_reported_as_a_compiler_or_runtime_error_with_its_line_and_nothing_else():
+    from app.code_answers import error_message
 
     syntax = 'Traceback...\n  File "/run/main.py", line 3\n    print(\n         ^\nSyntaxError: \'(\' was never closed'
-    assert compiler_error(syntax, "python") == "Compiler error. Error on line 3."
+    assert error_message(syntax, "python") == "Compiler error. Error on line 3."
     # A crash further down: the last frame in the student's file counts, not one inside the standard library.
     nested = ('Traceback (most recent call last):\n  File "/run/main.py", line 9, in <module>\n    solve()\n'
               '  File "/run/main.py", line 5, in solve\n    json.loads(x)\n'
               '  File "/usr/lib/python3.12/json/__init__.py", line 346, in loads\nValueError: boom')
-    assert compiler_error(nested, "python") == "Compiler error. Error on line 5."
-    assert compiler_error("main.rb:4:in 'x': undefined local variable (NameError)\n\tfrom main.rb:8:in '<main>'",
-                          "ruby") == "Compiler error. Error on line 4."
-    assert compiler_error("something went wrong", "python") == "Compiler error."  # no line to point at
-    assert "out of memory" in compiler_error("Killed: probably out of memory (limit 256 MB).", "python")
+    assert error_message(nested, "python") == "Runtime error. Error on line 5."          # it ran, then crashed
+    assert error_message("main.rb:4:in 'x': undefined local variable (NameError)\n\tfrom main.rb:8:in '<main>'",
+                         "ruby") == "Runtime error. Error on line 4."
+    assert error_message("main.rb:2: syntax error, unexpected end-of-input (SyntaxError)", "ruby") == (
+        "Compiler error. Error on line 2.")
+    assert error_message("something went wrong", "python") == "Runtime error."  # no line to point at
+    assert "out of memory" in error_message("Killed: probably out of memory (limit 256 MB).", "python")
 
 
 def test_a_run_is_practice_only_it_creates_no_submission(fake):
@@ -244,8 +246,8 @@ def test_the_language_follows_the_assignment_and_is_checked(fake):
     python_asked = _run(ruby, stok, language="python")
     assert python_asked.status_code == 400 and "doesn't accept python" in python_asked.json()["detail"]
 
-    go = _challenge(itok, subject, "Go only", TESTS, code_languages=["go"])
-    assert "Python, Ruby, Java, JavaScript, C or C++ code only" in _run(go, stok).json()["detail"]
+    csharp = _challenge(itok, subject, "C# only", TESTS, code_languages=["csharp"])
+    assert "Python, Ruby, Java, JavaScript, C, C++, PHP or Go code only" in _run(csharp, stok).json()["detail"]
 
     either = _challenge(itok, subject, "Either", TESTS, code_languages=["python", "ruby"])
     assert _run(either, stok, language="ruby").status_code == 200 and fake.calls[-1]["file"] == "main.rb"
@@ -266,7 +268,7 @@ def test_java_and_javascript_challenges_run_and_save_their_answers_under_the_rig
     both = _challenge(itok, subject, "Java or JavaScript", TESTS, code_languages=["java", "javascript"])
     assert _run(both, stok, language="javascript").status_code == 200 and fake.calls[-1]["file"] == "main.js"
     assert _run(both, stok, language="java").status_code == 200 and fake.calls[-1]["file"] == "main.java"
-    assert _run(both, stok, language="php").status_code == 422          # not a language the endpoint knows
+    assert _run(both, stok, language="csharp").status_code == 422         # not a language the endpoint knows
 
 
 def test_each_task_can_be_handed_in_in_java_or_javascript_and_is_marked_on_its_own(fake):
@@ -429,7 +431,7 @@ def test_passing_every_test_case_earns_every_point(monkeypatch):
     assert _my_submission(assignment, stok)["final_mark"] == 8
 
 
-def test_a_submitted_code_challenge_is_final(fake):
+def test_a_submitted_code_challenge_cannot_be_changed_but_can_be_deleted_and_done_again(fake):
     subject, itok, stok = setup_subject_with_users(client)
     assignment = _challenge(itok, subject, "Final", TESTS)
     sub_id = _submit(assignment, stok).json()["submission_id"]
@@ -439,18 +441,24 @@ def test_a_submitted_code_challenge_is_final(fake):
     assert again.status_code == 409 and "already submitted" in again.json()["detail"]
     edit = client.put(f"/submissions/{sub_id}", files=upload(), headers=auth_headers(stok))
     assert edit.status_code == 409 and "can't be changed" in edit.json()["detail"]
-    assert client.delete(f"/submissions/{sub_id}", headers=auth_headers(stok)).status_code == 409
-    assert _my_submission(assignment, stok)["can_edit"] is False
-    assert len(client.get("/submissions", headers=auth_headers(stok)).json()) == 1  # still the one submission
+    mine = _my_submission(assignment, stok)
+    assert (mine["status"], mine["can_edit"], mine["can_delete"]) == ("graded", False, True)
 
-    # A challenge handed in as a plain file upload is final too (it just is not marked until the instructor does).
+    # Deleting it (it is marked from its tests, but no instructor graded it) lets the student start again.
+    assert client.delete(f"/submissions/{sub_id}", headers=auth_headers(stok)).status_code == 200
+    assert client.get("/submissions", headers=auth_headers(stok)).json() == []
+    assert client.get("/assignments", headers=auth_headers(stok)).json()[0]["my_submission"] is None
+    assert _submit(assignment, stok).status_code == 200                      # the challenge can be done again
+
+    # A challenge handed in as a plain file upload can be deleted too.
     other = new_student(client, subject["id"])
     posted = client.post("/submissions", data={"subject_id": subject["id"], "assignment_id": assignment["id"]},
                          files=upload(), headers=auth_headers(other))
     assert posted.status_code == 200, posted.text
-    assert _my_submission(assignment, other)["can_edit"] is False
+    mine = _my_submission(assignment, other)
+    assert (mine["can_edit"], mine["can_delete"]) == (False, True)
     assert client.put(f"/submissions/{posted.json()['id']}", files=upload(), headers=auth_headers(other)).status_code == 409
-    assert client.delete(f"/submissions/{posted.json()['id']}", headers=auth_headers(other)).status_code == 409
+    assert client.delete(f"/submissions/{posted.json()['id']}", headers=auth_headers(other)).status_code == 200
 
 
 def test_submitting_uses_none_of_the_hourly_runs_and_works_when_they_are_used_up(monkeypatch, fake):
@@ -844,7 +852,7 @@ def test_the_answer_is_checked_before_anything_is_saved(fake):
     assert post({"question": 3, "code": "x"}).status_code == 404      # no such question
     assert post({"question": 1, "code": ""}).status_code == 422
     assert post({"question": 0, "code": "x"}).status_code == 422
-    assert post({"question": 1, "code": "x", "language": "go"}).status_code == 422  # a language tests cannot run
+    assert post({"question": 1, "code": "x", "language": "csharp"}).status_code == 422  # a language tests cannot run
     refused = post({"question": 1, "code": "x", "language": "java"})  # one they can, but this assignment is Python only
     assert refused.status_code == 400 and "doesn't accept java" in refused.json()["detail"]
     wrong = post({"question": 1, "code": "x", "language": "ruby"})    # a language the assignment does not accept
@@ -1201,3 +1209,20 @@ def test_c_and_cpp_challenges_run_and_save_their_answers_under_the_right_file_na
     assert _submit_question(assignment, stok, 1, "int main(void) { return 0; }", language="c").status_code == 200
     assert _submit_question(assignment, stok, 2, "int main() {}", language="cpp").status_code == 200
     assert [c["file"] for c in fake.calls[-2:]] == ["q1.c", "q2.cpp"]
+
+
+def test_php_and_go_challenges_run_and_save_their_answers_under_the_right_file_names(fake):
+    subject, itok, stok = setup_subject_with_users(client)
+    php = _challenge(itok, subject, "PHP only", TESTS, code_languages=["php"])
+    assert _run(php, stok, code="<?php echo 42;").status_code == 200
+    assert fake.calls[-1]["file"] == "main.php"
+    go = _challenge(itok, subject, "Go only", TESTS, code_languages=["go"])
+    assert _run(go, stok, code="package main\nfunc main() {}").status_code == 200
+    assert fake.calls[-1]["file"] == "main.go"
+    wrong = _run(php, stok, language="go")
+    assert wrong.status_code == 400 and "doesn't accept go" in wrong.json()["detail"]
+
+    assignment = _two_questions(itok, subject, "PHP and Go", code_languages=["php", "go"])
+    assert _submit_question(assignment, stok, 1, "<?php echo 1;", language="php").status_code == 200
+    assert _submit_question(assignment, stok, 2, "package main\nfunc main() {}", language="go").status_code == 200
+    assert [c["file"] for c in fake.calls[-2:]] == ["q1.php", "q2.go"]

@@ -154,8 +154,10 @@ export interface MySubmission {
   criterion_marks: { name: string; score: number; max_points: number }[];
   /** The instructor's feedback for the student (never the internal comments). */
   feedback: string | null;
-  /** Open and not graded yet; never true for a code challenge, which is final once submitted. */
+  /** Open and not graded yet; never true for a code challenge, whose code cannot be replaced once submitted. */
   can_edit: boolean;
+  /** Open and not graded by an instructor: a code challenge can be deleted and done again, other work until graded. */
+  can_delete: boolean;
   /** A code challenge is handed in one task at a time: how many tasks have been (0 for other assignments). */
   questions_submitted: number;
 }
@@ -201,7 +203,8 @@ export interface CodeRunFailure {
   input?: string;
   expected_output: string;
   actual_output: string;
-  /** "Compiler error. Error on line N." for a crash (no traceback), or the time-limit note; "" for a wrong answer. */
+  /** "Compiler error. Error on line N." (did not compile) or "Runtime error. Error on line N." (crashed), no
+   *  traceback; or the time-limit note; "" for a wrong answer. */
   error: string;
 }
 

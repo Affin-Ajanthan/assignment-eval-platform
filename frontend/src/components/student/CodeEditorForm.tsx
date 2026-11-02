@@ -7,11 +7,9 @@ import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import Message, { MessageState } from "@/components/Message";
 import RichText from "@/components/RichText";
 import LineNumberedTextarea from "@/components/student/LineNumberedTextarea";
-import { CodeLanguageId, languagesFor } from "@/lib/codeLanguages";
+import { CodeLanguageId, languagesFor, RUNNABLE_LANGUAGES } from "@/lib/codeLanguages";
 import { taskName } from "@/lib/tasks";
 
-/** The languages the server can run tests for: must match LANGUAGES in app/evaluator/code_testing.py. */
-const RUNNABLE: CodeLanguageId[] = ["python", "ruby", "java", "javascript", "c", "cpp", "php", "go"];
 const MAX_CODE_CHARS = 50_000; // must match MAX_CODE_CHARS in app/routers/student_runs.py
 const INDENT: Partial<Record<CodeLanguageId, string>> = {
   python: "    ",
@@ -49,7 +47,7 @@ export function sampleLabel(name: string, index: number): string {
 
 /** The languages a code challenge can be written in on the page: its own, if the server can run them. */
 export function editorLanguages(assignment: StudentAssignment) {
-  return languagesFor(assignment.code_languages).filter((l) => RUNNABLE.includes(l.id));
+  return languagesFor(assignment.code_languages).filter((l) => RUNNABLE_LANGUAGES.includes(l.id));
 }
 
 /**
@@ -90,7 +88,7 @@ export function CodeRunResults({ run, submitted = false }: { run: CodeRun; submi
             // The program crashed, so there is no output to compare: only where it went wrong. (A result saved
             // before this was how it is shown holds the whole traceback in `error`: that is not printed.)
             <p className="mt-1 text-sm font-semibold text-red-800" data-testid="compiler-error">
-              {f.error.startsWith("Compiler error") ? f.error : "Compiler error."}
+              {/^(Compiler|Runtime) error|^The program ran out of memory/.test(f.error) ? f.error : "Runtime error."}
             </p>
           ) : (
             <>

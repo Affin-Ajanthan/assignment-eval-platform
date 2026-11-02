@@ -200,7 +200,7 @@ class RunFailureOut(BaseModel):
     input: str = ""
     expected_output: str
     actual_output: str
-    error: str = ""  # "Compiler error. Error on line N." for a crash, or the time-limit note; "" for a wrong answer
+    error: str = ""  # "Compiler error. ..." / "Runtime error. Error on line N." for a crash, or the time-limit note; "" for a wrong answer
 
 
 class RunOut(BaseModel):

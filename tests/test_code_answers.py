@@ -75,7 +75,7 @@ def test_a_wrong_answer_shows_its_input_expected_and_actual_but_a_hidden_input_n
     wrong, crash = report["failures"]
     assert (wrong["input"], wrong["expected_output"], wrong["actual_output"], wrong["error"]) == (
         "input of shown wrong", "want", "got", "")
-    assert (crash["status"], crash["error"]) == ("error", "Compiler error. Error on line 7.")
+    assert (crash["status"], crash["error"]) == ("error", "Runtime error. Error on line 7.")
     assert "input of hidden" not in json.dumps(report) and report["hidden_failed"] == 1
 
 
@@ -190,31 +190,31 @@ Error: boom
 
 
 def test_java_is_told_the_line_of_the_compile_error_or_of_its_own_frame_in_a_crash():
-    assert code_answers.compiler_error(JAVA_DOES_NOT_COMPILE, "java") == "Compiler error. Error on line 7."
+    assert code_answers.error_message(JAVA_DOES_NOT_COMPILE, "java") == "Compiler error. Error on line 7."
     # The JDK's own frames (java.base/..., jdk.compiler/...) are skipped: the line is the student's.
-    assert code_answers.compiler_error(JAVA_EXCEPTION, "java") == "Compiler error. Error on line 6."
-    assert code_answers.compiler_error("Exception in thread \"main\" java.lang.Error", "java") == "Compiler error."
-    assert code_answers.compiler_error("java.lang.OutOfMemoryError: Java heap space", "java") == (
+    assert code_answers.error_message(JAVA_EXCEPTION, "java") == "Runtime error. Error on line 6."
+    assert code_answers.error_message("Exception in thread \"main\" java.lang.Error", "java") == "Runtime error."
+    assert code_answers.error_message("java.lang.OutOfMemoryError: Java heap space", "java") == (
         "The program ran out of memory.")
 
 
 def test_javascript_is_told_the_line_node_names_in_the_students_own_file():
-    assert code_answers.compiler_error(NODE_SYNTAX_ERROR, "javascript") == "Compiler error. Error on line 2."
-    assert code_answers.compiler_error(NODE_EXCEPTION, "javascript") == "Compiler error. Error on line 5."
+    assert code_answers.error_message(NODE_SYNTAX_ERROR, "javascript") == "Compiler error. Error on line 2."
+    assert code_answers.error_message(NODE_EXCEPTION, "javascript") == "Runtime error. Error on line 5."
     only_node = "Error: x\n    at Module._compile (node:internal/modules/cjs/loader.js:1554:14)\n"
-    assert code_answers.compiler_error(only_node, "javascript") == "Compiler error."
-    assert code_answers.compiler_error("FATAL ERROR: JavaScript heap out of memory", "javascript") == (
+    assert code_answers.error_message(only_node, "javascript") == "Runtime error."
+    assert code_answers.error_message("FATAL ERROR: JavaScript heap out of memory", "javascript") == (
         "The program ran out of memory.")
 
 
-def test_a_java_crash_in_a_visible_test_shows_only_the_compiler_error_and_its_line():
+def test_a_java_crash_in_a_visible_test_shows_only_the_runtime_error_and_its_line():
     crash = ct.TestResult(test_id=1, name="t", visible=True, points=1, match="exact", status="error", passed=False,
                           expected_output="want", actual_output="partial", stderr=JAVA_EXCEPTION, input="x")
     report = code_answers.student_report([crash], "java")
     assert report["language"] == "java"
     assert report["failures"] == [{"sample": 1, "name": "t", "status": "error", "input": "x",
                                    "expected_output": "want", "actual_output": "",
-                                   "error": "Compiler error. Error on line 6."}]
+                                   "error": "Runtime error. Error on line 6."}]
     assert "java.base" not in json.dumps(report) and "NumberFormatException" not in json.dumps(report)
 
 
@@ -234,12 +234,68 @@ collect2: error: ld returned 1 exit status
 """
 
 
+PHP_PARSE_ERROR = """\
+PHP Parse error:  syntax error, unexpected token "echo", expecting "," or ";" in /run/main.php on line 3
+Parse error: syntax error, unexpected token "echo", expecting "," or ";" in /run/main.php on line 3
+"""
+
+PHP_EXCEPTION = """\
+PHP Fatal error:  Uncaught Exception: boom in /run/sub/main.php:6
+Stack trace:
+#0 {main}
+  thrown in /run/sub/main.php on line 6
+"""
+
+GO_DOES_NOT_BUILD = """\
+# command-line-arguments
+./main.go:3:8: "os" imported and not used
+./main.go:7:2: undefined: x
+"""
+
+GO_PANIC = """\
+panic: boom
+
+goroutine 1 [running]:
+main.helper(...)
+\t/run/main.go:12
+main.main()
+\t/run/main.go:19 +0x1d
+"""
+
+GO_RUNTIME_PANIC = """\
+panic: runtime error: index out of range [3] with length 3
+
+goroutine 1 [running]:
+main.main()
+\t/run/sub/main.go:9 +0x1d
+exit status 2
+"""
+
+
+def test_php_is_told_the_line_php_names_in_the_students_own_file():
+    assert code_answers.error_message(PHP_PARSE_ERROR, "php") == "Compiler error. Error on line 3."
+    assert code_answers.error_message(PHP_EXCEPTION, "php") == "Runtime error. Error on line 6."
+    assert code_answers.error_message("PHP Fatal error: x in /usr/local/lib/php/x.php on line 4", "php") == (
+        "Runtime error.")                                                      # not a file of the student's
+    assert code_answers.error_message("", "php") == "Runtime error."
+
+
+def test_go_is_told_the_first_build_error_or_the_first_own_frame_of_a_panic():
+    assert code_answers.error_message(GO_DOES_NOT_BUILD, "go") == "Compiler error. Error on line 3."
+    assert code_answers.error_message(GO_PANIC, "go") == "Runtime error. Error on line 12."
+    assert code_answers.error_message(GO_RUNTIME_PANIC, "go") == "Runtime error. Error on line 9."
+    only_runtime = "panic: boom\n\ngoroutine 1 [running]:\nruntime.gopanic(...)\n\t/usr/local/go/src/runtime/panic.go:770\n"
+    assert code_answers.error_message(only_runtime, "go") == "Runtime error."    # nothing of the student's
+    assert code_answers.error_message("fatal error: runtime: out of memory", "go") == "The program ran out of memory."
+
+
 def test_c_and_cpp_are_told_the_line_of_the_first_compiler_error_never_a_warning():
-    assert code_answers.compiler_error(GCC_DOES_NOT_COMPILE, "c") == "Compiler error. Error on line 4."
-    assert code_answers.compiler_error(GCC_MISSING_HEADER, "cpp") == "Compiler error. Error on line 1."
-    # A linker error, a crash with no message and a compile that only warned have no line of the student's.
-    assert code_answers.compiler_error(GCC_LINKER_ERROR, "c") == "Compiler error."
-    assert code_answers.compiler_error("", "cpp") == "Compiler error."
-    assert code_answers.compiler_error("main.c:3:5: warning: unused variable 'x'\n", "c") == "Compiler error."
-    assert code_answers.compiler_error("terminate called after throwing an instance of 'int'", "cpp") == (
-        "Compiler error.")
+    assert code_answers.error_message(GCC_DOES_NOT_COMPILE, "c") == "Compiler error. Error on line 4."
+    assert code_answers.error_message(GCC_MISSING_HEADER, "cpp") == "Compiler error. Error on line 1."
+    # A linker error has no line of the student's, but it is still a compiler error.
+    assert code_answers.error_message(GCC_LINKER_ERROR, "c") == "Compiler error."
+    # A crash with no message, and a program that only warned, ran: they are runtime errors with no line.
+    assert code_answers.error_message("", "cpp") == "Runtime error."
+    assert code_answers.error_message("main.c:3:5: warning: unused variable 'x'\n", "c") == "Runtime error."
+    assert code_answers.error_message("terminate called after throwing an instance of 'int'", "cpp") == (
+        "Runtime error.")
