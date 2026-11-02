@@ -124,6 +124,8 @@ export interface CodeQuestion {
   statement: string;
   /** Code the student's editor starts with for this task ("" = an empty box); missing from an older server. */
   starter_code?: string;
+  /** Seconds the student has from opening this task (0 or missing: no limit); missing from an older server. */
+  time_limit_seconds?: number;
 }
 
 /** One test for submitted code: `input` goes to standard input, the output is compared with `expected_output`. */
@@ -154,8 +156,10 @@ export interface MySubmission {
   criterion_marks: { name: string; score: number; max_points: number }[];
   /** The instructor's feedback for the student (never the internal comments). */
   feedback: string | null;
-  /** Open and not graded yet; never true for a code challenge, which is final once submitted. */
+  /** Open and not graded yet; never true for a code challenge, whose code cannot be replaced once submitted. */
   can_edit: boolean;
+  /** Open and not graded by an instructor: a code challenge can be deleted and done again, other work until graded. */
+  can_delete: boolean;
   /** A code challenge is handed in one task at a time: how many tasks have been (0 for other assignments). */
   questions_submitted: number;
 }
@@ -201,7 +205,8 @@ export interface CodeRunFailure {
   input?: string;
   expected_output: string;
   actual_output: string;
-  /** "Compiler error. Error on line N." for a crash (no traceback), or the time-limit note; "" for a wrong answer. */
+  /** "Compiler error. Error on line N." (did not compile) or "Runtime error. Error on line N." (crashed), no
+   *  traceback; or the time-limit note; "" for a wrong answer. */
   error: string;
 }
 
@@ -239,6 +244,12 @@ export interface CodeAnswer {
   /** What the answer earned: points of its test cases passed out of all its points. Null before the marks release date, or when not marked. */
   earned: number | null;
   total: number | null;
+  /** The task's time limit in seconds (0: none). */
+  time_limit_seconds: number;
+  /** A timed task: the student has opened it, which started the clock on the server. */
+  started: boolean;
+  /** A timed task opened but not handed in: seconds still left. Null otherwise. */
+  seconds_left: number | null;
 }
 
 /**

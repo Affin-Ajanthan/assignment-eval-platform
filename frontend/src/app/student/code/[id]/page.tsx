@@ -7,6 +7,7 @@ import { apiFetch, CodeWork, StudentAssignment } from "@/lib/api";
 import { useRequireRole } from "@/lib/useRequireRole";
 import { formatDateTime } from "@/lib/datetime";
 import { languageNames } from "@/lib/codeLanguages";
+import { taskName, timedTasks, timeLimitText } from "@/lib/tasks";
 import AccountBar from "@/components/AccountBar";
 import Badge from "@/components/Badge";
 import RichText from "@/components/RichText";
@@ -101,6 +102,15 @@ export default function CodeChallengePage() {
           // the instructions. With a password, pressing the button asks for it.
           <div className="mt-4" data-testid="do-task">
             {taskCount > 1 && <p className="mb-2 text-sm text-gray-700">This assignment has {taskCount} tasks.</p>}
+            {timedTasks(assignment.questions).length > 0 && (
+              <p className="mb-2 text-sm font-semibold text-blue-800" data-testid="time-limit-note">
+                ⏱ Time limits:{" "}
+                {timedTasks(assignment.questions)
+                  .map((q) => `${taskCount > 1 ? `${taskName(q)}: ` : ""}${timeLimitText(q.time_limit_seconds ?? 0)}`)
+                  .join(" · ")}
+                . A task&apos;s clock starts when you open it.
+              </p>
+            )}
             {assignment.tasks_in_order && taskCount > 1 && (
               <p className="mb-2 text-sm text-gray-700">The tasks are done in order: each one after the one before it.</p>
             )}

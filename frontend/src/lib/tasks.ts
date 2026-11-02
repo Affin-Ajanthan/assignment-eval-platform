@@ -13,6 +13,21 @@ export function ownTitle(title: string): string {
   return GENERATED_TITLE.test(trimmed) ? "" : trimmed;
 }
 
+/** A task's time limit in words: "10 minutes", "1 minute 30 seconds", "45 seconds". */
+export function timeLimitText(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  const parts = [];
+  if (m > 0) parts.push(`${m} minute${m === 1 ? "" : "s"}`);
+  if (s > 0) parts.push(`${s} second${s === 1 ? "" : "s"}`);
+  return parts.join(" ");
+}
+
+/** The tasks of a challenge that have a time limit. */
+export function timedTasks(questions: Pick<CodeQuestion, "id" | "title" | "time_limit_seconds">[] | undefined) {
+  return (questions ?? []).filter((q) => (q.time_limit_seconds ?? 0) > 0);
+}
+
 /** "Task 2: Triple it", or just "Task 2" for a task without a title of its own. */
 export function taskName(q: Pick<CodeQuestion, "id" | "title">): string {
   const title = ownTitle(q.title);

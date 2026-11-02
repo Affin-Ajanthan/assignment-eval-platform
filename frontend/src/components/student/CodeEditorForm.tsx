@@ -1,17 +1,15 @@
 "use client";
 
-import { KeyboardEvent, useRef, useState } from "react";
+import { KeyboardEvent, useEffect, useRef, useState } from "react";
 import { apiFetch, CodeAnswer, CodeQuestion, CodeRun, CodeWork, StudentAssignment } from "@/lib/api";
 import { formatDateTime, formatMark } from "@/lib/datetime";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import Message, { MessageState } from "@/components/Message";
 import RichText from "@/components/RichText";
 import LineNumberedTextarea from "@/components/student/LineNumberedTextarea";
-import { CodeLanguageId, languagesFor } from "@/lib/codeLanguages";
-import { taskName } from "@/lib/tasks";
+import { CodeLanguageId, languagesFor, RUNNABLE_LANGUAGES } from "@/lib/codeLanguages";
+import { taskName, timeLimitText } from "@/lib/tasks";
 
-/** The languages the server can run tests for: must match LANGUAGES in app/evaluator/code_testing.py. */
-const RUNNABLE: CodeLanguageId[] = ["python", "ruby", "java", "javascript", "c", "cpp"];
 const MAX_CODE_CHARS = 50_000; // must match MAX_CODE_CHARS in app/routers/student_runs.py
 const INDENT: Partial<Record<CodeLanguageId, string>> = {
   python: "    ",
@@ -20,6 +18,8 @@ const INDENT: Partial<Record<CodeLanguageId, string>> = {
   javascript: "  ",
   c: "    ",
   cpp: "    ",
+  php: "    ",
+  go: "\t", // gofmt indents with a tab
 };
 const PLACEHOLDER: Partial<Record<CodeLanguageId, string>> = {
   python: "# Read the input with input() and print the answer with print()",
@@ -28,6 +28,8 @@ const PLACEHOLDER: Partial<Record<CodeLanguageId, string>> = {
   javascript: "// Read the input with require('fs').readFileSync(0, 'utf8') and print the answer with console.log",
   c: "// Read the input with scanf and print the answer with printf. Put it in int main(void).",
   cpp: "// Read the input with std::cin and print the answer with std::cout. Put it in int main().",
+  php: "// Start the file with <?php. Read the input with fgets(STDIN) and print the answer with echo.",
+  go: "// Start with package main and import \"fmt\". Read the input with fmt.Scan and print the answer with fmt.Println. Put it in func main().",
 };
 
 const pre =
@@ -45,7 +47,7 @@ export function sampleLabel(name: string, index: number): string {
 
 /** The languages a code challenge can be written in on the page: its own, if the server can run them. */
 export function editorLanguages(assignment: StudentAssignment) {
-  return languagesFor(assignment.code_languages).filter((l) => RUNNABLE.includes(l.id));
+  return languagesFor(assignment.code_languages).filter((l) => RUNNABLE_LANGUAGES.includes(l.id));
 }
 
 /**
@@ -86,7 +88,7 @@ export function CodeRunResults({ run, submitted = false }: { run: CodeRun; submi
             // The program crashed, so there is no output to compare: only where it went wrong. (A result saved
             // before this was how it is shown holds the whole traceback in `error`: that is not printed.)
             <p className="mt-1 text-sm font-semibold text-red-800" data-testid="compiler-error">
-              {f.error.startsWith("Compiler error") ? f.error : "Compiler error."}
+              {/^(Compiler|Runtime) error|^The program ran out of memory/.test(f.error) ? f.error : "Runtime error."}
             </p>
           ) : (
             <>
@@ -220,6 +222,27 @@ function HandedIn({
 /** What a student has typed for one task that is not handed in yet. */
 type Answer = { code: string; language: CodeLanguageId };
 
+/** The clock reading of a timed task: 9:05, or 1:02:03 from an hour up. */
+function clockText(seconds: number): string {
+  const s = Math.max(0, seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const rest = String(s % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${rest}` : `${m}:${rest}`;
+}
+
+/** When (this browser's clock, in ms) each timed task that is open and not handed in runs out, from the seconds the server says are left. */
+function endsFrom(work: CodeWork): Record<number, number> {
+  const now = Date.now();
+  const ends: Record<number, number> = {};
+  for (const r of work.questions) {
+    if (!r.submitted && r.seconds_left !== null && r.seconds_left !== undefined) ends[r.question] = now + r.seconds_left * 1000;
+  }
+  return ends;
+}
+
+const DRAFT_EVERY_MS = 8000; // how often the code of a timed task is saved on the server, if it changed
+
 /**
  * The code editor of a code challenge, on the challenge's own page (app/student/code/[id]), which the
  * student reaches with "Do assignment": the questions are shown here and nowhere before. The student does
@@ -256,6 +279,9 @@ export default function CodeEditorForm({
   const waitingFor = (id: number): number | null =>
     assignment.tasks_in_order && open ? (questions.find((q) => q.id < id && handedIn(q.id) === null)?.id ?? null) : null;
 
+  /** Tasks in order: the student only moves forward, after handing in the one they are on. */
+  const forwardOnly = open && assignment.tasks_in_order === true;
+
   const [answers, setAnswers] = useState<Record<number, Answer>>({});
   const [runs, setRuns] = useState<Record<number, CodeRun | null>>({}); // the last Run of each task
   const [current, setCurrent] = useState(() => (questions.find((q) => handedIn(q.id) === null) ?? questions[0]).id);
@@ -279,6 +305,64 @@ export default function CodeEditorForm({
   const handedInCount = questions.filter((q) => handedIn(q.id) !== null).length;
   const todo = questions.filter((q) => q.id !== question.id && handedIn(q.id) === null);
   const next = open ? (todo.find((q) => q.id > question.id) ?? todo[0] ?? null) : null;
+  // The task before and after this one in the list, to walk through the tasks both ways.
+  const position = questions.findIndex((q) => q.id === question.id);
+  const before = position > 0 ? questions[position - 1] : null;
+  const after = position < questions.length - 1 ? questions[position + 1] : null;
+  const afterWaiting = after ? waitingFor(after.id) !== null : false; // in order: not open until this one is handed in
+
+  // Tasks with a time limit. The clock runs on the server from the moment the student opens the task (Start); this
+  // page counts down the seconds the server said were left, saves the typed code now and then (so the server can
+  // hand it in if this page goes away), and hands the task in itself when the time is up.
+  const [ends, setEnds] = useState<Record<number, number>>(() => endsFrom(work));
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [starting, setStarting] = useState(false);
+  const autoHandedIn = useRef<Set<number>>(new Set()); // tasks this page has already handed in because time ran out
+  const draftSent = useRef<Record<number, string>>({}); // the code last saved on the server, per task
+  const limit = question.time_limit_seconds ?? 0;
+  const started = work.questions.find((r) => r.question === question.id)?.started ?? false;
+  const gated = open && limit > 0 && saved === null && !started && waitingFor(question.id) === null;
+  const live = questions.filter((q) => ends[q.id] !== undefined && handedIn(q.id) === null);
+  const secondsLeft = ends[question.id] !== undefined ? Math.max(0, Math.ceil((ends[question.id] - nowMs) / 1000)) : null;
+  const latest = useRef({ live: [] as number[], answerOf });
+  latest.current = { live: live.map((q) => q.id), answerOf };
+
+  useEffect(() => setEnds(endsFrom(work)), [work]); // the server's reading is the truth: take it after every answer
+  useEffect(() => {
+    if (live.length === 0) return;
+    setNowMs(Date.now());
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live.length > 0]);
+  useEffect(() => {
+    if (live.length === 0) return;
+    const timer = setInterval(() => {
+      for (const id of latest.current.live) {
+        const a = latest.current.answerOf(id);
+        const key = `${a.language}\n${a.code}`;
+        if (!a.code.trim() || draftSent.current[id] === key) continue;
+        draftSent.current[id] = key;
+        apiFetch(`/assignments/${assignment.id}/task-draft`, {
+          method: "PUT",
+          json: { question: id, code: a.code, language: a.language },
+        }).catch(() => {
+          delete draftSent.current[id]; // try again at the next round
+        });
+      }
+    }, DRAFT_EVERY_MS);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live.length > 0, assignment.id]);
+  useEffect(() => {
+    // Every render (cheap): a timed task whose time is up is handed in once, with the code in its box.
+    for (const q of live) {
+      if (nowMs >= ends[q.id] && !autoHandedIn.current.has(q.id)) {
+        autoHandedIn.current.add(q.id);
+        void submit(q.id, true);
+      }
+    }
+  });
 
   /** A change to a task's code or language makes its last Run's result stale: drop it. */
   function change(id: number, patch: Partial<Answer>) {
@@ -344,7 +428,7 @@ export default function CodeEditorForm({
       title: many ? `Submit ${taskName(question)}?` : "Submit your code?",
       message: lines.join("\n"),
       confirmLabel: "Submit",
-      onConfirm: submit,
+      onConfirm: () => submit(),
     });
   }
 
@@ -357,23 +441,48 @@ export default function CodeEditorForm({
     }
   }
 
-  async function submit() {
-    const id = question.id;
+  /** Hands in a task with the code in its box. `auto`: its time ran out, so it goes in as it stands, even empty. */
+  async function submit(id: number = question.id, auto = false) {
+    const { code: text, language: lang } = answerOf(id);
+    const name = taskName(questions.find((q) => q.id === id) ?? question);
     setConfirm(null);
     setMsg(null);
     setSubmitting(true);
     try {
       const updated = await apiFetch<CodeWork>(`/assignments/${assignment.id}/submit-code`, {
         method: "POST",
-        json: { question: id, code, language },
+        json: { question: id, code: auto && !text.trim() ? "\n" : text, language: lang },
       });
       setRuns((all) => ({ ...all, [id]: null }));
       onWork(updated);
+      if (auto) setMsg({ text: `Time is up for ${name}: your code was handed in as it was.`, kind: "success" });
     } catch (err) {
-      setMsg({ text: `Submission failed: ${err instanceof Error ? err.message : err}`, kind: "error" });
-      await reload();
+      await reload(); // the server may have handed it in itself
+      setMsg(
+        auto
+          ? { text: `Time is up for ${name}: it was handed in as it was.`, kind: "success" }
+          : { text: `Submission failed: ${err instanceof Error ? err.message : err}`, kind: "error" },
+      );
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  /** Opens a task that has a time limit: its clock starts on the server now, and the page gets the seconds it has. */
+  async function startTask() {
+    setStarting(true);
+    setMsg(null);
+    try {
+      onWork(
+        await apiFetch<CodeWork>(`/assignments/${assignment.id}/start-task`, {
+          method: "POST",
+          json: { question: question.id },
+        }),
+      );
+    } catch (err) {
+      setMsg({ text: err instanceof Error ? err.message : String(err), kind: "error" });
+    } finally {
+      setStarting(false);
     }
   }
 
@@ -428,6 +537,7 @@ export default function CodeEditorForm({
               // (the starting code alone does not count).
               const typedCode = answers[q.id]?.code.trim() ?? "";
               const waiting = waitingFor(q.id);
+              const behind = forwardOnly && q.id < question.id; // already passed: no way back
               const mark = waiting !== null
                 ? "🔒 "
                 : handedIn(q.id)
@@ -443,19 +553,28 @@ export default function CodeEditorForm({
                   id={`${editorId}-tab-${q.id}`}
                   aria-selected={selected}
                   aria-controls={`${editorId}-panel`}
-                  disabled={waiting !== null}
-                  title={waiting !== null ? `Hand in ${taskName(questions.find((x) => x.id === waiting) ?? q)} first` : undefined}
+                  disabled={waiting !== null || behind}
+                  title={
+                    waiting !== null
+                      ? `Hand in ${taskName(questions.find((x) => x.id === waiting) ?? q)} first`
+                      : behind
+                        ? "The tasks are done in order: you cannot go back"
+                        : undefined
+                  }
                   onClick={() => setCurrent(q.id)}
                   className={`-mb-px max-w-[16rem] truncate rounded-t-md border px-3 py-1.5 text-sm font-semibold ${
                     selected
                       ? "border-gray-200 border-b-white bg-white text-blue-700"
-                      : waiting !== null
+                      : waiting !== null || behind
                         ? "cursor-not-allowed border-transparent text-gray-400"
                         : "border-transparent text-gray-600 hover:text-gray-900"
                   }`}
                 >
                   {mark}
                   {taskName(q)}
+                  {(q.time_limit_seconds ?? 0) > 0 && (
+                    <span className="ml-1 text-xs font-normal">⏱ {clockText(q.time_limit_seconds ?? 0)}</span>
+                  )}
                 </button>
               );
             })}
@@ -463,11 +582,46 @@ export default function CodeEditorForm({
         </>
       )}
 
+      {secondsLeft !== null && !saved && (
+        <p
+          role="timer"
+          className={`mb-3 rounded-md px-3 py-2 text-sm font-semibold ${
+            secondsLeft <= 60 ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-900"
+          }`}
+          data-testid="task-timer"
+        >
+          ⏱ Time left for {heading}: <span className="tabular-nums">{clockText(secondsLeft)}</span>
+          <span className="ml-2 text-xs font-normal">
+            When it reaches 0:00 your code is handed in as it is and marked.
+          </span>
+        </p>
+      )}
+
       <div
         id={`${editorId}-panel`}
         role={many ? "tabpanel" : undefined}
         aria-labelledby={many ? `${editorId}-tab-${question.id}` : undefined}
       >
+        {gated ? (
+          <div className="mb-3 rounded-md bg-gray-50 p-3" data-testid="start-task">
+            <p className="text-sm font-bold">{heading}</p>
+            <p className="mt-2 text-sm text-gray-700">
+              This task has a time limit of <strong>{timeLimitText(limit)}</strong>. The clock starts when you press Start and
+              does not stop, even if you close this page. When it runs out, the code in your box is handed in as it is and
+              marked. You see the question only after you start.
+            </p>
+            <button
+              type="button"
+              onClick={startTask}
+              disabled={starting}
+              className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+              data-testid="start-task-button"
+            >
+              {starting ? "Starting…" : `Start ${heading}`}
+            </button>
+          </div>
+        ) : (
+        <>
         <div className="mb-3 rounded-md bg-gray-50 p-3" data-testid="question-statement">
           <p className="text-sm font-bold">{heading}</p>
           {hasQuestion && (
@@ -531,9 +685,11 @@ export default function CodeEditorForm({
             Tab indents; press Esc then Tab to move to the next control. {code.length} / {MAX_CODE_CHARS} characters.
           </p>
         )}
+        </>
+        )}
       </div>
 
-      {!locked && (
+      {!locked && !gated && (
         <>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
@@ -584,6 +740,31 @@ export default function CodeEditorForm({
           onGetMarks={getMarks}
           gettingMarks={gettingMarks}
         />
+      )}
+      {many && (
+        <div className="mt-4 flex justify-between gap-2 border-t border-gray-200 pt-3" data-testid="task-nav">
+          {!forwardOnly && (
+            <button
+              type="button"
+              onClick={() => before && setCurrent(before.id)}
+              disabled={!before || busy}
+              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+              data-testid="previous-task"
+            >
+              ← {before ? taskName(before) : "Previous"}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => after && setCurrent(after.id)}
+            disabled={!after || afterWaiting || busy}
+            title={afterWaiting && after ? `Hand in ${taskName(question)} first` : undefined}
+            className="ml-auto rounded-md border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+            data-testid="following-task"
+          >
+            {after ? taskName(after) : "Next"} →
+          </button>
+        </div>
       )}
       <ConfirmDialog request={confirm} onCancel={() => setConfirm(null)} />
     </div>

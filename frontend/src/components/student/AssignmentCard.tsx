@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { StudentAssignment } from "@/lib/api";
+import { taskName, timedTasks, timeLimitText } from "@/lib/tasks";
 import { formatDateTime, formatMark } from "@/lib/datetime";
 import Badge from "@/components/Badge";
 import RichText from "@/components/RichText";
@@ -99,6 +100,15 @@ export default function AssignmentCard({
               You need the password from your instructor to start the tasks.
             </p>
           )}
+          {timedTasks(a.questions).length > 0 && (
+            <p className="text-xs font-semibold text-blue-800" data-testid="time-limit-note">
+              ⏱ Timed:{" "}
+              {timedTasks(a.questions)
+                .map((q) => `${manyTasks ? `${taskName(q)}: ` : ""}${timeLimitText(q.time_limit_seconds ?? 0)}`)
+                .join(" · ")}
+              . The clock starts when you open the task.
+            </p>
+          )}
           {manyTasks && a.tasks_in_order && (
             <p className="text-xs text-gray-500" data-testid="order-note">
               The tasks are done in order: you can start a task only after handing in the one before it.
@@ -185,22 +195,22 @@ export default function AssignmentCard({
             </button>
           )}
           {a.status === "open" && sub?.can_edit && (
-            <>
-              <button
-                type="button"
-                onClick={() => setOpenForm({ id: a.id, mode: "edit" })}
-                className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
-              >
-                Edit submission
-              </button>
-              <button
-                type="button"
-                onClick={() => askDelete(a)}
-                className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
-              >
-                Delete submission
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => setOpenForm({ id: a.id, mode: "edit" })}
+              className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+            >
+              Edit submission
+            </button>
+          )}
+          {a.status === "open" && sub?.can_delete && (
+            <button
+              type="button"
+              onClick={() => askDelete(a)}
+              className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+            >
+              Delete submission
+            </button>
           )}
         </div>
       )}

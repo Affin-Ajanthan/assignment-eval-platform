@@ -17,13 +17,24 @@ export type QuestionRow = {
   title: string;
   statement: string; // the question the student must answer in code
   starterCode: string; // "" = the student's code box starts empty
+  timeMinutes: string; // the task's time limit as typed; both blank (or 0): no limit
+  timeSeconds: string;
   tests: TestCaseRow[];
 };
 
 export const MAX_QUESTIONS = 20; // must match the backend's _QUESTIONS_MAX
 const MAX_STARTER_CHARS = 50_000; // must match the backend's _TASK_STARTER_MAX
+const MAX_TIME_SECONDS = 24 * 3600; // must match the backend's _TASK_TIME_MAX
 
-export const emptyQuestionRow = (): QuestionRow => ({ title: "", statement: "", starterCode: "", tests: [] });
+export const emptyQuestionRow = (): QuestionRow => ({
+  title: "", statement: "", starterCode: "", timeMinutes: "", timeSeconds: "", tests: [],
+});
+
+/** A time limit in seconds as the two boxes show it: blank boxes for no limit. */
+function timeBoxes(total: number): Pick<QuestionRow, "timeMinutes" | "timeSeconds"> {
+  if (!total) return { timeMinutes: "", timeSeconds: "" };
+  return { timeMinutes: String(Math.floor(total / 60)), timeSeconds: String(total % 60) };
+}
 
 /** The tasks of an existing challenge, each with the test cases that name it. A challenge made without tasks has one. */
 export function toQuestionRows(a: Pick<Assignment, "questions" | "test_cases">): QuestionRow[] {
@@ -32,12 +43,13 @@ export function toQuestionRows(a: Pick<Assignment, "questions" | "test_cases">):
     title: ownTitle(q.title), // "Task 2" is only what the server called a task without a title
     statement: q.statement,
     starterCode: q.starter_code ?? "",
+    ...timeBoxes(q.time_limit_seconds ?? 0),
     tests: toTestRows((a.test_cases ?? []).filter((t) => (t.question ?? 1) === q.id)),
   }));
 }
 
 type QuestionsPayload =
-  | { questions: { title: string; statement: string; starter_code: string }[]; tests: (TestCasePayload & Pick<TestCase, "question">)[]; error: null }
+  | { questions: { title: string; statement: string; starter_code: string; time_limit_seconds: number }[]; tests: (TestCasePayload & Pick<TestCase, "question">)[]; error: null }
   | { questions: null; tests: null; error: string };
 
 /** The tasks and all their tests as the API expects them (a test names its task by its place), or the first problem to show. */
@@ -48,6 +60,14 @@ export function questionRowsPayload(rows: QuestionRow[]): QuestionsPayload {
     const where = many ? `Task ${i + 1}: ` : "";
     if (!row.title.trim()) return { questions: null, tests: null, error: `${where}Enter a title for the task.` };
     if (!row.statement.trim()) return { questions: null, tests: null, error: `${where}Enter the question for the task.` };
+    const minutes = row.timeMinutes.trim() === "" ? 0 : Number(row.timeMinutes);
+    const seconds = row.timeSeconds.trim() === "" ? 0 : Number(row.timeSeconds);
+    if (!Number.isInteger(minutes) || !Number.isInteger(seconds) || minutes < 0 || seconds < 0 || seconds > 59) {
+      return { questions: null, tests: null, error: `${where}The time limit is whole minutes, and seconds from 0 to 59.` };
+    }
+    if (minutes * 60 + seconds > MAX_TIME_SECONDS) {
+      return { questions: null, tests: null, error: `${where}The time limit can be at most 24 hours.` };
+    }
     if (row.tests.length === 0) {
       const error = many ? `Task ${i + 1} needs at least one test case.` : "Add at least one test case to a code challenge.";
       return { questions: null, tests: null, error };
@@ -59,7 +79,12 @@ export function questionRowsPayload(rows: QuestionRow[]): QuestionsPayload {
   if (tests.length > MAX_TESTS) {
     return { questions: null, tests: null, error: `An assignment can have at most ${MAX_TESTS} test cases in all (you have ${tests.length}).` };
   }
-  const questions = rows.map((r) => ({ title: r.title.trim(), statement: r.statement, starter_code: r.starterCode }));
+  const questions = rows.map((r) => ({
+    title: r.title.trim(),
+    statement: r.statement,
+    starter_code: r.starterCode,
+    time_limit_seconds: (Number(r.timeMinutes) || 0) * 60 + (Number(r.timeSeconds) || 0),
+  }));
   return { questions, tests, error: null };
 }
 
@@ -164,6 +189,45 @@ export default function QuestionsEditor({
               Put in this task&apos;s code box when the student opens it, so they write on top of it. Empty: the box
               starts empty.
             </p>
+
+            <fieldset className="mt-2" data-testid="time-limit">
+              <legend className="text-xs font-semibold">
+                Time limit <span className="font-normal text-gray-500">(optional)</span>
+              </legend>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+                <input
+                  type="number"
+                  min={0}
+                  max={1440}
+                  step={1}
+                  inputMode="numeric"
+                  aria-label={`Task ${i + 1} time limit, minutes`}
+                  value={row.timeMinutes}
+                  placeholder="0"
+                  onChange={(e) => update(i, { timeMinutes: e.target.value })}
+                  className="w-20 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                />
+                <span>min</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={59}
+                  step={1}
+                  inputMode="numeric"
+                  aria-label={`Task ${i + 1} time limit, seconds`}
+                  value={row.timeSeconds}
+                  placeholder="0"
+                  onChange={(e) => update(i, { timeSeconds: e.target.value })}
+                  className="w-20 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                />
+                <span>sec</span>
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                The student&apos;s clock for this task starts when they open it. When it runs out, the code in the box is
+                handed in as it stands and marked, and the next task opens. A task not opened in time earns nothing.
+                Empty: no time limit.
+              </p>
+            </fieldset>
 
             <TestCasesEditor
               rows={row.tests}

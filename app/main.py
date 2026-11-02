@@ -94,6 +94,7 @@ from .models import (
     SimilarityFlag,
     Subject,
     Submission,
+    TaskStart,
     TaskUnlock,
     User,
 )
@@ -263,6 +264,7 @@ _STATEMENT_MAX = 10_000
 _TASK_STARTER_MAX = 50_000  # the student editor's limit (MAX_CODE_CHARS in app/routers/student_runs.py)
 _TEST_TEXT_MAX = 10_000
 _TASK_PASSWORD_MAX = 100
+_TASK_TIME_MAX = 24 * 3600  # a task's time limit, in seconds
 
 
 class QuestionIn(BaseModel):
@@ -275,6 +277,9 @@ class QuestionIn(BaseModel):
     # Optional starting code: put in the student's code box when they open the task, for them to write on.
     # (The assignment's own starter_code is a different thing: instructor-only, left out of the similarity check.)
     starter_code: str = Field(default="", max_length=_TASK_STARTER_MAX)
+    # Optional time limit in seconds (the page takes minutes and seconds): the student's clock for this task
+    # starts when they open it, and when it runs out their code is handed in as it stands. 0: no limit.
+    time_limit_seconds: int = Field(default=0, ge=0, le=_TASK_TIME_MAX)
 
 
 class QuestionOut(QuestionIn):
@@ -434,7 +439,10 @@ class MySubmissionOut(BaseModel):
     # Empty when graded with "Final mark only" (no per-criterion marks) or not graded.
     criterion_marks: list[CriterionMarkOut] = []
     feedback: Optional[str] = None
-    can_edit: bool  # assignment open, not yet graded, and not a code challenge (those are final once submitted)
+    can_edit: bool  # assignment open, not yet graded, and not a code challenge (its code cannot be replaced)
+    # The student may delete the submission: the assignment is open and (unless it is a code challenge, which is
+    # marked from its tests at once) it is not graded yet. A graded code challenge can still be deleted and redone.
+    can_delete: bool = False
     # A code challenge is handed in one task at a time: how many tasks have been (0 for other assignments).
     questions_submitted: int = 0
 
@@ -896,6 +904,7 @@ def _delete_user(db: Session, user: User) -> dict:
         synchronize_session=False)
     db.query(Enrollment).filter(Enrollment.student_id == user.id).delete(synchronize_session=False)
     db.query(TaskUnlock).filter(TaskUnlock.student_id == user.id).delete(synchronize_session=False)
+    db.query(TaskStart).filter(TaskStart.student_id == user.id).delete(synchronize_session=False)
     db.delete(user)
     db.commit()
     for rel_path, kind in upload_parts:  # files only after the database change succeeded
@@ -1278,7 +1287,8 @@ def _clean_questions(questions: list[QuestionIn]) -> Optional[list[dict]]:
         return None
     return [
         {"id": n, "title": q.title.strip() or (f"Task {n}" if len(questions) > 1 else ""),
-         "statement": q.statement.strip(), "starter_code": q.starter_code if q.starter_code.strip() else ""}
+         "statement": q.statement.strip(), "starter_code": q.starter_code if q.starter_code.strip() else "",
+         "time_limit_seconds": q.time_limit_seconds}
         for n, q in enumerate(questions, start=1)
     ]
 
@@ -1378,13 +1388,19 @@ def _is_code_challenge(submission: Submission) -> bool:
 
 
 def _my_submission_out(submission: Submission, assignment_open: bool, now: datetime) -> MySubmissionOut:
-    # A code challenge is final once it is handed in (it is marked from its tests at once);
-    # other work can be changed until the deadline or until it is graded.
-    can_edit = assignment_open and submission.status != "graded" and not _is_code_challenge(submission)
+    # The code of a code challenge cannot be replaced once handed in (it is marked from its tests at once), but
+    # the whole submission can be deleted while the assignment is open, unless the instructor graded it.
+    # Other work can be changed or deleted until the deadline or until it is graded.
+    challenge = _is_code_challenge(submission)
+    can_edit = assignment_open and submission.status != "graded" and not challenge
+    # A challenge with time limits is final: doing it again would start every clock over.
+    can_delete = assignment_open and (
+        submission.latest_grade is None and not submission.assignment.is_timed if challenge
+        else submission.status != "graded")
     common = dict(
         id=submission.id, submitted_at=_as_utc(submission.submitted_at),
         has_code=bool(submission.code_path), has_report=bool(submission.report_path),
-        has_video=bool(submission.video_path), can_edit=can_edit,
+        has_video=bool(submission.video_path), can_edit=can_edit, can_delete=can_delete,
         questions_submitted=_code_answers.answer_count(submission.assignment, submission)
         if _is_code_challenge(submission) else 0,
     )
@@ -1669,6 +1685,7 @@ def delete_assignment(assignment_id: int, instructor: User = Depends(require_ins
     kept = db.query(Submission).filter(Submission.assignment_id == assignment.id).update(
         {Submission.assignment_id: None})
     db.query(TaskUnlock).filter(TaskUnlock.assignment_id == assignment.id).delete(synchronize_session=False)
+    db.query(TaskStart).filter(TaskStart.assignment_id == assignment.id).delete(synchronize_session=False)
     db.delete(assignment)
     db.commit()
     return {"status": "deleted", "submissions_kept": kept}
@@ -1941,15 +1958,26 @@ def _require_open(assignment: Assignment) -> None:
         raise HTTPException(403, f"The submission deadline for '{assignment.name}' has passed.")
 
 
-def _own_changeable_submission(db: Session, student: User, submission_id: int) -> Submission:
+def _own_changeable_submission(db: Session, student: User, submission_id: int, *,
+                               deleting: bool = False) -> Submission:
+    """The student's own submission, if they may still change it. A code challenge's code can never be
+    replaced; with `deleting` it can be withdrawn while the assignment is open (it is marked from its tests at
+    once, so "graded" does not stop it) unless the instructor graded it."""
     submission = db.get(Submission, submission_id)
     if not submission or submission.student_id != student.id:
         raise HTTPException(404, "Submission not found")  # never confirm other students' submissions exist
     if submission.assignment is None:
         raise HTTPException(409, "This submission isn't linked to an open assignment, so it can't be changed.")
     if submission.assignment.kind == "code_challenge":
-        raise HTTPException(409, "A code challenge can't be changed or withdrawn once it is submitted.")
-    if submission.status == "graded":
+        if not deleting:
+            raise HTTPException(409, "A code challenge's code can't be changed once it is submitted. "
+                                     "Delete the submission to do it again.")
+        if submission.latest_grade is not None:
+            raise HTTPException(409, "This submission has already been graded by your instructor and can no "
+                                     "longer be deleted.")
+        if submission.assignment.is_timed:
+            raise HTTPException(409, "This code challenge has time limits, so a submission to it can't be deleted.")
+    elif submission.status == "graded":
         raise HTTPException(409, "This submission has already been graded and can no longer be changed.")
     _require_open(submission.assignment)
     return submission
@@ -1993,7 +2021,7 @@ def update_submission(
 ):
     """Replace one or more files of the student's own submission while the
     assignment is open and before it's graded. Files not sent are kept.
-    Not for a code challenge: that is final once it is submitted."""
+    Not for a code challenge: its code cannot be replaced once it is submitted (delete it to start again)."""
     submission = _own_changeable_submission(db, student, submission_id)
     code, report, video = (f if f is not None and f.filename else None for f in (code, report, video))
     if not (code or report or video):
@@ -2034,8 +2062,9 @@ def update_submission(
 def delete_submission(submission_id: int, student: User = Depends(require_student), db: Session = Depends(get_db)):
     """Withdraw the student's own submission while the assignment is open
     and before it's graded (a graded submission is an academic record).
-    Not for a code challenge: that is final once it is submitted."""
-    submission = _own_changeable_submission(db, student, submission_id)
+    A code challenge may be deleted (and then done again) while it is open, even though its tests
+    marked it at once, unless the instructor graded it."""
+    submission = _own_changeable_submission(db, student, submission_id, deleting=True)
     parts = [(submission.code_path, "code"), (submission.report_path, "report"), (submission.video_path, "video")]
     _discard_derived_results(db, submission.id)
     db.delete(submission)

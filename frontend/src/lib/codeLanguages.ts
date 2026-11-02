@@ -14,6 +14,9 @@ export const CODE_LANGUAGES: { id: CodeLanguageId; name: string; extensions: str
   { id: "php", name: "PHP", extensions: [".php"] },
 ];
 
+/** The languages the server can run tests for: must match LANGUAGES in app/evaluator/code_testing.py. */
+export const RUNNABLE_LANGUAGES: CodeLanguageId[] = ["python", "ruby", "java", "javascript", "c", "cpp", "php", "go"];
+
 /** The languages an assignment accepts: its chosen ones, or every language when none were chosen. */
 export function languagesFor(chosen: CodeLanguageId[] | undefined) {
   return chosen && chosen.length ? CODE_LANGUAGES.filter((l) => chosen.includes(l.id)) : CODE_LANGUAGES;

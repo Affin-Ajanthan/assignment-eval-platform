@@ -6,7 +6,7 @@ import { combineLocal, splitLocal } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
 import AutoGrowTextarea from "@/components/AutoGrowTextarea";
 import RichTextEditor from "@/components/instructor/RichTextEditor";
-import { CODE_LANGUAGES, CodeLanguageId, languageNames } from "@/lib/codeLanguages";
+import { CODE_LANGUAGES, CodeLanguageId, languageNames, RUNNABLE_LANGUAGES } from "@/lib/codeLanguages";
 import QuestionsEditor, {
   emptyQuestionRow,
   QuestionRow,
@@ -307,7 +307,8 @@ export default function AssignmentForm({
             Programming language <span className="font-normal text-gray-500">(optional)</span>
           </legend>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-            {CODE_LANGUAGES.map((l) => (
+            {/* A code challenge offers only the languages the server can run. */}
+            {CODE_LANGUAGES.filter((l) => form.kind !== "code_challenge" || RUNNABLE_LANGUAGES.includes(l.id)).map((l) => (
               <label key={l.id} className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -335,8 +336,8 @@ export default function AssignmentForm({
           </p>
           {form.kind === "code_challenge" && (
             <p className="mt-1 text-xs text-gray-500" data-testid="runnable-languages-note">
-              A code challenge can run Python, Ruby, Java, JavaScript, C and C++. With none ticked, students choose
-              among those six; the other languages cannot be run yet.
+              A code challenge can run Python, Ruby, Java, JavaScript, C, C++, PHP and Go. With none ticked, students
+              choose among those eight; the other languages cannot be run yet.
             </p>
           )}
         </fieldset>
@@ -395,10 +396,10 @@ export default function AssignmentForm({
                 className={input}
               />
               <p className="mt-1 text-xs text-gray-500">
-                The file name (or path) the tests run: Python (.py), Ruby (.rb), Java (.java), JavaScript (.js), C (.c)
-                and C++ (.cpp) only. Empty: the only such file in the submission, or one named main, app, run, program
-                or index. Code that students type in the editor is always saved and run as main.py, main.rb, main.java,
-                main.js, main.c or main.cpp, so leave this empty for it.
+                The file name (or path) the tests run: Python (.py), Ruby (.rb), Java (.java), JavaScript (.js), C (.c),
+                C++ (.cpp), PHP (.php) and Go (.go) only. Empty: the only such file in the submission, or one named main,
+                app, run, program or index. Code that students type in the editor is always saved and run as main.py,
+                main.rb, main.java, main.js, main.c, main.cpp, main.php or main.go, so leave this empty for it.
               </p>
             </div>
           )}

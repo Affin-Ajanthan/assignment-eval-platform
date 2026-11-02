@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiFetch, Assignment, AssignmentStatus, SubmissionType } from "@/lib/api";
+import { taskName, timedTasks, timeLimitText } from "@/lib/tasks";
 import { formatDateTime } from "@/lib/datetime";
 import { takeFlash } from "@/lib/flash";
 import Message, { MessageState } from "@/components/Message";
@@ -122,6 +123,16 @@ export default function AssignmentsSection({
                       {a.questions?.length > 1 && `Tasks: ${a.questions.length} · `}
                       Test cases: {a.test_cases.length} ({a.test_cases.filter((t) => t.visible).length} visible) ·{" "}
                       {a.test_cases.reduce((sum, t) => sum + t.points, 0)} points
+                    </p>
+                  )}
+                  {a.assignment_type === "code_challenge" && (
+                    <p className="text-xs text-gray-600" data-testid="time-limits-summary">
+                      Time limits:{" "}
+                      {timedTasks(a.questions).length === 0
+                        ? "none"
+                        : timedTasks(a.questions)
+                            .map((q) => `${taskName(q)} ${timeLimitText(q.time_limit_seconds ?? 0)}`)
+                            .join(" · ")}
                     </p>
                   )}
                   {a.submission_types.includes("code") && (

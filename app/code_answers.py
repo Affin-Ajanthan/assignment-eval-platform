@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import hmac
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -35,7 +35,7 @@ from sqlalchemy.orm import Session
 
 from .db import BASE_DIR
 from .evaluator import code_testing
-from .models import Assignment, Submission, TaskUnlock
+from .models import Assignment, Submission, TaskStart, TaskUnlock
 
 
 def tasks_unlocked(db: Session, student_id: int, assignment: Assignment) -> bool:
@@ -61,6 +61,27 @@ def unfinished_before(assignment: Assignment, submission: Optional[Submission], 
     return next((q["id"] for q in assignment.questions if q["id"] < question and q["id"] not in done), None)
 
 
+def time_limit(question: dict) -> int:
+    """A task's time limit in seconds; 0 when it has none (also for a task saved before limits existed)."""
+    return int(question.get("time_limit_seconds") or 0)
+
+
+def task_start(db: Session, student_id: int, assignment_id: int, question: int) -> Optional[TaskStart]:
+    """When the student opened this timed task (and the code they last had there), or None if they have not."""
+    return db.query(TaskStart).filter(
+        TaskStart.assignment_id == assignment_id, TaskStart.student_id == student_id,
+        TaskStart.question == question).first()
+
+
+def task_ends_at(assignment: Assignment, start: Optional[TaskStart], question: dict) -> Optional[datetime]:
+    """When the student's clock for a timed task runs out: its time limit after they opened it, or the
+    assignment's deadline if that comes first. None for a task with no limit or one not opened yet."""
+    limit = time_limit(question)
+    if not limit or start is None:
+        return None
+    return min(start.started_at + timedelta(seconds=limit), assignment.deadline)
+
+
 def points_of(tests: list) -> float:
     """The points of every test in `tests`."""
     return round(sum(t.get("points", 1) for t in tests), 2)
@@ -76,14 +97,44 @@ _JAVA_FRAME = re.compile(r"^\s*at (?!java\.|jdk\.|sun\.|javax\.)[^\s(]+\([^()]*\
 _GCC_ERROR = re.compile(r"^[^\s:]+\.(?:c|cc|cpp|cxx):(\d+):(?:\d+:)? (?:fatal )?error", re.MULTILINE)
 # Node: `/run/main.js:7` heads a syntax error and an uncaught exception (the scratch folder is /run).
 _JS_LINE = re.compile(r"/run/\S*?\.js:(\d+)")
+# PHP: `PHP Parse error: syntax error, ... in /run/main.php on line 3`; an uncaught exception ends with
+# `thrown in /run/main.php on line 5`. Warnings and notices end the same way, but they do not stop the program.
+_PHP_LINE = re.compile(r"\bin /run/\S*?\.php on line (\d+)")
+# Go: `./main.go:7:2: "os" imported and not used` for code that does not build; a panic names its frames as
+# `\t/run/main.go:9 +0x1d` (frames of the Go runtime itself are under /usr/local/go and are not the student's).
+_GO_ERROR = re.compile(r"^(?:\./)?[^\s:]*\.go:(\d+):(?:\d+:)? ", re.MULTILINE)
+_GO_FRAME = re.compile(r"^\s+/run/\S*?\.go:(\d+)", re.MULTILINE)
+
+# What tells a program that never started (it does not compile or parse) from one that crashed while running.
+_GCC_FAILURE = re.compile(
+    r"^[^\s:]+\.(?:c|cc|cpp|cxx):\d+:(?:\d+:)? (?:fatal )?error|collect2: error|undefined reference to", re.MULTILINE)
+_COMPILE_FAILURE = {
+    "python": re.compile(r"^(?:SyntaxError|IndentationError|TabError)\b", re.MULTILINE),
+    "ruby": re.compile(r"syntax error|SyntaxError"),
+    "javascript": re.compile(r"^SyntaxError\b", re.MULTILINE),
+    "java": re.compile(r"^\S+\.java:\d+: error|error: compilation failed", re.MULTILINE),
+    "c": _GCC_FAILURE,
+    "cpp": _GCC_FAILURE,
+    "php": re.compile(r"\bParse error\b"),
+    "go": re.compile(r"^(?:# command-line-arguments|(?:\./)?[^\s:]*\.go:\d+:)", re.MULTILINE),
+}
 
 
-def compiler_error(stderr: str, language: str) -> str:
-    """What a student is told when their program crashed before it could give an answer: just that it
-    failed and on which line, never the traceback (which can show paths and the tester's own files).
+def did_not_compile(stderr: str, language: str) -> bool:
+    """Whether the program failed before it ran: a syntax error, or a compiler that refused the code."""
+    pattern = _COMPILE_FAILURE.get(language)
+    return bool(pattern and pattern.search(stderr))
+
+
+def error_message(stderr: str, language: str) -> str:
+    """What a student is told when their program failed before it could give an answer: "Compiler error." when
+    it never started (it does not compile or parse) and "Runtime error." when it crashed while running, each
+    with the line it went wrong on when that is known, never the traceback (which can show paths and the
+    tester's own files).
     The line is the one in the student's own file: the last Python frame outside the standard library,
-    the first line Ruby names, the compile error or first own frame Java names, the line Node names, or the first error gcc/g++ names
-    (a program that compiled but crashed, say with a segfault, has none: the message then has no line)."""
+    the first line Ruby names, the compile error or first own frame Java names, the line Node names, the first error gcc/g++ names
+    (a program that compiled but crashed, say with a segfault, has none: the message then has no line), the first line PHP
+    names in the student's own file, or the build error or first own frame Go names."""
     if "out of memory" in stderr or "OutOfMemoryError" in stderr:
         return "The program ran out of memory."
     if language == "ruby":
@@ -98,16 +149,23 @@ def compiler_error(stderr: str, language: str) -> str:
     elif language in ("c", "cpp"):
         found = _GCC_ERROR.search(stderr)
         line = found.group(1) if found else None
+    elif language == "php":
+        found = _PHP_LINE.search(stderr)
+        line = found.group(1) if found else None
+    elif language == "go":
+        found = _GO_ERROR.search(stderr) or _GO_FRAME.search(stderr)
+        line = found.group(1) if found else None
     else:
         frames = [n for path, n in _PYTHON_FRAME.findall(stderr) if "/usr/" not in path and "/lib/" not in path]
         line = frames[-1] if frames else None
-    return f"Compiler error. Error on line {line}." if line else "Compiler error."
+    kind = "Compiler error" if did_not_compile(stderr, language) else "Runtime error"
+    return f"{kind}. Error on line {line}." if line else f"{kind}."
 
 
 def student_report(results: list, language: str) -> dict:
     """What a student may see of one question's run: how many test cases passed, and for each VISIBLE test
     that failed either its input with the expected and actual output (the program ran) or just "Compiler
-    error. Error on line N." (it crashed). A HIDDEN test that failed is only counted: its name, input and
+    error. Error on line N." (it did not compile) or "Runtime error. Error on line N." (it crashed). A HIDDEN test that failed is only counted: its name, input and
     expected output never leave the server. The keys are those of RunOut, bar `remaining_runs`."""
     failures: list[dict] = []
     visible_seen = hidden_failed = 0
@@ -117,7 +175,7 @@ def student_report(results: list, language: str) -> dict:
             if not r.passed:
                 # A wrong answer is shown as expected vs actual only; a crash as the compiler error alone; a
                 # timeout keeps its note (the time limit), which says nothing about the code.
-                error = compiler_error(r.stderr, language) if r.status == "error" else (
+                error = error_message(r.stderr, language) if r.status == "error" else (
                     r.stderr if r.status == "timeout" else "")
                 failures.append({"sample": visible_seen, "name": r.name, "status": r.status,
                                  "input": r.input, "expected_output": r.expected_output,
