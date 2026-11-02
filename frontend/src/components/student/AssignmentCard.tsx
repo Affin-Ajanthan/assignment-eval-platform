@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { StudentAssignment } from "@/lib/api";
+import { taskName, timedTasks, timeLimitText } from "@/lib/tasks";
 import { formatDateTime, formatMark } from "@/lib/datetime";
 import Badge from "@/components/Badge";
 import RichText from "@/components/RichText";
@@ -97,6 +98,15 @@ export default function AssignmentCard({
           {a.has_task_password && !a.tasks_unlocked && (
             <p className="text-xs text-gray-500" data-testid="password-note">
               You need the password from your instructor to start the tasks.
+            </p>
+          )}
+          {timedTasks(a.questions).length > 0 && (
+            <p className="text-xs font-semibold text-blue-800" data-testid="time-limit-note">
+              ⏱ Timed:{" "}
+              {timedTasks(a.questions)
+                .map((q) => `${manyTasks ? `${taskName(q)}: ` : ""}${timeLimitText(q.time_limit_seconds ?? 0)}`)
+                .join(" · ")}
+              . The clock starts when you open the task.
             </p>
           )}
           {manyTasks && a.tasks_in_order && (

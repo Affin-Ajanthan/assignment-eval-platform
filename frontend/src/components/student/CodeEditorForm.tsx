@@ -8,7 +8,7 @@ import Message, { MessageState } from "@/components/Message";
 import RichText from "@/components/RichText";
 import LineNumberedTextarea from "@/components/student/LineNumberedTextarea";
 import { CodeLanguageId, languagesFor, RUNNABLE_LANGUAGES } from "@/lib/codeLanguages";
-import { taskName } from "@/lib/tasks";
+import { taskName, timeLimitText } from "@/lib/tasks";
 
 const MAX_CODE_CHARS = 50_000; // must match MAX_CODE_CHARS in app/routers/student_runs.py
 const INDENT: Partial<Record<CodeLanguageId, string>> = {
@@ -229,16 +229,6 @@ function clockText(seconds: number): string {
   const m = Math.floor((s % 3600) / 60);
   const rest = String(s % 60).padStart(2, "0");
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${rest}` : `${m}:${rest}`;
-}
-
-/** A time limit in words: "10 minutes", "1 minute 30 seconds", "45 seconds". */
-function limitText(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  const parts = [];
-  if (m > 0) parts.push(`${m} minute${m === 1 ? "" : "s"}`);
-  if (s > 0) parts.push(`${s} second${s === 1 ? "" : "s"}`);
-  return parts.join(" ");
 }
 
 /** When (this browser's clock, in ms) each timed task that is open and not handed in runs out, from the seconds the server says are left. */
@@ -582,6 +572,9 @@ export default function CodeEditorForm({
                 >
                   {mark}
                   {taskName(q)}
+                  {(q.time_limit_seconds ?? 0) > 0 && (
+                    <span className="ml-1 text-xs font-normal">⏱ {clockText(q.time_limit_seconds ?? 0)}</span>
+                  )}
                 </button>
               );
             })}
@@ -613,7 +606,7 @@ export default function CodeEditorForm({
           <div className="mb-3 rounded-md bg-gray-50 p-3" data-testid="start-task">
             <p className="text-sm font-bold">{heading}</p>
             <p className="mt-2 text-sm text-gray-700">
-              This task has a time limit of <strong>{limitText(limit)}</strong>. The clock starts when you press Start and
+              This task has a time limit of <strong>{timeLimitText(limit)}</strong>. The clock starts when you press Start and
               does not stop, even if you close this page. When it runs out, the code in your box is handed in as it is and
               marked. You see the question only after you start.
             </p>
