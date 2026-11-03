@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, Submission } from "@/lib/api";
-import { formatDateTime, formatMark } from "@/lib/datetime";
+import { formatDateTime } from "@/lib/datetime";
+import { lateText, markWithPenalty } from "@/lib/late";
 import Badge from "@/components/Badge";
 import Message, { MessageState } from "@/components/Message";
 
@@ -70,13 +71,22 @@ export default function SubmissionHistory({ version }: { version: number }) {
                     <tr key={s.id}>
                       <td className="border border-gray-200 px-3 py-1.5">{s.subject_name}</td>
                       <td className="border border-gray-200 px-3 py-1.5">{s.assignment_name}</td>
-                      <td className="border border-gray-200 px-3 py-1.5">{formatDateTime(s.submitted_at)}</td>
+                      <td className="border border-gray-200 px-3 py-1.5">
+                        {formatDateTime(s.submitted_at)}
+                        {s.late_seconds != null && (
+                          <div className="text-xs font-semibold text-red-800" data-testid="late-note">
+                            Late · {lateText(s.late_seconds)} after the deadline
+                          </div>
+                        )}
+                      </td>
                       <td className="border border-gray-200 px-3 py-1.5">
                         <Badge bold={false} tone={s.status === "graded" ? "bg-green-50 text-green-800" : "bg-yellow-50 text-yellow-800"}>
                           {s.status === "graded" ? "Graded" : "Submitted"}
                         </Badge>
                       </td>
-                      <td className="border border-gray-200 px-3 py-1.5">{formatMark(s.final_mark, s.max_mark)}</td>
+                      <td className="border border-gray-200 px-3 py-1.5">
+                        {markWithPenalty(s.raw_mark, s.final_mark, s.max_mark, s.late_penalty_percent, s.late_penalty_marks)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

@@ -29,7 +29,8 @@ import RubricModelToggle, {
   useRubricModelSetting,
 } from "@/components/instructor/RubricModelToggle";
 import RubricsSection from "@/components/instructor/RubricsSection";
-import { formatDateTime, formatMark } from "@/lib/datetime";
+import { formatDateTime } from "@/lib/datetime";
+import { lateText, markWithPenalty } from "@/lib/late";
 import Message, { MessageState } from "@/components/Message";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 
@@ -944,7 +945,20 @@ export default function InstructorPage() {
                           </div>
                         )}
                       </td>
-                      <td className="border border-gray-200 px-3 py-1.5">{formatDateTime(s.submitted_at)}</td>
+                      <td className="border border-gray-200 px-3 py-1.5">
+                        {formatDateTime(s.submitted_at)}
+                        {s.late_seconds != null && (
+                          <div>
+                            <span
+                              className="rounded bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-800"
+                              data-testid="late-badge"
+                              title={`Handed in ${lateText(s.late_seconds)} after the deadline`}
+                            >
+                              Late · {lateText(s.late_seconds)}
+                            </span>
+                          </div>
+                        )}
+                      </td>
                       <td className="border border-gray-200 px-3 py-1.5">
                         <span
                           className={`rounded px-2 py-0.5 text-xs ${
@@ -954,7 +968,9 @@ export default function InstructorPage() {
                           {s.status}
                         </span>
                       </td>
-                      <td className="border border-gray-200 px-3 py-1.5">{formatMark(s.final_mark, s.max_mark)}</td>
+                      <td className="border border-gray-200 px-3 py-1.5" data-testid="submission-mark">
+                        {markWithPenalty(s.raw_mark, s.final_mark, s.max_mark, s.late_penalty_percent, s.late_penalty_marks)}
+                      </td>
                       <td className="border border-gray-200 px-3 py-1.5">
                         <div className="flex gap-1 whitespace-nowrap">
                           {/* A code challenge is marked from its tests (Tests button), not with the rubric form. */}
