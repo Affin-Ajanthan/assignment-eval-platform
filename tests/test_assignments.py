@@ -300,7 +300,11 @@ def test_student_sees_open_and_past_assignments_but_not_upcoming_ones():
                              "student_similarity_check", "student_ai_check", "marks_release_at",
                              "assignment_type", "questions", "my_submission",
                              # a code challenge's task password: only whether there is one, never the password
-                             "has_task_password", "tasks_unlocked", "tasks_in_order"}
+                             "has_task_password", "tasks_unlocked", "tasks_in_order",
+                             # late work: the grace period, the late window and the penalty the student is told about
+                             "past_deadline", "accept_until", "late_grace_minutes", "late_penalty_percent",
+                             "late_penalty_max_percent", "penalty_now_percent", "late_penalty_unit",
+                             "late_penalty_marks", "late_penalty_max_marks", "penalty_now_marks"}
     assert "task_password" not in open_one
     assert open_one["questions"] == []  # only a code challenge has questions
 
@@ -778,11 +782,11 @@ def test_a_challenge_can_have_several_questions_with_their_own_tests():
 
     # Without questions a challenge has one, as every challenge made before questions existed.
     single = _new_assignment(itok, subject, "One question", test_cases=SORT_TESTS).json()
-    assert single["questions"] == [{"id": 1, "title": "", "statement": "", "starter_code": ""}]
+    assert single["questions"] == [{"id": 1, "title": "", "statement": "", "starter_code": "", "time_limit_seconds": 0}]
     assert {t["question"] for t in single["test_cases"]} == {1}
     titled = _new_assignment(itok, subject, "One titled question", test_cases=SORT_TESTS,
                              questions=[{"title": "Sorting", "statement": "Sort them."}]).json()
-    assert titled["questions"] == [{"id": 1, "title": "Sorting", "statement": "Sort them.", "starter_code": ""}]
+    assert titled["questions"] == [{"id": 1, "title": "Sorting", "statement": "Sort them.", "starter_code": "", "time_limit_seconds": 0}]
     assert _new_assignment(itok, subject, "Plain").json()["questions"] == []  # other assignments have none
 
 

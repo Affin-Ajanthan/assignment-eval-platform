@@ -286,6 +286,26 @@ line N.**, and one that crashes while running as **Runtime error. Error on line 
 whatever the language (a C/C++ crash such as a segfault has no line, so it shows
 **Runtime error.**). The traceback is never shown.
 
+**Late submissions** (optional, for every kind of assignment). The instructor can set, on the
+assignment: a **grace period** (minutes after the deadline in which work still counts as on
+time), a **late submission deadline** (the second deadline: the last moment late work is
+taken; after it nothing is accepted), and a **penalty** for every day or part of a day late,
+after the grace period, with a **maximum**. The penalty is counted in **percent** of the mark
+or in **marks** (`late_penalty_unit`: `percent` uses `late_penalty_percent` and
+`late_penalty_max_percent`; `marks` uses `late_penalty_marks` and `late_penalty_max_marks`,
+empty: no limit). The defaults change nothing: nothing is taken after the deadline. Work
+handed in after the grace period and before the late deadline is accepted and stored as late:
+`Submission.late_seconds` (seconds after the deadline) and `late_penalty_percent` or
+`late_penalty_marks`, fixed when it is handed in (a code challenge: when its latest task is).
+The mark students and exports see (`final_mark`) is the raw mark less that penalty (never
+below 0), and the raw mark (`raw_mark`) is shown beside it, e.g. `34 / 40 → 30.6 / 40
+(late −10%)` or `34 / 40 → 24 / 40 (late −10 marks)`. The instructor's submissions table shows a **Late** badge with how late; the
+student sees a notice on the card and on the code page (while the deadline is past, with what
+handing in now would cost; after submitting, how late and how much is taken off). While late
+work is taken the student's assignment `status` stays `open` and `past_deadline` is true. The
+late rules can change at any time; work already handed in keeps the penalty it got. A timed
+task is cut short at the last moment work is taken.
+
 **Time limit per task** (optional). The instructor can give each task its own limit in
 minutes and seconds (`time_limit_seconds` on the task, at most 24 hours; empty or 0: no
 limit). A timed task shows a **Start** button instead of its question: pressing it
