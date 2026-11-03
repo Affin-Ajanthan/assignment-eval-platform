@@ -29,6 +29,7 @@ import RubricModelToggle, {
   useRubricModelSetting,
 } from "@/components/instructor/RubricModelToggle";
 import RubricsSection from "@/components/instructor/RubricsSection";
+import PairFilters, { pairMatches, usePairFilters } from "@/components/instructor/PairFilters";
 import { formatDateTime, formatMark } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
@@ -67,7 +68,47 @@ function gradingSnapshot(
   return JSON.stringify(hasMarks ? [mode, marks, notes] : [null, null, notes]);
 }
 
-const STATUS_FILTERS: { label: string; status: Submission["status"] | null }[] = [
+type CodePairSort = "flag" | "jaccard" | "containment" | "semantic";
+const CODE_PAIR_SORTS: { value: CodePairSort; label: string }[] = [
+  { value: "flag", label: "Flag, then overlap" },
+  { value: "jaccard", label: "Jaccard" },
+  { value: "containment", label: "Containment" },
+  { value: "semantic", label: "Semantic" },
+];
+const FLAG_RANK = { high: 2, review: 1 } as const;
+type CodePair = SimilarityCheckResult["pairs"][number];
+/** Highest first; a pair without a semantic score sorts below every scored one. */
+function codePairOrder(sort: CodePairSort): (a: CodePair, b: CodePair) => number {
+  const semantic = (p: CodePair) => p.semantic_similarity ?? -1;
+  const flag = (p: CodePair) => (p.flag_level ? FLAG_RANK[p.flag_level] : 0);
+  const value: Record<CodePairSort, (p: CodePair) => number> = {
+    flag,
+    jaccard: (p) => p.jaccard,
+    containment: (p) => p.containment,
+    semantic,
+  };
+  return (a, b) =>
+    value[sort](b) - value[sort](a) || flag(b) - flag(a) || b.jaccard - a.jaccard || semantic(b) - semantic(a);
+}
+
+type SubmissionSort = "newest" | "oldest" | "student" | "mark";
+const SUBMISSION_SORTS: { value: SubmissionSort; label: string }[] = [
+  { value: "newest", label: "Submitted, newest first" },
+  { value: "oldest", label: "Submitted, oldest first" },
+  { value: "student", label: "Student name" },
+  { value: "mark", label: "Mark, highest first" },
+];
+/** Ungraded submissions (no mark) sort after every marked one. */
+function submissionOrder(sort: SubmissionSort): (a: Submission, b: Submission) => number {
+  const time = (s: Submission) => new Date(s.submitted_at).getTime();
+  const mark = (s: Submission) => (s.final_mark === null || !s.max_mark ? -1 : s.final_mark / s.max_mark);
+  if (sort === "oldest") return (a, b) => time(a) - time(b);
+  if (sort === "student") return (a, b) => a.student_name.localeCompare(b.student_name) || time(b) - time(a);
+  if (sort === "mark") return (a, b) => mark(b) - mark(a) || time(b) - time(a);
+  return (a, b) => time(b) - time(a);
+}
+
+const STATUS_FILTERS:{ label: string; status: Submission["status"] | null }[] = [
   { label: "All", status: null },
   { label: "Submitted", status: "submitted" },
   { label: "Graded", status: "graded" },
@@ -137,6 +178,7 @@ export default function InstructorPage() {
   const [similarityResult, setSimilarityResult] = useState<SimilarityCheckResult | null>(null);
   const [similarityMsg, setSimilarityMsg] = useState<MessageState>(null);
   const [similarityRunning, setSimilarityRunning] = useState(false);
+  const pairFilters = usePairFilters<CodePairSort>("flag");
 
   // Auto-evaluation panel
   const [autoevalSubmissionId, setAutoevalSubmissionId] = useState<number | null>(null);
@@ -144,7 +186,7 @@ export default function InstructorPage() {
   const [autoevalResult, setAutoevalResult] = useState<AutoEvaluation | null>(null);
   const [autoevalMsg, setAutoevalMsg] = useState<MessageState>(null);
   const [autoevalRunning, setAutoevalRunning] = useState(false);
-  // The panel renders at the bottom of the page: bring it into view on every
+  // The panel opens under the clicked row: bring it into view on every
   // "Auto-evaluate" click (a counter, so clicking the same student again works too).
   const autoevalPanelRef = useRef<HTMLElement>(null);
   const [autoevalScrollRequest, setAutoevalScrollRequest] = useState(0);
@@ -164,6 +206,8 @@ export default function InstructorPage() {
   // or "n:<name>" for submissions whose assignment was deleted (kept as records).
   const [submissionFilter, setSubmissionFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<Submission["status"] | null>(null); // null: all
+  const [submissionSearch, setSubmissionSearch] = useState("");
+  const [submissionSort, setSubmissionSort] = useState<SubmissionSort>("newest");
   const [gradingRubricId, setGradingRubricId] = useState<number | null>(null);
   const [criterionScores, setCriterionScores] = useState<Record<string, string>>({});
   // "final": one overall mark (e.g. 70 / 100) instead of a mark per criterion.
@@ -245,21 +289,32 @@ export default function InstructorPage() {
   useEffect(() => {
     setSubmissionFilter("all");
     setStatusFilter(null);
+    setSubmissionSearch("");
   }, [subjectId]);
 
   const selectedOption = submissionOptions.find((o) => o.key === submissionFilter) ?? null;
+  // In the table's sort order, so "Save & next" goes to the next row down.
   const shownSubmissions = useMemo(() => {
-    if (submissionFilter === "all") return submissions;
+    let chosen = submissions;
     if (submissionFilter.startsWith("a:")) {
       const id = Number(submissionFilter.slice(2));
-      return submissions.filter((sub) => sub.assignment_id === id);
+      chosen = submissions.filter((sub) => sub.assignment_id === id);
+    } else if (submissionFilter !== "all") {
+      const name = submissionFilter.slice(2);
+      chosen = submissions.filter((sub) => sub.assignment_id === null && sub.assignment_name === name);
     }
-    const name = submissionFilter.slice(2);
-    return submissions.filter((sub) => sub.assignment_id === null && sub.assignment_name === name);
-  }, [submissions, submissionFilter]);
-  // The status filter narrows only the table; the assignment summary and
+    return [...chosen].sort(submissionOrder(submissionSort));
+  }, [submissions, submissionFilter, submissionSort]);
+  // The status filter and the search narrow only the table; the assignment summary and
   // "Save & next" still use every submission of the chosen assignment.
-  const tableSubmissions = statusFilter ? shownSubmissions.filter((s) => s.status === statusFilter) : shownSubmissions;
+  const searchText = submissionSearch.trim().toLowerCase();
+  const tableSubmissions = shownSubmissions.filter(
+    (s) =>
+      (!statusFilter || s.status === statusFilter) &&
+      (!searchText ||
+        s.student_name.toLowerCase().includes(searchText) ||
+        s.student_email.toLowerCase().includes(searchText)),
+  );
 
   const assignmentNames = useMemo(
     () => Array.from(new Set(submissions.map((s) => s.assignment_name))),
@@ -286,6 +341,16 @@ export default function InstructorPage() {
   }
 
   // ---- Similarity check ----
+
+  const allPairs = similarityResult?.pairs ?? [];
+  const flaggedPairCount = allPairs.filter((p) => p.flagged).length;
+  const shownPairs = allPairs
+    .filter(
+      (p) =>
+        (!pairFilters.flaggedOnly || p.flagged) &&
+        pairMatches(pairFilters.search, studentLabel(p.submission_a_id), studentLabel(p.submission_b_id)),
+    )
+    .sort(codePairOrder(pairFilters.sort));
 
   async function handleRunSimilarity() {
     setSimilarityMsg(null);
@@ -493,8 +558,11 @@ export default function InstructorPage() {
 
   function closeGradingPanel() {
     setGradingSubmissionId(null);
-    gradeLoadFor.current = null;
   }
+  // A saved grade still loading for a panel that was closed is dropped when it arrives.
+  useEffect(() => {
+    if (gradingSubmissionId === null) gradeLoadFor.current = null;
+  }, [gradingSubmissionId]);
 
   /** Runs `action` (which replaces or closes the grading form) straight away, or
    * after the instructor confirms when the form has unsaved marks or comments. */
@@ -583,6 +651,316 @@ export default function InstructorPage() {
   }
 
   if (!ready || !user) return null;
+
+  // The panels open under the clicked row (inline), or at the bottom of the page when that row is not
+  // in the table (the status filter or the search hides it).
+  const panelClass = (inline: boolean) =>
+    inline
+      ? "scroll-mt-4 rounded-lg border border-blue-200 bg-white p-4 shadow-sm"
+      : "mt-6 scroll-mt-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm";
+  const inTable = (id: number | null) => tableSubmissions.some((s) => s.id === id);
+
+  function renderAutoevalPanel(inline: boolean) {
+    if (autoevalSubmissionId === null) return null;
+    return (
+      <section
+        ref={autoevalPanelRef}
+        className={panelClass(inline)}
+      >
+        <h2 className="text-lg font-bold">
+          Auto-evaluation {studentLabel(autoevalSubmissionId)}
+        </h2>
+        <p className="mt-1 text-sm text-gray-600">
+          Runs the automated evaluator (static analysis, AI-content heuristics, cross-modal consistency,
+          rubric grading) against this submission.
+        </p>
+        <RubricField
+          id="autoeval-rubric"
+          rubrics={rubrics}
+          value={autoevalRubricId}
+          locked={assignmentRubricFor(autoevalSubmissionId) !== null}
+          onChange={setAutoevalRubricId}
+        />
+        <RubricModelToggle on={useRubricModel} onChange={setUseRubricModel} disabled={autoevalRunning} />
+        <AiDetectionToggle on={useAiDetection} onChange={setUseAiDetection} disabled={autoevalRunning} />
+        <div className="mt-3 space-x-2">
+          <button
+            type="button"
+            disabled={autoevalRunning}
+            onClick={handleRunAutoeval}
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+          >
+            {autoevalRunning ? "Running..." : "Run auto-evaluation"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setAutoevalSubmissionId(null)}
+            className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+          >
+            Cancel
+          </button>
+        </div>
+        <Message state={autoevalMsg} />
+
+        {autoevalResult && (
+          <div className="mt-4">
+            <h3 className="font-bold">
+              Recommended score: {autoevalResult.recommended_score} / {autoevalResult.recommended_max} (
+              {autoevalResult.model ? `${autoevalResult.grader}, model ${autoevalResult.model}` : autoevalResult.grader} grader)
+            </h3>
+            <div className="mt-2">
+              <strong className="text-sm">Review flags:</strong>
+              <ul className="ml-5 list-disc text-sm">
+                {autoevalResult.review_flags.length ? (
+                  autoevalResult.review_flags.map((f, i) => <li key={i}>{f}</li>)
+                ) : (
+                  <li>Nothing flagged for review.</li>
+                )}
+              </ul>
+            </div>
+            <CrossModalConsistencyPanel result={autoevalResult.cross_modal_consistency} />
+            <AISignalsPanel result={autoevalResult} />
+            <table className="mt-3 w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 text-left">
+                  <th className="border border-gray-200 px-3 py-1.5">Criterion</th>
+                  <th className="border border-gray-200 px-3 py-1.5">Score</th>
+                  <th className="border border-gray-200 px-3 py-1.5">Justification</th>
+                </tr>
+              </thead>
+              <tbody>
+                {autoevalResult.criterion_breakdown.map((c, i) => (
+                  <tr key={i}>
+                    <td className="border border-gray-200 px-3 py-1.5">{c.name}</td>
+                    <td className="border border-gray-200 px-3 py-1.5">
+                      {c.score} / {c.max_points}
+                    </td>
+                    <td className="border border-gray-200 px-3 py-1.5">{c.justification}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <button
+              type="button"
+              onClick={useAutoevalScoresForGrading}
+              className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            >
+              Use these scores as starting point for manual grading
+            </button>
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  function renderGradingPanel(inline: boolean) {
+    if (gradingSubmissionId === null) return null;
+    return (
+      <section
+        ref={gradingPanelRef}
+        className={panelClass(inline)}
+      >
+        <h2 className="text-lg font-bold">Grade submission {studentLabel(gradingSubmissionId)}</h2>
+        {loadingSavedGrade && <p className="mt-1 text-sm text-gray-500">Loading the saved grade...</p>}
+        {savedGradeNote && (
+          <p className="mt-2 rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">{savedGradeNote}</p>
+        )}
+        <RubricField
+          id="grading-rubric"
+          rubrics={rubrics}
+          value={gradingRubricId}
+          locked={assignmentRubricFor(gradingSubmissionId) !== null}
+          onChange={setGradingRubricId}
+        />
+
+        {/* A plain div, not <fieldset>: browsers draw a fieldset's border through its legend. */}
+        <div
+          role="radiogroup"
+          aria-labelledby="grading-mode-label"
+          className="mb-3 rounded-md border border-blue-100 bg-blue-50 p-3"
+        >
+          <p id="grading-mode-label" className="text-sm font-semibold">
+            How to grade
+          </p>
+          <div className="mt-2 flex flex-wrap gap-4 text-sm">
+            <label className="flex items-center gap-1.5">
+              <input
+                type="radio"
+                name="grading-mode"
+                checked={gradingMode === "criteria"}
+                onChange={() => setGradingMode("criteria")}
+              />
+              Mark each criterion
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input
+                type="radio"
+                name="grading-mode"
+                checked={gradingMode === "final"}
+                onChange={() => setGradingMode("final")}
+              />
+              Final mark only
+            </label>
+          </div>
+          {gradingMode === "final" && (
+            <div className="mt-2">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-semibold" htmlFor="final-mark">
+                  Final mark
+                </label>
+                <input
+                  id="final-mark"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={finalMark}
+                  placeholder={`max ${gradingRubric?.max_total ?? 0}`}
+                  aria-invalid={Boolean(finalMarkError)}
+                  aria-describedby={finalMarkError ? "final-mark-error" : undefined}
+                  onChange={(e) => setFinalMark(e.target.value)}
+                  className={`w-24 rounded-md border px-2 py-1.5 text-sm ${
+                    finalMarkError ? "border-red-500 bg-red-50" : "border-gray-300"
+                  }`}
+                />
+                <span className="text-sm">/ {gradingRubric?.max_total ?? 0}</span>
+              </div>
+              {finalMarkError && (
+                <p id="final-mark-error" className="mt-1 text-xs text-red-700">
+                  {finalMarkError}
+                </p>
+              )}
+              <p className="mt-1 text-xs text-gray-600">
+                No per-criterion marks are saved. Students see this final mark and your feedback.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {gradingMode === "criteria" && (
+          <>
+            <div className="space-y-2">
+              {gradingRubric?.criteria.map((c) => {
+                const error = scoreErrors[c.name];
+                const empty = showEmptyMarks && (criterionScores[c.name] ?? "").trim() === "";
+                const inputId = `score-${c.name}`;
+                return (
+                  <div key={c.name} className="flex items-start gap-3">
+                    <label className="flex-1 pt-1.5 text-sm" htmlFor={inputId}>
+                      {c.name}{" "}
+                      <small className="text-gray-500">
+                        ({c.description || "no description"}, max {c.max_points})
+                      </small>
+                    </label>
+                    <div className="w-28 shrink-0">
+                      <input
+                        id={inputId}
+                        // Text, not type="number": a number box reports "abc" as empty,
+                        // which would hide the error and save 0.
+                        type="text"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        value={criterionScores[c.name] ?? ""}
+                        placeholder={`max ${c.max_points}`}
+                        aria-invalid={Boolean(error)}
+                        aria-describedby={error || empty ? `${inputId}-error` : undefined}
+                        onChange={(e) => setCriterionScores((prev) => ({ ...prev, [c.name]: e.target.value }))}
+                        className={`w-full rounded-md border px-2 py-1.5 text-sm ${
+                          error
+                            ? "border-red-500 bg-red-50"
+                            : empty
+                              ? "border-amber-500 bg-amber-50"
+                              : "border-gray-300"
+                        }`}
+                      />
+                      {error ? (
+                        <p id={`${inputId}-error`} className="mt-1 text-xs text-red-700">
+                          {error}
+                        </p>
+                      ) : (
+                        empty && (
+                          <p id={`${inputId}-error`} className="mt-1 text-xs text-amber-700">
+                            Empty: saved as 0.
+                          </p>
+                        )
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <p className="mt-3 text-sm font-semibold">
+              Final mark:{" "}
+              {criteriaTotal} / {gradingRubric?.max_total ?? 0}
+              {Object.keys(scoreErrors).length > 0 && (
+                <span className="ml-2 text-xs font-normal text-red-700">Marks shown in red are not counted.</span>
+              )}
+              <span className="ml-2 text-xs font-normal text-gray-500">
+                Students see this mark, the per-criterion marks and your feedback, never the internal comments.
+              </span>
+            </p>
+          </>
+        )}
+
+        <label className="mt-3 block text-sm font-semibold" htmlFor="grading-feedback">
+          Feedback for the student
+        </label>
+        <textarea
+          id="grading-feedback"
+          value={gradingFeedback}
+          onChange={(e) => setGradingFeedback(e.target.value)}
+          maxLength={5000}
+          placeholder="What was done well and what to improve (written for the student)"
+          className="mt-1 mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          rows={3}
+        />
+
+        <label className="mt-3 block text-sm font-semibold" htmlFor="grading-comments">
+          Comments (internal)
+        </label>
+        <textarea
+          id="grading-comments"
+          value={gradingComments}
+          onChange={(e) => setGradingComments(e.target.value)}
+          placeholder="Grading notes (visible to instructors only)"
+          className="mt-1 mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          rows={3}
+        />
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => handleSaveGrade()}
+            disabled={cannotSave}
+            title={cannotSaveReason}
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Save grade
+          </button>
+          {nextUngradedId !== null && (
+            <button
+              type="button"
+              onClick={() => handleSaveGrade(nextUngradedId)}
+              disabled={cannotSave}
+              title={cannotSaveReason ?? `Save, then grade ${studentLabel(nextUngradedId)}`}
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Save &amp; next
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => confirmDiscardThen(() => closeGradingPanel())}
+            className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+          >
+            Cancel
+          </button>
+        </div>
+        <Message state={gradingMsg} />
+        <ConfirmDialog request={gradingConfirm} onCancel={() => setGradingConfirm(null)} />
+      </section>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
@@ -696,6 +1074,14 @@ export default function InstructorPage() {
                     score fairly high, so this is evidence for review, not proof.
                   </dd>
                 </dl>
+                <PairFilters
+                  idPrefix="code-pairs"
+                  filters={pairFilters}
+                  sortOptions={CODE_PAIR_SORTS}
+                  shown={shownPairs.length}
+                  total={allPairs.length}
+                  flaggedTotal={flaggedPairCount}
+                />
                 <div className="mt-3 overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -715,7 +1101,7 @@ export default function InstructorPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {similarityResult.pairs.map((p) => (
+                      {shownPairs.map((p) => (
                         <tr
                           key={`${p.submission_a_id}-${p.submission_b_id}`}
                           className={
@@ -896,6 +1282,39 @@ export default function InstructorPage() {
               })}
             </div>
 
+            <div className="mt-3 flex flex-wrap items-end gap-3 text-sm">
+              <div>
+                <label className="block text-xs font-semibold" htmlFor="submissions-search">
+                  Student
+                </label>
+                <input
+                  id="submissions-search"
+                  type="search"
+                  value={submissionSearch}
+                  onChange={(e) => setSubmissionSearch(e.target.value)}
+                  placeholder="Search by name or email"
+                  className="mt-0.5 w-56 rounded-md border border-gray-300 px-2 py-1 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold" htmlFor="submissions-sort">
+                  Sort by
+                </label>
+                <select
+                  id="submissions-sort"
+                  value={submissionSort}
+                  onChange={(e) => setSubmissionSort(e.target.value as SubmissionSort)}
+                  className="mt-0.5 rounded-md border border-gray-300 px-2 py-1 text-sm"
+                >
+                  {SUBMISSION_SORTS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             {/* Scrolls sideways inside the page on narrow screens instead of widening it. */}
             <div className="mt-3 overflow-x-auto">
               <table className="w-full text-sm">
@@ -914,7 +1333,9 @@ export default function InstructorPage() {
                   {tableSubmissions.length === 0 && (
                     <tr>
                       <td colSpan={7} className="border border-gray-200 px-3 py-3 text-center text-gray-500">
-                        {shownSubmissions.length > 0
+                        {shownSubmissions.length > 0 && searchText
+                          ? `No ${statusFilter ? `${statusFilter} ` : ""}submissions from a student matching "${submissionSearch.trim()}".`
+                          : shownSubmissions.length > 0
                           ? `No ${statusFilter === "graded" ? "graded" : "ungraded"} submissions here.`
                           : submissionFilter === "all"
                             ? "No submissions yet."
@@ -1044,6 +1465,20 @@ export default function InstructorPage() {
                         </td>
                       </tr>
                     )}
+                    {autoevalSubmissionId === s.id && (
+                      <tr>
+                        <td colSpan={7} className="border border-gray-200 bg-blue-50/40 px-3 py-3">
+                          {renderAutoevalPanel(true)}
+                        </td>
+                      </tr>
+                    )}
+                    {gradingSubmissionId === s.id && (
+                      <tr>
+                        <td colSpan={7} className="border border-gray-200 bg-blue-50/40 px-3 py-3">
+                          {renderGradingPanel(true)}
+                        </td>
+                      </tr>
+                    )}
                     </Fragment>
                   ))}
                 </tbody>
@@ -1051,303 +1486,8 @@ export default function InstructorPage() {
             </div>
           </section>
 
-          {/* Auto-evaluation panel */}
-          {autoevalSubmissionId !== null && (
-            <section
-              ref={autoevalPanelRef}
-              className="mt-6 scroll-mt-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm"
-            >
-              <h2 className="text-lg font-bold">
-                Auto-evaluation {studentLabel(autoevalSubmissionId)}
-              </h2>
-              <p className="mt-1 text-sm text-gray-600">
-                Runs the automated evaluator (static analysis, AI-content heuristics, cross-modal consistency,
-                rubric grading) against this submission.
-              </p>
-              <RubricField
-                id="autoeval-rubric"
-                rubrics={rubrics}
-                value={autoevalRubricId}
-                locked={assignmentRubricFor(autoevalSubmissionId) !== null}
-                onChange={setAutoevalRubricId}
-              />
-              <RubricModelToggle on={useRubricModel} onChange={setUseRubricModel} disabled={autoevalRunning} />
-              <AiDetectionToggle on={useAiDetection} onChange={setUseAiDetection} disabled={autoevalRunning} />
-              <div className="mt-3 space-x-2">
-                <button
-                  type="button"
-                  disabled={autoevalRunning}
-                  onClick={handleRunAutoeval}
-                  className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-                >
-                  {autoevalRunning ? "Running..." : "Run auto-evaluation"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAutoevalSubmissionId(null)}
-                  className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
-                >
-                  Cancel
-                </button>
-              </div>
-              <Message state={autoevalMsg} />
-
-              {autoevalResult && (
-                <div className="mt-4">
-                  <h3 className="font-bold">
-                    Recommended score: {autoevalResult.recommended_score} / {autoevalResult.recommended_max} (
-                    {autoevalResult.model ? `${autoevalResult.grader}, model ${autoevalResult.model}` : autoevalResult.grader} grader)
-                  </h3>
-                  <div className="mt-2">
-                    <strong className="text-sm">Review flags:</strong>
-                    <ul className="ml-5 list-disc text-sm">
-                      {autoevalResult.review_flags.length ? (
-                        autoevalResult.review_flags.map((f, i) => <li key={i}>{f}</li>)
-                      ) : (
-                        <li>Nothing flagged for review.</li>
-                      )}
-                    </ul>
-                  </div>
-                  <CrossModalConsistencyPanel result={autoevalResult.cross_modal_consistency} />
-                  <AISignalsPanel result={autoevalResult} />
-                  <table className="mt-3 w-full text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 text-left">
-                        <th className="border border-gray-200 px-3 py-1.5">Criterion</th>
-                        <th className="border border-gray-200 px-3 py-1.5">Score</th>
-                        <th className="border border-gray-200 px-3 py-1.5">Justification</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {autoevalResult.criterion_breakdown.map((c, i) => (
-                        <tr key={i}>
-                          <td className="border border-gray-200 px-3 py-1.5">{c.name}</td>
-                          <td className="border border-gray-200 px-3 py-1.5">
-                            {c.score} / {c.max_points}
-                          </td>
-                          <td className="border border-gray-200 px-3 py-1.5">{c.justification}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <button
-                    type="button"
-                    onClick={useAutoevalScoresForGrading}
-                    className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                  >
-                    Use these scores as starting point for manual grading
-                  </button>
-                </div>
-              )}
-            </section>
-          )}
-
-          {/* Grading panel */}
-          {gradingSubmissionId !== null && (
-            <section
-              ref={gradingPanelRef}
-              className="mt-6 scroll-mt-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm"
-            >
-              <h2 className="text-lg font-bold">Grade submission {studentLabel(gradingSubmissionId)}</h2>
-              {loadingSavedGrade && <p className="mt-1 text-sm text-gray-500">Loading the saved grade...</p>}
-              {savedGradeNote && (
-                <p className="mt-2 rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">{savedGradeNote}</p>
-              )}
-              <RubricField
-                id="grading-rubric"
-                rubrics={rubrics}
-                value={gradingRubricId}
-                locked={assignmentRubricFor(gradingSubmissionId) !== null}
-                onChange={setGradingRubricId}
-              />
-
-              {/* A plain div, not <fieldset>: browsers draw a fieldset's border through its legend. */}
-              <div
-                role="radiogroup"
-                aria-labelledby="grading-mode-label"
-                className="mb-3 rounded-md border border-blue-100 bg-blue-50 p-3"
-              >
-                <p id="grading-mode-label" className="text-sm font-semibold">
-                  How to grade
-                </p>
-                <div className="mt-2 flex flex-wrap gap-4 text-sm">
-                  <label className="flex items-center gap-1.5">
-                    <input
-                      type="radio"
-                      name="grading-mode"
-                      checked={gradingMode === "criteria"}
-                      onChange={() => setGradingMode("criteria")}
-                    />
-                    Mark each criterion
-                  </label>
-                  <label className="flex items-center gap-1.5">
-                    <input
-                      type="radio"
-                      name="grading-mode"
-                      checked={gradingMode === "final"}
-                      onChange={() => setGradingMode("final")}
-                    />
-                    Final mark only
-                  </label>
-                </div>
-                {gradingMode === "final" && (
-                  <div className="mt-2">
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm font-semibold" htmlFor="final-mark">
-                        Final mark
-                      </label>
-                      <input
-                        id="final-mark"
-                        type="text"
-                        inputMode="decimal"
-                        autoComplete="off"
-                        value={finalMark}
-                        placeholder={`max ${gradingRubric?.max_total ?? 0}`}
-                        aria-invalid={Boolean(finalMarkError)}
-                        aria-describedby={finalMarkError ? "final-mark-error" : undefined}
-                        onChange={(e) => setFinalMark(e.target.value)}
-                        className={`w-24 rounded-md border px-2 py-1.5 text-sm ${
-                          finalMarkError ? "border-red-500 bg-red-50" : "border-gray-300"
-                        }`}
-                      />
-                      <span className="text-sm">/ {gradingRubric?.max_total ?? 0}</span>
-                    </div>
-                    {finalMarkError && (
-                      <p id="final-mark-error" className="mt-1 text-xs text-red-700">
-                        {finalMarkError}
-                      </p>
-                    )}
-                    <p className="mt-1 text-xs text-gray-600">
-                      No per-criterion marks are saved. Students see this final mark and your feedback.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {gradingMode === "criteria" && (
-                <>
-                  <div className="space-y-2">
-                    {gradingRubric?.criteria.map((c) => {
-                      const error = scoreErrors[c.name];
-                      const empty = showEmptyMarks && (criterionScores[c.name] ?? "").trim() === "";
-                      const inputId = `score-${c.name}`;
-                      return (
-                        <div key={c.name} className="flex items-start gap-3">
-                          <label className="flex-1 pt-1.5 text-sm" htmlFor={inputId}>
-                            {c.name}{" "}
-                            <small className="text-gray-500">
-                              ({c.description || "no description"}, max {c.max_points})
-                            </small>
-                          </label>
-                          <div className="w-28 shrink-0">
-                            <input
-                              id={inputId}
-                              // Text, not type="number": a number box reports "abc" as empty,
-                              // which would hide the error and save 0.
-                              type="text"
-                              inputMode="decimal"
-                              autoComplete="off"
-                              value={criterionScores[c.name] ?? ""}
-                              placeholder={`max ${c.max_points}`}
-                              aria-invalid={Boolean(error)}
-                              aria-describedby={error || empty ? `${inputId}-error` : undefined}
-                              onChange={(e) => setCriterionScores((prev) => ({ ...prev, [c.name]: e.target.value }))}
-                              className={`w-full rounded-md border px-2 py-1.5 text-sm ${
-                                error
-                                  ? "border-red-500 bg-red-50"
-                                  : empty
-                                    ? "border-amber-500 bg-amber-50"
-                                    : "border-gray-300"
-                              }`}
-                            />
-                            {error ? (
-                              <p id={`${inputId}-error`} className="mt-1 text-xs text-red-700">
-                                {error}
-                              </p>
-                            ) : (
-                              empty && (
-                                <p id={`${inputId}-error`} className="mt-1 text-xs text-amber-700">
-                                  Empty: saved as 0.
-                                </p>
-                              )
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <p className="mt-3 text-sm font-semibold">
-                    Final mark:{" "}
-                    {criteriaTotal} / {gradingRubric?.max_total ?? 0}
-                    {Object.keys(scoreErrors).length > 0 && (
-                      <span className="ml-2 text-xs font-normal text-red-700">Marks shown in red are not counted.</span>
-                    )}
-                    <span className="ml-2 text-xs font-normal text-gray-500">
-                      Students see this mark, the per-criterion marks and your feedback, never the internal comments.
-                    </span>
-                  </p>
-                </>
-              )}
-
-              <label className="mt-3 block text-sm font-semibold" htmlFor="grading-feedback">
-                Feedback for the student
-              </label>
-              <textarea
-                id="grading-feedback"
-                value={gradingFeedback}
-                onChange={(e) => setGradingFeedback(e.target.value)}
-                maxLength={5000}
-                placeholder="What was done well and what to improve (written for the student)"
-                className="mt-1 mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                rows={3}
-              />
-
-              <label className="mt-3 block text-sm font-semibold" htmlFor="grading-comments">
-                Comments (internal)
-              </label>
-              <textarea
-                id="grading-comments"
-                value={gradingComments}
-                onChange={(e) => setGradingComments(e.target.value)}
-                placeholder="Grading notes (visible to instructors only)"
-                className="mt-1 mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                rows={3}
-              />
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleSaveGrade()}
-                  disabled={cannotSave}
-                  title={cannotSaveReason}
-                  className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Save grade
-                </button>
-                {nextUngradedId !== null && (
-                  <button
-                    type="button"
-                    onClick={() => handleSaveGrade(nextUngradedId)}
-                    disabled={cannotSave}
-                    title={cannotSaveReason ?? `Save, then grade ${studentLabel(nextUngradedId)}`}
-                    className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    Save &amp; next
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => confirmDiscardThen(closeGradingPanel)}
-                  className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
-                >
-                  Cancel
-                </button>
-              </div>
-              <Message state={gradingMsg} />
-              <ConfirmDialog request={gradingConfirm} onCancel={() => setGradingConfirm(null)} />
-            </section>
-          )}
+          {autoevalSubmissionId !== null && !inTable(autoevalSubmissionId) && renderAutoevalPanel(false)}
+          {gradingSubmissionId !== null && !inTable(gradingSubmissionId) && renderGradingPanel(false)}
         </>
       )}
     </div>
