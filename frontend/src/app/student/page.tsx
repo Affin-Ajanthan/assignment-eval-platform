@@ -10,6 +10,7 @@ import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import AssignmentCard from "@/components/student/AssignmentCard";
 import SubmissionHistory from "@/components/student/SubmissionHistory";
 import { OpenForm } from "@/components/student/labels";
+import PageLoading from "@/components/PageLoading";
 
 export default function StudentPage() {
   const { user, ready } = useRequireRole("student");
@@ -73,7 +74,7 @@ export default function StudentPage() {
     });
   }
 
-  if (!ready || !user) return null;
+  if (!ready || !user) return <PageLoading />;
 
   const subjects = Array.from(
     new Map((assignments ?? []).map((a) => [a.subject_id, a.subject_name] as const)).entries(),

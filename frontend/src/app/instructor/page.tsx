@@ -35,6 +35,7 @@ import DashboardTabs, { DashboardTab, isDashboardTab, tabPanelProps } from "@/co
 import { formatDateTime, formatMark } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
+import PageLoading from "@/components/PageLoading";
 
 /** Inline error for one criterion's mark, or null when it is fine. An empty box
  * is not an error (it is saved as 0). */
@@ -671,7 +672,8 @@ export default function InstructorPage() {
     }
   }
 
-  if (!ready || !user) return null;
+  if (!ready || !user) return <PageLoading />;
+  const currentSubject = user.subjects.find((s) => s.id === subjectId);
 
   // The panels open under the clicked row (inline), or at the bottom of the page when that row is not
   // in the table (the status filter or the search hides it).
@@ -985,7 +987,7 @@ export default function InstructorPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
-      <AccountBar user={user} />
+      <AccountBar user={user} context={currentSubject ? `${currentSubject.name} (${currentSubject.code})` : undefined} />
 
       <h1 className="text-2xl font-bold">Instructor dashboard</h1>
       <p className="mt-1 text-sm text-gray-600">
