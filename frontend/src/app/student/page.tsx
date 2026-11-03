@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { apiFetch, StudentAssignment } from "@/lib/api";
+import { apiFetch, StudentAssignment, UpcomingAssignment } from "@/lib/api";
 import { useRequireRole } from "@/lib/useRequireRole";
 import { formatDateTime } from "@/lib/datetime";
 import AccountBar from "@/components/AccountBar";
@@ -19,6 +19,8 @@ export default function StudentPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   // Which subject's assignments are listed, for a student in more than one.
   const [subjectFilter, setSubjectFilter] = useState<number | "all">("all");
+  // Not open yet: name and dates only. A failure here just leaves the list out.
+  const [upcoming, setUpcoming] = useState<UpcomingAssignment[]>([]);
   // Bumped after every submit / edit / delete, so an open history refreshes.
   const [historyVersion, setHistoryVersion] = useState(0);
   const [openForm, setOpenForm] = useState<OpenForm>(null);
@@ -39,6 +41,9 @@ export default function StudentPage() {
   useEffect(() => {
     if (!ready || !user) return;
     load();
+    apiFetch<UpcomingAssignment[]>("/upcoming-assignments")
+      .then(setUpcoming)
+      .catch(() => setUpcoming([]));
   }, [ready, user, load]);
 
   async function changed(assignmentId: number, text: string) {
@@ -75,6 +80,8 @@ export default function StudentPage() {
   ).sort((x, y) => x[1].localeCompare(y[1]));
   const listed = (assignments ?? []).filter((a) => subjectFilter === "all" || a.subject_id === subjectFilter);
   const deadline = (a: StudentAssignment) => new Date(a.deadline).getTime();
+  const chosenSubject = subjects.find(([id]) => id === subjectFilter)?.[1];
+  const comingSoon = upcoming.filter((u) => subjectFilter === "all" || u.subject_name === chosenSubject);
   // Open ones by the deadline that comes first; past ones with the most recent first.
   const open = listed.filter((a) => a.status === "open").sort((x, y) => deadline(x) - deadline(y));
   const past = listed.filter((a) => a.status === "closed").sort((x, y) => deadline(y) - deadline(x));
@@ -147,6 +154,29 @@ export default function StudentPage() {
           <ul className="mt-3 space-y-4">{open.map(card)}</ul>
         )}
       </section>
+
+      {comingSoon.length > 0 && (
+        <section className="mt-8" data-testid="coming-soon">
+          <h2 className="text-lg font-bold">Coming soon</h2>
+          <p className="mt-1 text-sm text-gray-600">
+            Not open yet. The details appear here when each one opens.
+          </p>
+          <ul className="mt-3 divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white text-sm shadow-sm">
+            {comingSoon.map((u) => (
+              <li key={`${u.subject_name}-${u.name}`} className="flex flex-wrap items-baseline justify-between gap-2 px-4 py-3">
+                <span>
+                  <span className="font-semibold">{u.name}</span>
+                  {u.assignment_type === "code_challenge" && <span className="ml-2 text-xs text-gray-500">Code challenge</span>}
+                  <span className="block text-xs text-gray-500">{u.subject_name}</span>
+                </span>
+                <span className="text-xs text-gray-700">
+                  Opens {formatDateTime(u.available_from)} · Deadline {formatDateTime(u.deadline)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {past.length > 0 && (
         <section className="mt-8">

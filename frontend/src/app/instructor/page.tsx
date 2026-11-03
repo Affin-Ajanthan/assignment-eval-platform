@@ -30,6 +30,7 @@ import RubricModelToggle, {
 } from "@/components/instructor/RubricModelToggle";
 import RubricsSection from "@/components/instructor/RubricsSection";
 import PairFilters, { pairMatches, usePairFilters } from "@/components/instructor/PairFilters";
+import CodeCompareView from "@/components/instructor/CodeCompareView";
 import DashboardTabs, { DashboardTab, isDashboardTab, tabPanelProps } from "@/components/instructor/DashboardTabs";
 import { formatDateTime, formatMark } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
@@ -193,6 +194,8 @@ export default function InstructorPage() {
   const [similarityMsg, setSimilarityMsg] = useState<MessageState>(null);
   const [similarityRunning, setSimilarityRunning] = useState(false);
   const pairFilters = usePairFilters<CodePairSort>("flag");
+  // The pair whose code is open side by side ("<a id>-<b id>"), if any.
+  const [comparePair, setComparePair] = useState<string | null>(null);
 
   // Auto-evaluation panel
   const [autoevalSubmissionId, setAutoevalSubmissionId] = useState<number | null>(null);
@@ -369,6 +372,7 @@ export default function InstructorPage() {
   async function handleRunSimilarity() {
     setSimilarityMsg(null);
     setSimilarityResult(null);
+    setComparePair(null);
     if (subjectId === null) {
       setSimilarityMsg({ text: "Pick a subject first.", kind: "error" });
       return;
@@ -1123,9 +1127,11 @@ export default function InstructorPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {shownPairs.map((p) => (
+                      {shownPairs.map((p) => {
+                        const pairKey = `${p.submission_a_id}-${p.submission_b_id}`;
+                        return (
+                        <Fragment key={pairKey}>
                         <tr
-                          key={`${p.submission_a_id}-${p.submission_b_id}`}
                           className={
                             p.flag_level === "high" ? "bg-red-50" : p.flag_level === "review" ? "bg-yellow-50" : undefined
                           }
@@ -1150,9 +1156,33 @@ export default function InstructorPage() {
                               <span className="font-semibold text-yellow-800">⚑ Review (semantic)</span>
                             )}
                             {p.flag_reason && <div className="text-xs text-gray-600">{p.flag_reason}</div>}
+                            <button
+                              type="button"
+                              aria-expanded={comparePair === pairKey}
+                              onClick={() => setComparePair(comparePair === pairKey ? null : pairKey)}
+                              className="mt-1 text-xs font-semibold text-blue-700 hover:underline"
+                            >
+                              {comparePair === pairKey ? "Hide code" : "Compare code"}
+                            </button>
                           </td>
                         </tr>
-                      ))}
+                        {comparePair === pairKey && subjectId !== null && (
+                          <tr>
+                            <td colSpan={7} className="border border-gray-200 bg-white px-3 py-3">
+                              <CodeCompareView
+                                subjectId={subjectId}
+                                assignmentName={similarityResult.assignment_name}
+                                aId={p.submission_a_id}
+                                bId={p.submission_b_id}
+                                labelA={studentLabel(p.submission_a_id)}
+                                labelB={studentLabel(p.submission_b_id)}
+                              />
+                            </td>
+                          </tr>
+                        )}
+                        </Fragment>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

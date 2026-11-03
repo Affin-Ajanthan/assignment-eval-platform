@@ -661,6 +661,38 @@ export async function apiFetch<T = unknown>(path: string, options: ApiFetchOptio
   return (text ? JSON.parse(text) : null) as T;
 }
 
+/** A not-yet-open assignment in the student's "Coming soon" list (GET /upcoming-assignments): name and dates only. */
+export interface UpcomingAssignment {
+  name: string;
+  subject_name: string;
+  assignment_type: "submission" | "code_challenge";
+  available_from: string;
+  deadline: string;
+}
+
+/** One pair of the code check side by side (GET .../code-compare): each file and its lines shared with the other. */
+export interface CodeCompareFile {
+  name: string;
+  source: string;
+  line_count: number;
+  truncated: boolean;
+  ranges: { start: number; end: number }[];
+}
+
+export interface CodeCompareSide {
+  submission_id: number;
+  student: string;
+  files: CodeCompareFile[];
+}
+
+export interface CodeCompareResult {
+  assignment_name: string;
+  shared_fingerprints: number;
+  common_code_removed: number;
+  a: CodeCompareSide;
+  b: CodeCompareSide;
+}
+
 /** Thrown by apiUpload when the student cancels the upload. */
 export class UploadCancelled extends Error {
   constructor() {
