@@ -30,6 +30,7 @@ import RubricModelToggle, {
 } from "@/components/instructor/RubricModelToggle";
 import RubricsSection from "@/components/instructor/RubricsSection";
 import PairFilters, { pairMatches, usePairFilters } from "@/components/instructor/PairFilters";
+import DashboardTabs, { DashboardTab, isDashboardTab, tabPanelProps } from "@/components/instructor/DashboardTabs";
 import { formatDateTime, formatMark } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
@@ -168,6 +169,19 @@ export default function InstructorPage() {
   const { user, ready } = useRequireRole("instructor");
 
   const [subjectId, setSubjectId] = useState<number | null>(null);
+  // Which part of the dashboard is shown; ?tab= in the address, so a reload or a link
+  // back from an assignment page opens the same tab.
+  const [tab, setTab] = useState<DashboardTab>("grading");
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("tab");
+    if (isDashboardTab(wanted)) setTab(wanted);
+  }, []);
+  function changeTab(next: DashboardTab) {
+    setTab(next);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", next);
+    window.history.replaceState(null, "", url);
+  }
   const [rubrics, setRubrics] = useState<Rubric[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
 
@@ -395,6 +409,9 @@ export default function InstructorPage() {
   function isCodeChallenge(assignmentId: number | null): boolean {
     return assignments.find((a) => a.id === assignmentId)?.assignment_type === "code_challenge";
   }
+
+  // Submissions waiting for a grade, shown on the tab. A code challenge is marked by its tests, not graded here.
+  const ungradedCount = submissions.filter((s) => s.status !== "graded" && !isCodeChallenge(s.assignment_id)).length;
 
   // How many test cases the submission's assignment has (0 when none).
   function testCountFor(assignmentId: number | null): number {
@@ -963,7 +980,7 @@ export default function InstructorPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8">
+    <div className="mx-auto max-w-6xl px-4 py-8">
       <AccountBar user={user} />
 
       <h1 className="text-2xl font-bold">Instructor dashboard</h1>
@@ -998,6 +1015,9 @@ export default function InstructorPage() {
 
       {user.subjects.length > 0 && (
         <>
+          <DashboardTabs tab={tab} onChange={changeTab} toGrade={ungradedCount} />
+
+          <div {...tabPanelProps("setup", tab)}>
           {subjectId !== null && (
             <>
               <AssignmentsSection
@@ -1008,7 +1028,9 @@ export default function InstructorPage() {
               <RubricsSection subjectId={subjectId} rubrics={rubrics} onChanged={reloadCourseSetup} />
             </>
           )}
+          </div>
 
+          <div {...tabPanelProps("integrity", tab)}>
           {/* Similarity check */}
           <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-bold">Similarity Code Check</h2>
@@ -1166,7 +1188,9 @@ export default function InstructorPage() {
 
           {/* Student self-check history */}
           <SelfCheckHistoryPanel assignments={assignments} />
+          </div>
 
+          <div {...tabPanelProps("batch", tab)}>
           {/* Evaluate a whole assignment */}
           {subjectId !== null && (
             <BatchEvaluateSection
@@ -1176,7 +1200,9 @@ export default function InstructorPage() {
               rubrics={rubrics}
             />
           )}
+          </div>
 
+          <div {...tabPanelProps("grading", tab)}>
           {/* Submissions */}
           <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-bold">Submissions for this subject</h2>
@@ -1488,6 +1514,7 @@ export default function InstructorPage() {
 
           {autoevalSubmissionId !== null && !inTable(autoevalSubmissionId) && renderAutoevalPanel(false)}
           {gradingSubmissionId !== null && !inTable(gradingSubmissionId) && renderGradingPanel(false)}
+          </div>
         </>
       )}
     </div>

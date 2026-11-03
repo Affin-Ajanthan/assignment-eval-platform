@@ -36,7 +36,7 @@ export default function NewAssignmentPage() {
 
   if (!ready || !user) return null;
 
-  const back = target ? `/instructor?subject=${target.subjectId}` : "/instructor";
+  const back = target ? `/instructor?subject=${target.subjectId}&tab=setup` : "/instructor";
   const kindTitle = KIND_OPTIONS.find((o) => o.value === target?.kind)?.title;
   const subject = user.subjects.find((s) => s.id === target?.subjectId);
   return (
