@@ -17,6 +17,8 @@ export default function StudentPage() {
   // null until the first load: "no assignments" is shown only once the list has arrived.
   const [assignments, setAssignments] = useState<StudentAssignment[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Which subject's assignments are listed, for a student in more than one.
+  const [subjectFilter, setSubjectFilter] = useState<number | "all">("all");
   // Bumped after every submit / edit / delete, so an open history refreshes.
   const [historyVersion, setHistoryVersion] = useState(0);
   const [openForm, setOpenForm] = useState<OpenForm>(null);
@@ -68,8 +70,14 @@ export default function StudentPage() {
 
   if (!ready || !user) return null;
 
-  const open = (assignments ?? []).filter((a) => a.status === "open");
-  const past = (assignments ?? []).filter((a) => a.status === "closed");
+  const subjects = Array.from(
+    new Map((assignments ?? []).map((a) => [a.subject_id, a.subject_name] as const)).entries(),
+  ).sort((x, y) => x[1].localeCompare(y[1]));
+  const listed = (assignments ?? []).filter((a) => subjectFilter === "all" || a.subject_id === subjectFilter);
+  const deadline = (a: StudentAssignment) => new Date(a.deadline).getTime();
+  // Open ones by the deadline that comes first; past ones with the most recent first.
+  const open = listed.filter((a) => a.status === "open").sort((x, y) => deadline(x) - deadline(y));
+  const past = listed.filter((a) => a.status === "closed").sort((x, y) => deadline(y) - deadline(x));
   const card = (a: StudentAssignment) => (
     <AssignmentCard
       key={a.id}
@@ -88,14 +96,33 @@ export default function StudentPage() {
 
       <h1 className="text-2xl font-bold">Student portal</h1>
       <p className="mt-1 text-sm text-gray-600">
-        Open an assignment, upload your code, report and presentation video, and submit before the deadline. You can
-        edit or delete your submission until the deadline or until it has been graded. A code challenge is the
-        exception: press Do assignment and it opens on its own page with the instructions; press Do task there to see the
-        questions and do the tasks one at a time. Each task is marked as soon as you submit it and cannot be changed afterwards, but you can delete your whole submission (until the deadline) and do the tasks again.
+        Submit your work before the deadline. You can edit or delete a submission until the deadline or until it is
+        graded; each assignment below says what it accepts.
       </p>
 
       {user.subjects.length === 0 && (
         <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">No subjects assigned yet -- ask your admin</p>
+      )}
+
+      {subjects.length > 1 && (
+        <div className="mt-4">
+          <label className="block text-sm font-semibold" htmlFor="subject-filter">
+            Subject
+          </label>
+          <select
+            id="subject-filter"
+            value={subjectFilter}
+            onChange={(e) => setSubjectFilter(e.target.value === "all" ? "all" : Number(e.target.value))}
+            className="mt-1 rounded-md border border-gray-300 px-3 py-2 text-sm"
+          >
+            <option value="all">All subjects</option>
+            {subjects.map(([id, name]) => (
+              <option key={id} value={id}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </div>
       )}
 
       <section className="mt-6">

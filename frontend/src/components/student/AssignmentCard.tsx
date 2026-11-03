@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { StudentAssignment } from "@/lib/api";
 import { taskName, timedTasks, timeLimitText } from "@/lib/tasks";
-import { formatDateTime, formatMark } from "@/lib/datetime";
+import { formatDateTime, formatMark, timeLeft } from "@/lib/datetime";
 import Badge from "@/components/Badge";
 import RichText from "@/components/RichText";
 import Message, { MessageState } from "@/components/Message";
@@ -48,6 +48,8 @@ export default function AssignmentCard({
     ? [sub.has_code && "code", sub.has_report && "report", sub.has_video && "video"].filter(Boolean).join(", ")
     : "";
   const formMode = openForm?.id === a.id ? openForm.mode : null;
+  // "Due in 3 days" on an open assignment; red under 24 hours.
+  const due = a.status === "open" ? timeLeft(a.deadline) : null;
   const closeForm = () => setOpenForm(null);
   const finishForm = async (text: string) => {
     setOpenForm(null);
@@ -78,9 +80,18 @@ export default function AssignmentCard({
             <p className="text-xs text-gray-500">Language: {languageNames(a.code_languages)}</p>
           )}
         </div>
-        <Badge tone={a.status === "open" ? "bg-green-50 text-green-800" : "bg-gray-100 text-gray-700"}>
-          {a.status === "open" ? "Open" : "Closed"}
-        </Badge>
+        <div className="flex flex-wrap items-center gap-1">
+          {due && (
+            <Badge tone={due.urgent ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-800"}>
+              <span data-testid="due-badge" title={`Deadline: ${formatDateTime(a.deadline)}`}>
+                {due.text}
+              </span>
+            </Badge>
+          )}
+          <Badge tone={a.status === "open" ? "bg-green-50 text-green-800" : "bg-gray-100 text-gray-700"}>
+            {a.status === "open" ? "Open" : "Closed"}
+          </Badge>
+        </div>
       </div>
 
       {/* A code challenge is done on its own page: its description and its questions are shown there, after the

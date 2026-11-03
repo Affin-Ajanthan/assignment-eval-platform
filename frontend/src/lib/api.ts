@@ -661,6 +661,60 @@ export async function apiFetch<T = unknown>(path: string, options: ApiFetchOptio
   return (text ? JSON.parse(text) : null) as T;
 }
 
+/** Thrown by apiUpload when the student cancels the upload. */
+export class UploadCancelled extends Error {
+  constructor() {
+    super("Upload cancelled");
+  }
+}
+
+/** Like apiFetch for a file upload, but reports progress (`onProgress` gets 0..1), which fetch cannot do, and stops
+ * when `signal` is aborted (rejecting with UploadCancelled). */
+export function apiUpload<T = unknown>(
+  path: string,
+  method: "POST" | "PUT",
+  body: FormData,
+  onProgress: (fraction: number) => void,
+  signal?: AbortSignal,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, `${API_BASE}${path}`);
+    const token = getToken();
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && e.total > 0) onProgress(e.loaded / e.total);
+    };
+    xhr.onload = () => {
+      if (xhr.status === 401) {
+        clearSession();
+        // Same as apiFetch: a plain utility can't use useRouter().
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+        if (typeof window !== "undefined") window.location.href = "/login";
+        return reject(new Error("Session expired -- please log in again"));
+      }
+      let parsed: unknown = null;
+      try {
+        parsed = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+      } catch {
+        /* not JSON */
+      }
+      if (xhr.status < 200 || xhr.status >= 300) {
+        const detail = (parsed as { detail?: unknown } | null)?.detail;
+        return reject(new Error(typeof detail === "string" ? detail : xhr.statusText || `Upload failed (${xhr.status})`));
+      }
+      resolve(parsed as T);
+    };
+    xhr.onerror = () => reject(new Error("Network error: the upload did not reach the server"));
+    xhr.onabort = () => reject(new UploadCancelled());
+    if (signal) {
+      if (signal.aborted) return reject(new UploadCancelled());
+      signal.addEventListener("abort", () => xhr.abort(), { once: true });
+    }
+    xhr.send(body);
+  });
+}
+
 /** A file that belongs to a submission (see GET /submissions/{id}/files). */
 export interface SubmissionFile {
   kind: "code" | "report" | "video";
@@ -753,6 +807,8 @@ export interface SelfCheckStatus {
   ai_enabled: boolean;
   limit_per_hour: number;
   remaining: Record<SelfCheckKind, number>;
+  /** When a kind whose checks are used up for this hour can run again (null while some are left). */
+  next_available?: Partial<Record<SelfCheckKind, string | null>>;
   latest: Record<SelfCheckKind, SelfCheck | null>;
 }
 

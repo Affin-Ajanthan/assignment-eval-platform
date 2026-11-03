@@ -10,7 +10,7 @@ ever sees bands and their own matching passages (app/self_checks.py).
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -54,6 +54,8 @@ class SelfCheckStatusOut(BaseModel):
     ai_enabled: bool
     limit_per_hour: int
     remaining: dict[str, int]  # checks left this hour, per kind
+    # When a check of a kind whose limit is used up can run again (None while some are left).
+    next_available: dict[str, Optional[UTCDateTime]] = {}
     latest: dict[str, Optional[SelfCheckOut]]  # most recent check per kind
 
 
@@ -188,16 +190,22 @@ def self_check_status(submission_id: int, student: User = Depends(require_studen
     a = submission.assignment
     latest: dict[str, Optional[SelfCheckOut]] = {}
     remaining: dict[str, int] = {}
+    next_available: dict[str, Optional[datetime]] = {}
     for kind in _self_checks.KINDS:
         last = (db.query(SelfCheck).filter(SelfCheck.submission_id == submission.id, SelfCheck.kind == kind)
                 .order_by(SelfCheck.id.desc()).first())
         latest[kind] = _self_check_out(last) if last else None
-        remaining[kind] = max(0, _self_checks.LIMIT_PER_HOUR - len(_checks_this_hour(db, submission, kind)))
+        recent = _checks_this_hour(db, submission, kind)
+        remaining[kind] = max(0, _self_checks.LIMIT_PER_HOUR - len(recent))
+        # The oldest check of the hour leaves the window first (the same time start_self_check's 429 gives).
+        next_available[kind] = (as_utc(recent[0].created_at) + timedelta(hours=1)
+                                if remaining[kind] == 0 and recent else None)
     return SelfCheckStatusOut(
         submission_id=submission.id, can_run=_self_check_allowed(submission) is None,
         similarity_enabled=bool(a) and on_flag(a.student_similarity_check),
         ai_enabled=bool(a) and on_flag(a.student_ai_check),
-        limit_per_hour=_self_checks.LIMIT_PER_HOUR, remaining=remaining, latest=latest,
+        limit_per_hour=_self_checks.LIMIT_PER_HOUR, remaining=remaining, next_available=next_available,
+        latest=latest,
     )
 
 
