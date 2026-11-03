@@ -142,6 +142,13 @@ add_missing_columns("assignments", {"code_languages": "JSON"})
 add_missing_columns("assignments", {"student_similarity_check": "BOOLEAN NOT NULL DEFAULT 1",
                                     "student_ai_check": "BOOLEAN NOT NULL DEFAULT 1"})
 add_missing_columns("assignments", {"ignore_common_code": "BOOLEAN NOT NULL DEFAULT 1"})
+add_missing_columns("assignments", {
+    "late_grace_minutes": "INTEGER NOT NULL DEFAULT 0", "late_until": "DATETIME",
+    "late_penalty_percent": "FLOAT NOT NULL DEFAULT 0", "late_penalty_max_percent": "FLOAT NOT NULL DEFAULT 100",
+    "late_penalty_unit": "VARCHAR NOT NULL DEFAULT 'percent'", "late_penalty_marks": "FLOAT NOT NULL DEFAULT 0",
+    "late_penalty_max_marks": "FLOAT"})
+add_missing_columns("submissions", {"late_seconds": "INTEGER", "late_penalty_percent": "FLOAT NOT NULL DEFAULT 0",
+                                    "late_penalty_marks": "FLOAT NOT NULL DEFAULT 0"})
 
 
 # --------------------------------------------------------------------------
@@ -265,6 +272,9 @@ _TASK_STARTER_MAX = 50_000  # the student editor's limit (MAX_CODE_CHARS in app/
 _TEST_TEXT_MAX = 10_000
 _TASK_PASSWORD_MAX = 100
 _TASK_TIME_MAX = 24 * 3600  # a task's time limit, in seconds
+_LATE_GRACE_MAX = 7 * 24 * 60  # the grace period after a deadline, in minutes
+_LATE_MARKS_MAX = 1000  # the most marks a late penalty can take (per day or in all)
+LatePenaltyUnit = Literal["percent", "marks"]  # what a late penalty is counted in
 
 
 class QuestionIn(BaseModel):
@@ -351,6 +361,16 @@ class AssignmentIn(BaseModel):
     task_password: str = Field(default="", max_length=_TASK_PASSWORD_MAX)
     # A code challenge's tasks must be handed in in order, the first before the second, and so on.
     tasks_in_order: bool = False
+    # Late work. Minutes after the deadline in which work still counts as on time; the late deadline, the date until
+    # which late work is accepted at all (None: not after the grace period); and the penalty for every day or part
+    # of a day late, at most the maximum: in percent of the mark, or in marks (`late_penalty_unit` says which).
+    late_grace_minutes: int = Field(default=0, ge=0, le=_LATE_GRACE_MAX)
+    late_until: Optional[datetime] = None
+    late_penalty_unit: LatePenaltyUnit = "percent"
+    late_penalty_percent: float = Field(default=0, ge=0, le=100)
+    late_penalty_max_percent: float = Field(default=100, ge=0, le=100)
+    late_penalty_marks: float = Field(default=0, ge=0, le=_LATE_MARKS_MAX)
+    late_penalty_max_marks: Optional[float] = Field(default=None, ge=0, le=_LATE_MARKS_MAX)  # None: no limit
 
 
 class AssignmentUpdate(BaseModel):
@@ -375,6 +395,14 @@ class AssignmentUpdate(BaseModel):
     test_main_file: Optional[str] = Field(default=None, max_length=200)  # "" picks it automatically
     task_password: Optional[str] = Field(default=None, max_length=_TASK_PASSWORD_MAX)  # "" removes it
     tasks_in_order: Optional[bool] = None  # can be changed at any time
+    # The late rules can change at any time; work already handed in keeps the penalty it got.
+    late_grace_minutes: Optional[int] = Field(default=None, ge=0, le=_LATE_GRACE_MAX)
+    late_until: Optional[datetime] = None  # send null explicitly to stop accepting late work
+    late_penalty_percent: Optional[float] = Field(default=None, ge=0, le=100)
+    late_penalty_max_percent: Optional[float] = Field(default=None, ge=0, le=100)
+    late_penalty_unit: Optional[LatePenaltyUnit] = None
+    late_penalty_marks: Optional[float] = Field(default=None, ge=0, le=_LATE_MARKS_MAX)
+    late_penalty_max_marks: Optional[float] = Field(default=None, ge=0, le=_LATE_MARKS_MAX)  # null: no limit
 
 
 class AssignmentOut(BaseModel):
@@ -415,6 +443,14 @@ class AssignmentOut(BaseModel):
     test_main_file: str = ""
     task_password: str = ""  # the code challenge's access password, for the instructor to read back and share
     tasks_in_order: bool = False
+    late_grace_minutes: int = 0
+    late_until: Optional[UTCDateTime] = None
+    late_penalty_percent: float = 0
+    late_penalty_max_percent: float = 100
+    late_penalty_unit: LatePenaltyUnit = "percent"
+    late_penalty_marks: float = 0
+    late_penalty_max_marks: Optional[float] = None
+    late_count: int = 0  # submissions handed in late
 
 
 class CriterionMarkOut(BaseModel):
@@ -434,8 +470,14 @@ class MySubmissionOut(BaseModel):
     has_code: bool
     has_report: bool
     has_video: bool
-    final_mark: Optional[float]
+    final_mark: Optional[float]  # after any late penalty
     max_mark: Optional[float]
+    # Handed in after the deadline and its grace period: seconds after the deadline (None: on time), the percent
+    # of the mark or the marks that cost, and the mark before that penalty (shown with the final one, e.g. 34 -> 30.6).
+    late_seconds: Optional[int] = None
+    late_penalty_percent: float = 0
+    late_penalty_marks: float = 0
+    raw_mark: Optional[float] = None
     # Empty when graded with "Final mark only" (no per-criterion marks) or not graded.
     criterion_marks: list[CriterionMarkOut] = []
     feedback: Optional[str] = None
@@ -475,6 +517,18 @@ class StudentAssignmentOut(BaseModel):
     has_task_password: bool = False
     tasks_unlocked: bool = True  # False: has_task_password and this student has not entered it yet
     tasks_in_order: bool = False  # the tasks must be handed in in order
+    # Late work. `status` stays "open" while late work is still taken, so `past_deadline` says the deadline has gone.
+    # `accept_until` is the last moment work is taken when that is after the deadline (grace period or late date).
+    past_deadline: bool = False
+    accept_until: Optional[UTCDateTime] = None
+    late_grace_minutes: int = 0
+    late_penalty_percent: float = 0
+    late_penalty_max_percent: float = 100
+    late_penalty_unit: LatePenaltyUnit = "percent"
+    late_penalty_marks: float = 0
+    late_penalty_max_marks: Optional[float] = None
+    penalty_now_percent: float = 0  # what handing in right now would cost (0 inside the grace period)
+    penalty_now_marks: float = 0
     my_submission: Optional[MySubmissionOut]
 
 
@@ -494,8 +548,14 @@ class SubmissionOut(BaseModel):
     status: str
     # Final total of the latest grade (and the rubric's maximum); the only
     # grading information this response carries.
-    final_mark: Optional[float] = None
+    final_mark: Optional[float] = None  # after any late penalty
     max_mark: Optional[float] = None
+    # Handed in late: seconds after the deadline (None: on time), the percent of the mark or the marks lost for it,
+    # and the mark before that.
+    late_seconds: Optional[int] = None
+    late_penalty_percent: float = 0
+    late_penalty_marks: float = 0
+    raw_mark: Optional[float] = None
     # Kinds of file uploaded: a subset of code, report, video.
     submitted_types: list[str] = []
 
@@ -1218,6 +1278,16 @@ def _validate_window(available_from: datetime, deadline: datetime) -> None:
         raise HTTPException(400, "The submission deadline must be later than the available-from date and time.")
 
 
+def _clean_late_until(late_until: Optional[datetime], deadline: datetime) -> Optional[datetime]:
+    """The date until which late work is taken, as naive UTC, or None. It can't be before the deadline."""
+    if late_until is None:
+        return None
+    until = _to_naive_utc(late_until)
+    if until < deadline:
+        raise HTTPException(400, "Accept late submissions until a date after the deadline.")
+    return until
+
+
 def _check_assignment_rubric(db: Session, subject_id: int, rubric_id: Optional[int]) -> None:
     if rubric_id is None:
         return
@@ -1259,6 +1329,12 @@ def _assignment_out(db: Session, a: Assignment) -> AssignmentOut:
         assignment_type=a.kind,
         task_password=(a.task_password or "") if a.kind == "code_challenge" else "",
         tasks_in_order=_on(a.tasks_in_order) if a.kind == "code_challenge" else False,
+        late_grace_minutes=a.late_grace_minutes or 0, late_until=_as_utc(a.late_until),
+        late_penalty_percent=a.late_penalty_percent or 0,
+        late_penalty_max_percent=100 if a.late_penalty_max_percent is None else a.late_penalty_max_percent,
+        late_penalty_unit=a.late_penalty_unit or "percent", late_penalty_marks=a.late_penalty_marks or 0,
+        late_penalty_max_marks=a.late_penalty_max_marks,
+        late_count=sum(1 for s in subs if s.late_seconds is not None),
     )
 
 
@@ -1403,13 +1479,15 @@ def _my_submission_out(submission: Submission, assignment_open: bool, now: datet
         has_video=bool(submission.video_path), can_edit=can_edit, can_delete=can_delete,
         questions_submitted=_code_answers.answer_count(submission.assignment, submission)
         if _is_code_challenge(submission) else 0,
+        late_seconds=submission.late_seconds, late_penalty_percent=submission.late_penalty_percent or 0,
+        late_penalty_marks=submission.late_penalty_marks or 0,
     )
     if not _marks_released(submission, now):
         return MySubmissionOut(**common, status="submitted", final_mark=None, max_mark=None)
     grade = submission.latest_grade
     return MySubmissionOut(
         **common, status=submission.status,
-        final_mark=submission.final_mark, max_mark=submission.max_mark,
+        final_mark=submission.final_mark, max_mark=submission.max_mark, raw_mark=submission.raw_mark,
         criterion_marks=_criterion_marks(grade),
         feedback=grade.feedback if grade else None,
     )
@@ -1419,12 +1497,15 @@ def _student_submission_out(submission: Submission, now: datetime) -> Submission
     """A submission as its student sees it: no mark before the release date."""
     out = SubmissionOut.model_validate(submission)
     if not _marks_released(submission, now):
-        out = out.model_copy(update={"status": "submitted", "final_mark": None, "max_mark": None})
+        out = out.model_copy(update={"status": "submitted", "final_mark": None, "max_mark": None, "raw_mark": None})
     return out
 
 
 def _student_assignment_out(db: Session, student: User, a: Assignment, now: datetime) -> StudentAssignmentOut:
     status = a.status_at(now)
+    past_deadline = status == "closed"
+    if past_deadline and a.accepts_at(now):
+        status = "open"  # late work is still taken: the page treats the assignment as open (see `past_deadline`)
     mine = (
         db.query(Submission)
         .filter(Submission.assignment_id == a.id, Submission.student_id == student.id)
@@ -1447,6 +1528,14 @@ def _student_assignment_out(db: Session, student: User, a: Assignment, now: date
         has_task_password=a.requires_password,
         tasks_unlocked=unlocked,
         tasks_in_order=_on(a.tasks_in_order) if a.kind == "code_challenge" else False,
+        past_deadline=past_deadline,
+        accept_until=_as_utc(a.accept_until) if a.accept_until > a.deadline else None,
+        late_grace_minutes=a.late_grace_minutes or 0,
+        late_penalty_percent=a.late_penalty_percent or 0,
+        late_penalty_max_percent=100 if a.late_penalty_max_percent is None else a.late_penalty_max_percent,
+        late_penalty_unit=a.late_penalty_unit or "percent", late_penalty_marks=a.late_penalty_marks or 0,
+        late_penalty_max_marks=a.late_penalty_max_marks,
+        penalty_now_percent=a.lateness_at(now)[1], penalty_now_marks=a.lateness_at(now)[2],
         my_submission=_my_submission_out(mine, status == "open", now) if mine else None,
     )
 
@@ -1479,6 +1568,10 @@ def create_assignment(payload: AssignmentIn, instructor: User = Depends(require_
         test_main_file=payload.test_main_file.strip() or None,
         task_password=(payload.task_password.strip() or None) if kind == "code_challenge" else None,
         tasks_in_order=payload.tasks_in_order and kind == "code_challenge",
+        late_grace_minutes=payload.late_grace_minutes, late_until=_clean_late_until(payload.late_until, deadline),
+        late_penalty_percent=payload.late_penalty_percent, late_penalty_max_percent=payload.late_penalty_max_percent,
+        late_penalty_unit=payload.late_penalty_unit, late_penalty_marks=payload.late_penalty_marks,
+        late_penalty_max_marks=payload.late_penalty_max_marks,
         created_by_id=instructor.id,
     )
     db.add(assignment)
@@ -1620,6 +1713,23 @@ def update_assignment(
         filename = (payload.starter_code_filename if payload.starter_code_filename is not None
                     else (assignment.starter_code_filename or ""))
         assignment.starter_code, assignment.starter_code_filename = _clean_starter_code(code, filename)
+    # The late rules can change at any time; work already handed in keeps the penalty it got.
+    if payload.late_grace_minutes is not None:
+        assignment.late_grace_minutes = payload.late_grace_minutes
+    if payload.late_penalty_percent is not None:
+        assignment.late_penalty_percent = payload.late_penalty_percent
+    if payload.late_penalty_max_percent is not None:
+        assignment.late_penalty_max_percent = payload.late_penalty_max_percent
+    if payload.late_penalty_unit is not None:
+        assignment.late_penalty_unit = payload.late_penalty_unit
+    if payload.late_penalty_marks is not None:
+        assignment.late_penalty_marks = payload.late_penalty_marks
+    if "late_penalty_max_marks" in payload.model_fields_set:
+        assignment.late_penalty_max_marks = payload.late_penalty_max_marks  # null: no limit
+    if "late_until" in payload.model_fields_set:
+        assignment.late_until = _clean_late_until(payload.late_until, deadline)
+    elif assignment.late_until is not None and assignment.late_until < deadline:
+        assignment.late_until = deadline  # the deadline moved past the old date
     assignment.available_from, assignment.deadline = available_from, deadline
     db.commit()
     db.refresh(assignment)
@@ -1923,6 +2033,7 @@ def create_submission(
         report_path=report_path,
         video_path=video_path,
     )
+    submission.apply_lateness(assignment, _utcnow_naive())
     db.add(submission)
     db.commit()
     db.refresh(submission)
@@ -1950,11 +2061,12 @@ def _resolve_assignment_for_submission(
 
 
 def _require_open(assignment: Assignment) -> None:
-    """The deadline check every student write goes through."""
-    status = assignment.status_at(_utcnow_naive())
-    if status == "upcoming":
+    """The deadline check every student write goes through. Work is taken until the deadline, then through the
+    grace period and up to the accept-late-until date, when the instructor set them (it is then marked late)."""
+    now = _utcnow_naive()
+    if assignment.status_at(now) == "upcoming":
         raise HTTPException(403, f"'{assignment.name}' is not open for submissions yet.")
-    if status == "closed":
+    if now > assignment.accept_until:
         raise HTTPException(403, f"The submission deadline for '{assignment.name}' has passed.")
 
 
@@ -2048,6 +2160,7 @@ def update_submission(
         replaced.append((submission.video_path, "video"))
         submission.video_path = new_video
     submission.submitted_at = datetime.now(timezone.utc)
+    submission.apply_lateness(submission.assignment, _utcnow_naive())  # replacing files late makes the work late
     _discard_derived_results(db, submission.id)
     db.commit()
     db.refresh(submission)

@@ -19,7 +19,8 @@ Access control shape:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import math
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import (
     JSON,
@@ -173,6 +174,20 @@ class Assignment(Base):
     # assignment before this time, so a whole class can be published at once.
     # NULL shows each mark as soon as it is saved. Enforced by the API.
     marks_release_at = Column(DateTime, nullable=True)
+    # Late submissions, set by the instructor (see `accept_until` and `lateness_at`). A grace period after the
+    # deadline in which work still counts as on time; then, until `late_until` (naive UTC; NULL: never), work is
+    # accepted but marked Late, and loses `late_penalty_percent` of its mark for every day (or part of a day) it is
+    # late, at most `late_penalty_max_percent`. The defaults change nothing: no grace, no late work, no penalty.
+    late_grace_minutes = Column(Integer, nullable=False, default=0, server_default="0")
+    late_until = Column(DateTime, nullable=True)
+    late_penalty_percent = Column(Float, nullable=False, default=0, server_default="0")
+    late_penalty_max_percent = Column(Float, nullable=False, default=100, server_default="100")
+    # The penalty can be in percent (the two columns above) or in marks (the two below): `late_penalty_unit` says
+    # which one counts. In marks it is `late_penalty_marks` off the mark for every day (or part of a day) late, at
+    # most `late_penalty_max_marks` (NULL: no limit but the mark itself).
+    late_penalty_unit = Column(String, nullable=False, default="percent", server_default="percent")
+    late_penalty_marks = Column(Float, nullable=False, default=0, server_default="0")
+    late_penalty_max_marks = Column(Float, nullable=True)
     # Optional test cases for submitted code (HackerRank style):
     # [{"id", "name", "input", "expected_output", "match": "exact" | "contains",
     #   "visible": bool, "points": float}, ...]. "input" is fed to the program's
@@ -250,6 +265,38 @@ class Assignment(Base):
         """Whether students may see marks and feedback at a naive-UTC ``now``."""
         return self.marks_release_at is None or now >= self.marks_release_at
 
+    @property
+    def grace_ends_at(self) -> datetime:
+        """Until then work counts as on time: the deadline plus the grace period."""
+        return self.deadline + timedelta(minutes=self.late_grace_minutes or 0)
+
+    @property
+    def accept_until(self) -> datetime:
+        """The last moment work is taken: the end of the grace period, or the accept-late-until date if later."""
+        return max(self.grace_ends_at, self.late_until) if self.late_until else self.grace_ends_at
+
+    def accepts_at(self, now: datetime) -> bool:
+        """Whether work is taken at a naive-UTC ``now``: from the start date until `accept_until`."""
+        return self.available_from <= now <= self.accept_until
+
+    def lateness_at(self, at: datetime) -> tuple[int | None, float, float]:
+        """For work handed in at ``at``: (seconds after the deadline, percent of the mark lost, marks lost). Work
+        inside the grace period is on time: (None, 0, 0). The penalty is, for every day or part of a day after the
+        grace period, `late_penalty_percent` (at most `late_penalty_max_percent`) when the unit is percent, or
+        `late_penalty_marks` (at most `late_penalty_max_marks`) when it is marks. Only one of the two is not 0."""
+        if at <= self.grace_ends_at:
+            return None, 0.0, 0.0
+        days = math.ceil((at - self.grace_ends_at).total_seconds() / 86400)
+        late_seconds = int((at - self.deadline).total_seconds())
+        if self.late_penalty_unit == "marks":
+            marks = days * (self.late_penalty_marks or 0.0)
+            if self.late_penalty_max_marks is not None:
+                marks = min(marks, self.late_penalty_max_marks)
+            return late_seconds, 0.0, round(max(marks, 0.0), 2)
+        cap = min(self.late_penalty_max_percent if self.late_penalty_max_percent is not None else 100.0, 100.0)
+        percent = min(days * (self.late_penalty_percent or 0.0), cap)
+        return late_seconds, round(max(percent, 0.0), 2), 0.0
+
     def status_at(self, now: datetime) -> str:
         """'upcoming' | 'open' | 'closed' for a naive-UTC ``now``."""
         if now < self.available_from:
@@ -313,6 +360,13 @@ class Submission(Base):
     # "total", "report"}, ...] (see app/code_answers.py, which reads and writes it). NULL for a
     # submission made before that, or uploaded as files: its answers are worked out from its files.
     question_results = Column(JSON, nullable=True)
+    # Work handed in after the deadline and its grace period: how many seconds after the deadline it was
+    # (NULL: on time) and the percent of the mark it loses for that (see Assignment.lateness_at). Fixed when the
+    # work is handed in (a code challenge: when its latest task is), so later changes to the assignment's late
+    # rules do not move it.
+    late_seconds = Column(Integer, nullable=True)
+    late_penalty_percent = Column(Float, nullable=False, default=0, server_default="0")
+    late_penalty_marks = Column(Float, nullable=False, default=0, server_default="0")  # or marks lost, if so set
 
     # Oldest first; re-grading adds a row, so the last one is the current grade.
     grades = relationship("Grade", back_populates="submission", order_by="Grade.id")
@@ -336,12 +390,30 @@ class Submission(Base):
         return (self.test_total is not None and self.assignment is not None
                 and self.assignment.kind == "code_challenge")
 
+    def apply_lateness(self, assignment: "Assignment", at: datetime) -> None:
+        """Record how late the work handed in at ``at`` is, and the penalty that costs."""
+        self.late_seconds, self.late_penalty_percent, self.late_penalty_marks = assignment.lateness_at(at)
+
     @property
-    def final_mark(self) -> float | None:
+    def is_late(self) -> bool:
+        return self.late_seconds is not None
+
+    @property
+    def raw_mark(self) -> float | None:
+        """The mark before any late penalty: the tests' points, or the instructor's grade."""
         if self.marked_by_tests:
             return self.test_earned
         grade = self.latest_grade
         return grade.total_score if grade else None
+
+    @property
+    def final_mark(self) -> float | None:
+        """The mark students and exports see: the raw mark less the late penalty, if any."""
+        raw = self.raw_mark
+        if raw is None or not (self.late_penalty_percent or self.late_penalty_marks):
+            return raw
+        marked = raw * (1 - (self.late_penalty_percent or 0) / 100) - (self.late_penalty_marks or 0)
+        return round(max(marked, 0.0), 2)
 
     @property
     def max_mark(self) -> float | None:

@@ -267,8 +267,14 @@ class CodeWorkOut(BaseModel):
     # The mark so far: the points of the tests passed out of the points of ALL the tasks' tests, so a
     # task not handed in yet earns nothing for now. None before the assignment's marks release date,
     # and when nothing is marked.
-    earned: Optional[float] = None
+    earned: Optional[float] = None  # after any late penalty
     total: Optional[float] = None
+    # Late work (see Submission.late_seconds): seconds after the deadline (None: on time), the percent of the mark
+    # lost for it (or the marks, if the assignment counts the penalty in marks), and the mark before that penalty.
+    late_seconds: Optional[int] = None
+    late_penalty_percent: float = 0
+    late_penalty_marks: float = 0
+    raw_earned: Optional[float] = None
 
 
 def _visible_challenge(db: Session, student: User, assignment_id: int, what: str) -> Assignment:
@@ -285,7 +291,7 @@ def _visible_challenge(db: Session, student: User, assignment_id: int, what: str
 def _challenge_for(db: Session, student: User, assignment_id: int, what: str) -> Assignment:
     """The open code challenge this student may run or submit code to, or the HTTP error saying why not."""
     assignment = _visible_challenge(db, student, assignment_id, what)
-    if assignment.status_at(utcnow_naive()) != "open":
+    if not assignment.accepts_at(utcnow_naive()):  # the deadline, its grace period and any late window
         raise HTTPException(400, "This assignment is closed.")
     if not assignment.test_cases:
         raise HTTPException(400, "This assignment has no test cases to run.")
@@ -412,6 +418,7 @@ def _save_answer(db: Session, student: User, assignment: Assignment, submission:
                 assignment_id=assignment.id, code_path=str(folder.relative_to(BASE_DIR)), question_results=[])
             db.add(submission)
         code_answers.add_answer(assignment, submission, question, filename, language)
+        submission.apply_lateness(assignment, utcnow_naive())  # a task handed in late makes the work late
         db.commit()
     except Exception:
         db.rollback()
@@ -541,8 +548,12 @@ def _work_out(db: Session, student: User, assignment: Assignment, submission: Op
     return CodeWorkOut(
         submission_id=submission.id if submission else None, marked=marked_any,
         complete=all(q.submitted for q in questions), questions=questions,
-        earned=submission.test_earned if marked_any and released else None,
-        total=submission.test_total if marked_any and released else None)
+        earned=submission.final_mark if marked_any and released else None,
+        total=submission.test_total if marked_any and released else None,
+        late_seconds=submission.late_seconds if submission else None,
+        late_penalty_percent=(submission.late_penalty_percent or 0) if submission else 0,
+        late_penalty_marks=(submission.late_penalty_marks or 0) if submission else 0,
+        raw_earned=submission.raw_mark if marked_any and released else None)
 
 
 @router.get("/assignments/{assignment_id}/my-code", response_model=CodeWorkOut)

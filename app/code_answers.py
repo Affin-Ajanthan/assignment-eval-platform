@@ -74,12 +74,13 @@ def task_start(db: Session, student_id: int, assignment_id: int, question: int) 
 
 
 def task_ends_at(assignment: Assignment, start: Optional[TaskStart], question: dict) -> Optional[datetime]:
-    """When the student's clock for a timed task runs out: its time limit after they opened it, or the
-    assignment's deadline if that comes first. None for a task with no limit or one not opened yet."""
+    """When the student's clock for a timed task runs out: its time limit after they opened it, or the last
+    moment the assignment takes work (its deadline, grace period and late window) if that comes first. None for a
+    task with no limit or one not opened yet."""
     limit = time_limit(question)
     if not limit or start is None:
         return None
-    return min(start.started_at + timedelta(seconds=limit), assignment.deadline)
+    return min(start.started_at + timedelta(seconds=limit), assignment.accept_until)
 
 
 def points_of(tests: list) -> float:
