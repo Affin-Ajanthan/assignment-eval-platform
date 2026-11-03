@@ -14,7 +14,9 @@ import { OpenForm } from "@/components/student/labels";
 export default function StudentPage() {
   const { user, ready } = useRequireRole("student");
 
-  const [assignments, setAssignments] = useState<StudentAssignment[]>([]);
+  // null until the first load: "no assignments" is shown only once the list has arrived.
+  const [assignments, setAssignments] = useState<StudentAssignment[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   // Bumped after every submit / edit / delete, so an open history refreshes.
   const [historyVersion, setHistoryVersion] = useState(0);
   const [openForm, setOpenForm] = useState<OpenForm>(null);
@@ -24,7 +26,12 @@ export default function StudentPage() {
 
   // The submission history loads itself when opened (SubmissionHistory).
   const load = useCallback(async () => {
-    setAssignments(await apiFetch<StudentAssignment[]>("/assignments"));
+    try {
+      setAssignments(await apiFetch<StudentAssignment[]>("/assignments"));
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : String(err));
+    }
   }, []);
 
   useEffect(() => {
@@ -61,8 +68,8 @@ export default function StudentPage() {
 
   if (!ready || !user) return null;
 
-  const open = assignments.filter((a) => a.status === "open");
-  const past = assignments.filter((a) => a.status === "closed");
+  const open = (assignments ?? []).filter((a) => a.status === "open");
+  const past = (assignments ?? []).filter((a) => a.status === "closed");
   const card = (a: StudentAssignment) => (
     <AssignmentCard
       key={a.id}
@@ -93,7 +100,21 @@ export default function StudentPage() {
 
       <section className="mt-6">
         <h2 className="text-lg font-bold">Available assignments</h2>
-        {open.length === 0 ? (
+        {loadError && (
+          <div role="alert" className="mt-2 flex flex-wrap items-center gap-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+            <span>Could not load your assignments: {loadError}</span>
+            <button
+              type="button"
+              onClick={load}
+              className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+        {assignments === null ? (
+          !loadError && <p className="mt-2 text-sm text-gray-500">Loading your assignments...</p>
+        ) : open.length === 0 ? (
           <p className="mt-2 text-sm text-gray-600">There are no assignments open for submission right now.</p>
         ) : (
           <ul className="mt-3 space-y-4">{open.map(card)}</ul>

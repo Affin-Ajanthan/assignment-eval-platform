@@ -59,7 +59,7 @@ export default function ReportSimilarityPanel({
         text: flagged
           ? `Compared ${res.compared} reports -- ${flagged} pair(s) worth a closer look.`
           : `Compared ${res.compared} reports -- no pairs flagged.`,
-        kind: flagged ? "error" : "success",
+        kind: flagged ? "warning" : "success",
       });
     } catch (err) {
       setMsg({ text: `Report similarity check failed: ${err instanceof Error ? err.message : err}`, kind: "error" });

@@ -310,7 +310,7 @@ export default function InstructorPage() {
         text: flaggedCount
           ? `Compared ${result.compared} submissions -- potential similarity detected in ${flaggedCount} pair(s); lecturer review recommended.`
           : `Compared ${result.compared} submissions -- no pairs flagged.`,
-        kind: flaggedCount ? "error" : "success",
+        kind: flaggedCount ? "warning" : "success",
       });
     } catch (err) {
       setSimilarityMsg({ text: `Similarity check failed: ${err instanceof Error ? err.message : err}`, kind: "error" });
@@ -478,6 +478,18 @@ export default function InstructorPage() {
   const gradingDirty =
     gradingSubmissionId !== null &&
     gradingSnapshot(gradingMode, criterionScores, finalMark, gradingComments, gradingFeedback) !== gradingBaseline;
+
+  // Inside the page confirmDiscardThen asks first; this covers leaving it (refresh,
+  // closing the tab, Back): the browser asks before the unsaved marks are lost.
+  useEffect(() => {
+    if (!gradingDirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = ""; // older browsers show the prompt only when this is set
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [gradingDirty]);
 
   function closeGradingPanel() {
     setGradingSubmissionId(null);
@@ -951,7 +963,7 @@ export default function InstructorPage() {
                             s.status === "graded" ? "bg-green-50 text-green-800" : "bg-yellow-50 text-yellow-800"
                           }`}
                         >
-                          {s.status}
+                          {s.status === "graded" ? "Graded" : "Submitted"}
                         </span>
                       </td>
                       <td className="border border-gray-200 px-3 py-1.5">{formatMark(s.final_mark, s.max_mark)}</td>
