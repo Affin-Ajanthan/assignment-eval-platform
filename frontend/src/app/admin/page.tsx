@@ -5,12 +5,26 @@ import { apiFetch, Subject, UserInfo } from "@/lib/api";
 import { useRequireRole } from "@/lib/useRequireRole";
 import AccountBar from "@/components/AccountBar";
 import Message, { MessageState } from "@/components/Message";
+import AdminTabs, { adminPanelProps, AdminTab, isAdminTab } from "@/components/admin/AdminTabs";
 import ManageSubjectsTable from "@/components/admin/ManageSubjectsTable";
 import ManageUsersTable, { SubjectCheckboxes } from "@/components/admin/ManageUsersTable";
 import PageLoading from "@/components/PageLoading";
 
 export default function AdminPage() {
   const { user, ready } = useRequireRole("admin");
+
+  // Which section is shown; ?tab= in the address, so a reload or a shared link opens the same one.
+  const [tab, setTab] = useState<AdminTab>("subjects");
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("tab");
+    if (isAdminTab(wanted)) setTab(wanted);
+  }, []);
+  function changeTab(next: AdminTab) {
+    setTab(next);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", next);
+    window.history.replaceState(null, "", url);
+  }
 
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [instructors, setInstructors] = useState<UserInfo[]>([]);
@@ -134,7 +148,14 @@ export default function AdminPage() {
         there&apos;s no self-signup.
       </p>
 
+      <AdminTabs
+        tab={tab}
+        onChange={changeTab}
+        counts={{ subjects: subjects.length, instructors: instructors.length, students: students.length }}
+      />
+
       {/* Subjects */}
+      <div {...adminPanelProps("subjects", tab)}>
       <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-bold">Subjects</h2>
         <form onSubmit={handleAddSubject} className="mt-3">
@@ -169,8 +190,10 @@ export default function AdminPage() {
         <h3 className="mt-5 text-sm font-bold uppercase tracking-wide text-gray-500">Existing subjects</h3>
         <ManageSubjectsTable subjects={subjects} onChanged={loadSubjects} />
       </section>
+      </div>
 
       {/* Instructors */}
+      <div {...adminPanelProps("instructors", tab)}>
       <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-bold">Instructors</h2>
         <form onSubmit={handleCreateInstructor} className="mt-3">
@@ -226,8 +249,10 @@ export default function AdminPage() {
         <h3 className="mt-5 text-sm font-bold uppercase tracking-wide text-gray-500">Existing instructors</h3>
         <ManageUsersTable role="instructor" users={instructors} subjects={subjects} onChanged={loadInstructors} />
       </section>
+      </div>
 
       {/* Students */}
+      <div {...adminPanelProps("students", tab)}>
       <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-bold">Students</h2>
         <form onSubmit={handleCreateStudent} className="mt-3">
@@ -283,6 +308,7 @@ export default function AdminPage() {
         <h3 className="mt-5 text-sm font-bold uppercase tracking-wide text-gray-500">Existing students</h3>
         <ManageUsersTable role="student" users={students} subjects={subjects} onChanged={loadStudents} />
       </section>
+      </div>
     </div>
   );
 }
