@@ -200,7 +200,7 @@ function HandedIn({
             type="button"
             onClick={onGetMarks}
             disabled={gettingMarks}
-            className="mt-2 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+            className="btn-primary mt-2 rounded-md px-3 py-1.5 text-xs font-semibold disabled:opacity-60"
           >
             {gettingMarks ? "Getting your marks…" : "Get my marks"}
           </button>
@@ -210,7 +210,7 @@ function HandedIn({
         <button
           type="button"
           onClick={onNext}
-          className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+          className="btn-primary mt-3 rounded-md px-4 py-2 text-sm font-semibold"
           data-testid="next-question"
         >
           Go to {taskName(next)} →
@@ -639,7 +639,7 @@ export default function CodeEditorForm({
               type="button"
               onClick={startTask}
               disabled={starting}
-              className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+              className="btn-primary mt-3 rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
               data-testid="start-task-button"
             >
               {starting ? "Starting…" : `Start ${heading}`}
@@ -721,7 +721,7 @@ export default function CodeEditorForm({
               type="button"
               onClick={runCode}
               disabled={busy}
-              className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700 disabled:opacity-60"
+              className="btn-secondary rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
             >
               {running ? "Running…" : many ? "Run this task" : "Run"}
             </button>
@@ -729,7 +729,7 @@ export default function CodeEditorForm({
               type="button"
               onClick={askToSubmit}
               disabled={busy}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+              className="btn-primary rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
             >
               {submitting ? "Submitting…" : many ? "Submit this task" : "Submit"}
             </button>

@@ -152,6 +152,18 @@ const input = "mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm";
  * The details of one assignment, on a page of its own (app/instructor/assignments): pass `assignment` to edit
  * it, or the `kind` to create a new one in `subjectId`. `onSaved` is called with a message once it is saved.
  */
+
+/** A heading that groups the form's fields (Details, Dates and late work, ...) so the long form reads in parts. */
+function FormSectionTitle({ children, first = false }: { children: string; first?: boolean }) {
+  return (
+    <h3
+      className={`${first ? "" : "mt-8 "}mb-1 border-b border-gray-200 pb-1.5 text-xs font-semibold uppercase tracking-wide text-brand-700`}
+    >
+      {children}
+    </h3>
+  );
+}
+
 export default function AssignmentForm({
   subjectId,
   kind,
@@ -302,6 +314,7 @@ export default function AssignmentForm({
 
   return (
     <form onSubmit={handleSave} noValidate>
+      <FormSectionTitle first>Details</FormSectionTitle>
       <p className="text-sm" data-testid="assignment-type">
         <span className="font-semibold">Type:</span> {kindTitle(form.kind)}{" "}
         {editing && <span className="text-xs text-gray-500">(fixed once created)</span>}
@@ -332,6 +345,7 @@ export default function AssignmentForm({
         placeholder="Enter assignment instructions here..."
       />
 
+      <FormSectionTitle>What students hand in</FormSectionTitle>
       {form.kind === "submission" && (
         <fieldset className="mt-3">
           <legend className="text-sm font-semibold">Students can submit</legend>
@@ -461,6 +475,7 @@ export default function AssignmentForm({
         </>
       )}
 
+      <FormSectionTitle>Integrity checks</FormSectionTitle>
       {form.types.includes("code") && (
         <fieldset className="mt-3">
           <legend className="text-sm font-semibold">Code similarity</legend>
@@ -505,6 +520,7 @@ export default function AssignmentForm({
         </p>
       </fieldset>
 
+      <FormSectionTitle>Dates and late work</FormSectionTitle>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <fieldset>
           <legend className="text-sm font-semibold">Available from</legend>
@@ -590,7 +606,7 @@ export default function AssignmentForm({
                 <button
                   type="button"
                   onClick={() => setForm((f) => ({ ...f, lateDate: "", lateTime: "" }))}
-                  className="mt-1 rounded-md bg-gray-600 px-3 py-2 text-xs font-semibold text-white hover:bg-gray-700"
+                  className="btn-secondary mt-1 rounded-md px-3 py-2 text-xs font-semibold"
                 >
                   Clear
                 </button>
@@ -706,6 +722,7 @@ export default function AssignmentForm({
         </p>
       </fieldset>
 
+      <FormSectionTitle>Marking</FormSectionTitle>
       <fieldset className="mt-3">
         <legend className="text-sm font-semibold">
           Release marks to students <span className="font-normal text-gray-500">(optional)</span>
@@ -729,7 +746,7 @@ export default function AssignmentForm({
             <button
               type="button"
               onClick={() => setForm((f) => ({ ...f, releaseDate: "", releaseTime: "" }))}
-              className="mt-1 rounded-md bg-gray-600 px-3 py-2 text-xs font-semibold text-white hover:bg-gray-700"
+              className="btn-secondary mt-1 rounded-md px-3 py-2 text-xs font-semibold"
             >
               Clear
             </button>
@@ -809,14 +826,14 @@ export default function AssignmentForm({
         <button
           type="submit"
           disabled={saving}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+          className="btn-primary rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
         >
           {saving ? "Saving..." : editing ? "Update assignment" : "Save assignment"}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+          className="btn-secondary rounded-md px-4 py-2 text-sm font-semibold"
         >
           Cancel
         </button>

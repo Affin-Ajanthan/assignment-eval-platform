@@ -9,9 +9,9 @@ type Row = { name: string; description: string; maxPoints: string };
 const emptyRow = (): Row => ({ name: "", description: "", maxPoints: "" });
 
 const input = "w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm";
-const grayBtn = "rounded-md bg-gray-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-700 disabled:opacity-60";
-const redBtn = "rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700";
-const blueBtn = "rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60";
+const grayBtn = "btn-secondary rounded-md px-3 py-1.5 text-xs font-semibold disabled:opacity-60";
+const redBtn = "btn-danger rounded-md px-3 py-1.5 text-xs font-semibold";
+const blueBtn = "btn-primary rounded-md px-3 py-1.5 text-xs font-semibold disabled:opacity-60";
 
 function errText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -181,7 +181,7 @@ export default function RubricsSection({
   }
 
   return (
-    <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+    <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
       <h2 className="text-lg font-bold">Rubrics</h2>
       <p className="mt-1 text-sm text-gray-600">
         A rubric holds all of its criteria. Use <strong>+ Add criterion</strong> to add more to the same rubric.
@@ -228,7 +228,7 @@ export default function RubricsSection({
         <p className="mt-2 text-sm">
           Total maximum points: <strong>{createTotal}</strong>
         </p>
-        <button className="mt-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+        <button className="btn-primary mt-2 rounded-md px-4 py-2 text-sm font-semibold">
           Save rubric
         </button>
         <Message state={createMsg} />

@@ -123,8 +123,9 @@ export default function AdminPage() {
   if (!ready || !user) return <PageLoading />;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <AccountBar user={user} />
+    <>
+      <AccountBar user={user} width="max-w-5xl" />
+      <main className="mx-auto max-w-5xl px-4 py-8">
 
       <h1 className="text-2xl font-bold">Admin dashboard</h1>
       <p className="mt-1 text-sm text-gray-600">
@@ -133,7 +134,7 @@ export default function AdminPage() {
       </p>
 
       {/* Subjects */}
-      <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
         <h2 className="text-lg font-bold">Subjects</h2>
         <form onSubmit={handleAddSubject} className="mt-3">
           <label className="block text-sm font-semibold" htmlFor="subject_name">
@@ -158,7 +159,7 @@ export default function AdminPage() {
             placeholder="CS201"
             className="mt-1 mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
           />
-          <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+          <button className="btn-primary rounded-md px-4 py-2 text-sm font-semibold">
             Add subject
           </button>
           <Message state={subjectMsg} />
@@ -168,15 +169,15 @@ export default function AdminPage() {
         <table className="mt-2 w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-left">
-              <th className="border border-gray-200 px-3 py-1.5">Name</th>
-              <th className="border border-gray-200 px-3 py-1.5">Code</th>
+              <th className="border-b border-gray-200 px-3 py-2">Name</th>
+              <th className="border-b border-gray-200 px-3 py-2">Code</th>
             </tr>
           </thead>
           <tbody>
             {subjects.map((s) => (
               <tr key={s.id}>
-                <td className="border border-gray-200 px-3 py-1.5">{s.name}</td>
-                <td className="border border-gray-200 px-3 py-1.5">{s.code}</td>
+                <td className="border-b border-gray-200 px-3 py-2">{s.name}</td>
+                <td className="border-b border-gray-200 px-3 py-2">{s.code}</td>
               </tr>
             ))}
           </tbody>
@@ -184,7 +185,7 @@ export default function AdminPage() {
       </section>
 
       {/* Instructors */}
-      <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
         <h2 className="text-lg font-bold">Instructors</h2>
         <form onSubmit={handleCreateInstructor} className="mt-3">
           <label className="block text-sm font-semibold" htmlFor="instructor_name">
@@ -230,7 +231,7 @@ export default function AdminPage() {
               onToggle={(id) => toggleSet(instructorSubjects, id, setInstructorSubjects)}
             />
           </div>
-          <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+          <button className="btn-primary rounded-md px-4 py-2 text-sm font-semibold">
             Create instructor
           </button>
           <Message state={instructorMsg} />
@@ -241,7 +242,7 @@ export default function AdminPage() {
       </section>
 
       {/* Students */}
-      <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
         <h2 className="text-lg font-bold">Students</h2>
         <form onSubmit={handleCreateStudent} className="mt-3">
           <label className="block text-sm font-semibold" htmlFor="student_name">
@@ -287,7 +288,7 @@ export default function AdminPage() {
               onToggle={(id) => toggleSet(studentSubjects, id, setStudentSubjects)}
             />
           </div>
-          <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+          <button className="btn-primary rounded-md px-4 py-2 text-sm font-semibold">
             Create student
           </button>
           <Message state={studentMsg} />
@@ -296,6 +297,7 @@ export default function AdminPage() {
         <h3 className="mt-5 text-sm font-bold uppercase tracking-wide text-gray-500">Existing students</h3>
         <ManageUsersTable role="student" users={students} subjects={subjects} onChanged={loadStudents} />
       </section>
-    </div>
+      </main>
+    </>
   );
 }

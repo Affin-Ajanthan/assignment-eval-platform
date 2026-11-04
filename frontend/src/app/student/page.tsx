@@ -99,8 +99,9 @@ export default function StudentPage() {
   );
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <AccountBar user={user} />
+    <>
+      <AccountBar user={user} width="max-w-4xl" />
+      <main className="mx-auto max-w-4xl px-4 py-8">
 
       <h1 className="text-2xl font-bold">Student portal</h1>
       <p className="mt-1 text-sm text-gray-600">
@@ -141,7 +142,7 @@ export default function StudentPage() {
             <button
               type="button"
               onClick={load}
-              className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
+              className="btn-danger rounded-md px-3 py-1 text-xs font-semibold"
             >
               Try again
             </button>
@@ -189,6 +190,7 @@ export default function StudentPage() {
       <SubmissionHistory version={historyVersion} />
 
       <ConfirmDialog request={confirm} busy={confirmBusy} onCancel={() => !confirmBusy && setConfirm(null)} />
-    </div>
+      </main>
+    </>
   );
 }

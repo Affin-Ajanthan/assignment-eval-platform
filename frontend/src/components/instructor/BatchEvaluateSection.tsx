@@ -208,7 +208,7 @@ export default function BatchEvaluateSection({
   }
 
   return (
-    <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+    <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
       <h2 className="text-lg font-bold">Evaluate a whole assignment</h2>
       <p className="mt-1 text-sm text-gray-600">
         Runs the automated evaluation for every submission of one assignment (one after another, or several at a time
@@ -268,7 +268,7 @@ export default function BatchEvaluateSection({
         type="button"
         onClick={run}
         disabled={running || !assignment || rubricId === null}
-        className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+        className="btn-primary mt-3 rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-50"
       >
         {starting ? "Starting…" : running ? "Evaluating…" : `Evaluate all${count !== undefined ? ` ${count} submission(s)` : ""}`}
       </button>
@@ -305,7 +305,7 @@ export default function BatchEvaluateSection({
           type="button"
           onClick={resume}
           disabled={starting}
-          className="mt-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+          className="btn-primary mt-2 rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-50"
         >
           {/* Failed submissions have no evaluation, so they are graded again too. */}
           {starting ? "Resuming…" : `Resume (${job.total - job.evaluated - job.skipped} to grade)`}
@@ -327,39 +327,39 @@ export default function BatchEvaluateSection({
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 text-left">
-                <th className="border border-gray-200 px-3 py-1.5">Student</th>
-                <th className="border border-gray-200 px-3 py-1.5">Status</th>
-                <th className="border border-gray-200 px-3 py-1.5">Marks</th>
-                <th className="border border-gray-200 px-3 py-1.5">Similarity flag</th>
-                <th className="border border-gray-200 px-3 py-1.5">AI detection flag</th>
-                <th className="border border-gray-200 px-3 py-1.5">Grader</th>
-                <th className="border border-gray-200 px-3 py-1.5">Notes</th>
+                <th className="border-b border-gray-200 px-3 py-2">Student</th>
+                <th className="border-b border-gray-200 px-3 py-2">Status</th>
+                <th className="border-b border-gray-200 px-3 py-2">Marks</th>
+                <th className="border-b border-gray-200 px-3 py-2">Similarity flag</th>
+                <th className="border-b border-gray-200 px-3 py-2">AI detection flag</th>
+                <th className="border-b border-gray-200 px-3 py-2">Grader</th>
+                <th className="border-b border-gray-200 px-3 py-2">Notes</th>
               </tr>
             </thead>
             <tbody>
               {finished.map((r) => (
                 <tr key={r.submission_id}>
-                  <td className="border border-gray-200 px-3 py-1.5">
+                  <td className="border-b border-gray-200 px-3 py-2">
                     {r.student_name} (#{r.submission_id})
                   </td>
-                  <td className="border border-gray-200 px-3 py-1.5">
+                  <td className="border-b border-gray-200 px-3 py-2">
                     <Badge tone={STATUS_STYLE[r.status] ?? ""}>{r.status}</Badge>
                   </td>
-                  <td className="border border-gray-200 px-3 py-1.5">
+                  <td className="border-b border-gray-200 px-3 py-2">
                     {r.recommended_score === null ? "—" : formatMark(r.recommended_score, r.recommended_max)}
                   </td>
-                  <td className="border border-gray-200 px-3 py-1.5">
+                  <td className="border-b border-gray-200 px-3 py-2">
                     <FlagBadge flagged={r.similarity_flagged} />
                   </td>
-                  <td className="border border-gray-200 px-3 py-1.5">
+                  <td className="border-b border-gray-200 px-3 py-2">
                     <FlagBadge flagged={r.ai_flagged} />
                     <AISignalLine label="Report" signal={r.ai_signals?.report ?? null} report />
                     <AISignalLine label="Code" signal={r.ai_signals?.code ?? null} />
                   </td>
-                  <td className="border border-gray-200 px-3 py-1.5">
+                  <td className="border-b border-gray-200 px-3 py-2">
                     {r.grader ? (r.model ? `${r.grader}, ${r.model}` : r.grader) : "—"}
                   </td>
-                  <td className="border border-gray-200 px-3 py-1.5 text-xs">
+                  <td className="border-b border-gray-200 px-3 py-2 text-xs">
                     {r.error && <div className="text-red-700">{r.error}</div>}
                     {r.review_flags.map((f) => (
                       <div key={f} className="text-yellow-800">

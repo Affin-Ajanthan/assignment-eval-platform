@@ -89,7 +89,7 @@ export function questionRowsPayload(rows: QuestionRow[]): QuestionsPayload {
 }
 
 const field = "mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm";
-const button = "rounded-md bg-gray-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-700 disabled:opacity-60";
+const button = "btn-secondary rounded-md px-3 py-1.5 text-xs font-semibold disabled:opacity-60";
 
 /**
  * The tasks of a code challenge. At least one is required, and each needs a title, its own question (what the

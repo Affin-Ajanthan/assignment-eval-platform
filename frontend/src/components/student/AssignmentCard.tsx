@@ -73,7 +73,7 @@ export default function AssignmentCard({
     useEditor && (a.status === "open" || sub) ? (
       <Link
         href={`/student/code/${a.id}`}
-        className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+        className="btn-primary rounded-md px-4 py-2 text-sm font-semibold"
         data-testid="open-code-page"
       >
         {!sub ? "Do assignment" : moreToHandIn ? "Continue assignment" : "See your code and result"}
@@ -81,7 +81,7 @@ export default function AssignmentCard({
     ) : null;
 
   return (
-    <li className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm" data-testid="student-assignment">
+    <li className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-5" data-testid="student-assignment">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 className="text-lg font-bold">{a.name}</h3>
@@ -233,7 +233,7 @@ export default function AssignmentCard({
             <button
               type="button"
               onClick={() => setOpenForm({ id: a.id, mode: "submit" })}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+              className="btn-primary rounded-md px-4 py-2 text-sm font-semibold"
             >
               Submit assignment
             </button>
@@ -242,7 +242,7 @@ export default function AssignmentCard({
             <button
               type="button"
               onClick={() => setOpenForm({ id: a.id, mode: "edit" })}
-              className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+              className="btn-secondary rounded-md px-4 py-2 text-sm font-semibold"
             >
               Edit submission
             </button>
@@ -251,7 +251,7 @@ export default function AssignmentCard({
             <button
               type="button"
               onClick={() => askDelete(a)}
-              className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+              className="btn-danger rounded-md px-4 py-2 text-sm font-semibold"
             >
               Delete submission
             </button>

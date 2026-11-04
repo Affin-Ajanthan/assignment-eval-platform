@@ -119,7 +119,7 @@ export default function CodeChallengePage() {
               <button
                 type="button"
                 onClick={() => (passwordNeeded ? setAsking(true) : setStarted(true))}
-                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                className="btn-primary rounded-md px-4 py-2 text-sm font-semibold"
                 data-testid="do-task-button"
               >
                 {open ? (taskCount > 1 ? "Do tasks" : "Do task") : taskCount > 1 ? "See tasks" : "See task"}
@@ -141,12 +141,14 @@ export default function CodeChallengePage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8">
-      <AccountBar user={user} />
+    <>
+      <AccountBar user={user} width="max-w-4xl" />
+      <main className="mx-auto max-w-4xl px-4 py-8">
       <Link href="/student" className="text-sm font-semibold text-blue-700 hover:underline">
         ← Back to my assignments
       </Link>
       {body}
-    </div>
+      </main>
+    </>
   );
 }

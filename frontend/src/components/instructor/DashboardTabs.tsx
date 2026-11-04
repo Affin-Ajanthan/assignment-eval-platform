@@ -51,7 +51,7 @@ export default function DashboardTabs({
       role="tablist"
       aria-label="Dashboard sections"
       onKeyDown={onKeyDown}
-      className="mt-6 flex flex-wrap gap-1 border-b border-gray-200"
+      className="mt-6 flex gap-1 overflow-x-auto border-b border-gray-200"
     >
       {TABS.map((t) => {
         const active = t.id === tab;
@@ -68,10 +68,10 @@ export default function DashboardTabs({
             aria-controls={`tabpanel-${t.id}`}
             tabIndex={active ? 0 : -1}
             onClick={() => onChange(t.id)}
-            className={`-mb-px rounded-t-md border px-4 py-2 text-sm font-semibold ${
+            className={`-mb-px shrink-0 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-semibold ${
               active
-                ? "border-gray-200 border-b-white bg-white text-blue-700"
-                : "border-transparent text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                ? "border-brand-700 text-brand-700"
+                : "border-transparent text-gray-600 hover:border-gray-300 hover:text-gray-900"
             }`}
           >
             {t.label}

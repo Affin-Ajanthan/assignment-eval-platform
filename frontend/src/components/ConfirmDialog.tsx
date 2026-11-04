@@ -60,7 +60,7 @@ export default function ConfirmDialog({
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700 disabled:opacity-60"
+            className="btn-secondary rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
           >
             Cancel
           </button>

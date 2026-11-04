@@ -71,7 +71,7 @@ export default function AssignmentsSection({
   }
 
   return (
-    <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+    <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
       <h2 className="text-lg font-bold">Assignments</h2>
       <p className="mt-1 text-sm text-gray-600">
         Choose the kind of assignment to create: its details (name, instructions, dates and, for a code challenge, the
@@ -154,21 +154,21 @@ export default function AssignmentsSection({
                 <div className="flex gap-2">
                   <Link
                     href={`/instructor/assignments/${a.id}`}
-                    className="rounded-md bg-gray-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-700"
+                    className="btn-secondary rounded-md px-3 py-1.5 text-xs font-semibold"
                   >
                     Edit
                   </Link>
                   <button
                     type="button"
                     onClick={() => askDelete(a)}
-                    className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700"
+                    className="btn-danger rounded-md px-3 py-1.5 text-xs font-semibold"
                   >
                     Delete
                   </button>
                 </div>
               </div>
               {a.description && <RichText text={a.description} className="mt-2 text-sm text-gray-700" />}
-              <dl className="mt-2 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[max-content_1fr]">
+              <dl className="mt-3 grid gap-x-6 gap-y-1 border-t border-gray-100 pt-3 text-sm sm:grid-cols-[max-content_1fr] lg:grid-cols-[max-content_1fr_max-content_1fr]">
                 <dt className="font-semibold">Available from</dt>
                 <dd>{formatDateTime(a.available_from)}</dd>
                 <dt className="font-semibold">Deadline</dt>

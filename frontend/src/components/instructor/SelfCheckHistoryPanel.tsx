@@ -52,7 +52,7 @@ export default function SelfCheckHistoryPanel({ assignments }: { assignments: As
   const selected = assignments.find((a) => a.id === assignmentId);
 
   return (
-    <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+    <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
       <h2 className="text-lg font-bold">Student Self-Check History</h2>
       <p className="mt-1 text-sm text-gray-600">
         How often each student checked their own submission before the deadline. For monitoring and troubleshooting
@@ -82,7 +82,7 @@ export default function SelfCheckHistoryPanel({ assignments }: { assignments: As
               type="button"
               onClick={load}
               disabled={loading}
-              className="rounded-md bg-gray-600 px-3 py-2 text-sm font-semibold text-white hover:bg-gray-700 disabled:opacity-60"
+              className="btn-secondary rounded-md px-3 py-2 text-sm font-semibold disabled:opacity-60"
             >
               {loading ? "Loading..." : "Refresh"}
             </button>
@@ -101,26 +101,26 @@ export default function SelfCheckHistoryPanel({ assignments }: { assignments: As
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 text-left">
-                    <th className="border border-gray-200 px-3 py-1.5">Student</th>
-                    <th className="border border-gray-200 px-3 py-1.5 text-right">Code similarity</th>
-                    <th className="border border-gray-200 px-3 py-1.5 text-right">Report similarity</th>
-                    <th className="border border-gray-200 px-3 py-1.5 text-right">AI detection</th>
-                    <th className="border border-gray-200 px-3 py-1.5">Most recent check</th>
-                    <th className="border border-gray-200 px-3 py-1.5">Latest status</th>
+                    <th className="border-b border-gray-200 px-3 py-2">Student</th>
+                    <th className="border-b border-gray-200 px-3 py-2 text-right">Code similarity</th>
+                    <th className="border-b border-gray-200 px-3 py-2 text-right">Report similarity</th>
+                    <th className="border-b border-gray-200 px-3 py-2 text-right">AI detection</th>
+                    <th className="border-b border-gray-200 px-3 py-2">Most recent check</th>
+                    <th className="border-b border-gray-200 px-3 py-2">Latest status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((r) => (
                     <tr key={r.submission_id}>
-                      <td className="border border-gray-200 px-3 py-1.5">
+                      <td className="border-b border-gray-200 px-3 py-2">
                         {r.student_name}
                         <br />
                         <small className="text-gray-500">{r.student_email}</small>
                       </td>
-                      <td className="border border-gray-200 px-3 py-1.5 text-right">{r.code_similarity_checks}</td>
-                      <td className="border border-gray-200 px-3 py-1.5 text-right">{r.report_similarity_checks}</td>
-                      <td className="border border-gray-200 px-3 py-1.5 text-right">{r.ai_checks}</td>
-                      <td className="border border-gray-200 px-3 py-1.5">
+                      <td className="border-b border-gray-200 px-3 py-2 text-right">{r.code_similarity_checks}</td>
+                      <td className="border-b border-gray-200 px-3 py-2 text-right">{r.report_similarity_checks}</td>
+                      <td className="border-b border-gray-200 px-3 py-2 text-right">{r.ai_checks}</td>
+                      <td className="border-b border-gray-200 px-3 py-2">
                         {r.last_check_at ? (
                           <>
                             {formatDateTime(r.last_check_at)}
@@ -131,7 +131,7 @@ export default function SelfCheckHistoryPanel({ assignments }: { assignments: As
                           <span className="text-gray-400">never</span>
                         )}
                       </td>
-                      <td className="border border-gray-200 px-3 py-1.5">
+                      <td className="border-b border-gray-200 px-3 py-2">
                         {r.latest_status ? (
                           <Badge bold={false} tone={STATUS_STYLE[r.latest_status] ?? ""}>
                             {r.latest_status}

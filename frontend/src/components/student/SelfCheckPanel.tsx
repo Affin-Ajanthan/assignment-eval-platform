@@ -68,7 +68,7 @@ function SelfCheckBody({
                     type="button"
                     onClick={() => start(c.kind)}
                     disabled={busy || left === 0}
-                    className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                    className="btn-primary rounded-md px-3 py-1.5 text-xs font-semibold disabled:opacity-60"
                   >
                     {busy ? "Checking..." : c.button}
                   </button>

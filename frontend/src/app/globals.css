@@ -1,6 +1,182 @@
 @import "tailwindcss";
 
-body {
-  background: #fafafa;
-  color: #1a1a1a;
+/*
+ * Design system: "Academic navy".
+ * Navy is the brand colour, a muted gold is a thin accent (never text), and the page is a cool light grey with
+ * white cards. Tailwind's colour families are re-pointed at the palette, so every page uses it: blue is the
+ * brand, the greys are text and borders, yellow/amber is warning, red is error, green is success. All text
+ * pairs meet WCAG AA (4.5:1); form-control borders meet 3:1.
+ */
+@theme {
+  --color-brand-50: #e8f0f8;
+  --color-brand-100: #d3e0ef;
+  --color-brand-600: #2c5282; /* links, focus ring */
+  --color-brand-700: #1f3a5f; /* primary: header, primary buttons */
+  --color-brand-800: #172e4b; /* primary hover */
+  --color-accent: #b4912f; /* gold: rules and underlines only */
+  --color-page: #f3f5f8;
+
+  /* Brand (Tailwind "blue") */
+  --color-blue-50: #e8f0f8;
+  --color-blue-100: #d3e0ef;
+  --color-blue-200: #b9cce3;
+  --color-blue-500: #2c5282;
+  --color-blue-600: #1f3a5f;
+  --color-blue-700: #1a3354;
+  --color-blue-800: #1f4e79;
+
+  /* Neutrals: text and borders */
+  --color-gray-50: #f8fafc;
+  --color-gray-100: #eef1f5;
+  --color-gray-200: #d9dee5; /* card and table borders */
+  --color-gray-300: #858f9e; /* form-control borders, 3.3:1 */
+  --color-gray-400: #66707e; /* hints, 5.0:1 (was 2.5:1) */
+  --color-gray-500: #5b6573; /* muted text, 5.9:1 */
+  --color-gray-600: #4b5563;
+  --color-gray-700: #374151;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #111827;
+
+  /* Warning: yellow and amber are one colour */
+  --color-yellow-50: #fbf1db;
+  --color-yellow-100: #f6e3b4;
+  --color-yellow-800: #7a4b00;
+  --color-yellow-900: #5f3a00;
+  --color-amber-50: #fbf1db;
+  --color-amber-500: #b7791f;
+  --color-amber-700: #7a4b00;
+  --color-amber-800: #6b4200;
+  --color-amber-900: #5f3a00;
+
+  /* Error */
+  --color-red-50: #fbeaeb;
+  --color-red-100: #f6d5d7;
+  --color-red-600: #b42318;
+  --color-red-700: #9b2226;
+  --color-red-800: #861d21;
+
+  /* Success */
+  --color-green-50: #e7f3ec;
+  --color-green-100: #d2e9db;
+  --color-green-700: #1e6b47;
+  --color-green-800: #1e6b47;
+
+  --font-sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Element defaults, in the base layer so a utility class on an element still wins. */
+@layer base {
+  body {
+    background: var(--color-page);
+    color: var(--color-gray-800);
+    font-family: var(--font-sans);
+  }
+
+  /* One visible focus ring on everything that can be tabbed to. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-600);
+    outline-offset: 2px;
+  }
+
+  /* On the navy header and login panel the ring is white, so it stays visible. */
+  header :focus-visible,
+  aside :focus-visible {
+    outline-color: #fff;
+  }
+
+  /* Form controls: white, the accessible border, and room to tap. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),
+  select,
+  textarea {
+    background-color: #fff;
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-gray-400);
+  }
+
+  /* Headings: a clear step between page, section and label. */
+  h1 {
+    letter-spacing: -0.01em;
+  }
+
+  /* A card's own title gets the navy rule, so each section has an anchor. */
+  section > h2:first-child {
+    border-left: 3px solid var(--color-brand-700);
+    padding-left: 0.625rem;
+  }
+
+  /* Tables: horizontal dividers, a quiet header, aligned numbers, a light row hover. */
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+  /* A wide table inside a sideways-scrolling wrapper keeps readable columns and scrolls, instead of squeezing
+     dates and buttons onto several lines on a tablet or phone. */
+  .overflow-x-auto > table {
+    min-width: 40rem;
+  }
+  /* What opens under a row (grading, files, tests, code compare) stays in view while the table scrolls
+     sideways on a phone, at the width of the screen rather than of the table. */
+  .overflow-x-auto > table td[colspan] > * {
+    position: sticky;
+    left: 0;
+    max-width: calc(100vw - 4.5rem);
+  }
+  thead th {
+    color: var(--color-gray-600);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+  tbody > tr:hover > td {
+    background-color: rgb(31 58 95 / 0.03);
+  }
+}
+
+@layer components {
+  /* Buttons. Primary: the main action; secondary: everything neutral; danger: destructive (outlined, solid only
+     inside a confirmation). */
+  .btn-primary,
+  .btn-secondary,
+  .btn-danger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    border-radius: 0.375rem;
+    border: 1px solid transparent;
+    font-weight: 600;
+    line-height: 1.25rem;
+    transition: background-color 120ms, border-color 120ms, color 120ms;
+  }
+  .btn-primary {
+    background-color: var(--color-brand-700);
+    color: #fff;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background-color: var(--color-brand-800);
+  }
+  .btn-secondary {
+    background-color: #fff;
+    border-color: var(--color-brand-700);
+    color: var(--color-brand-700);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background-color: var(--color-brand-50);
+  }
+  .btn-danger {
+    background-color: #fff;
+    border-color: var(--color-red-700);
+    color: var(--color-red-700);
+  }
+  .btn-danger:hover:not(:disabled) {
+    background-color: var(--color-red-50);
+  }
+  .btn-primary:disabled,
+  .btn-secondary:disabled,
+  .btn-danger:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
 }

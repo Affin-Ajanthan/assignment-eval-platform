@@ -123,7 +123,7 @@ export default function ReportSimilarityPanel({
         type="button"
         onClick={run}
         disabled={running || !assignmentName}
-        className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+        className="btn-primary mt-3 rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
       >
         {running ? "Comparing reports..." : "Check report similarity"}
       </button>
@@ -179,11 +179,11 @@ export default function ReportSimilarityPanel({
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-left">
-                  <th className="border border-gray-200 px-3 py-1.5">Student A</th>
-                  <th className="border border-gray-200 px-3 py-1.5">Student B</th>
-                  <th className="border border-gray-200 px-3 py-1.5">Identical text (A / B)</th>
-                  <th className="border border-gray-200 px-3 py-1.5">Semantic</th>
-                  <th className="border border-gray-200 px-3 py-1.5">Flag</th>
+                  <th className="border-b border-gray-200 px-3 py-2">Student A</th>
+                  <th className="border-b border-gray-200 px-3 py-2">Student B</th>
+                  <th className="border-b border-gray-200 px-3 py-2">Identical text (A / B)</th>
+                  <th className="border-b border-gray-200 px-3 py-2">Semantic</th>
+                  <th className="border-b border-gray-200 px-3 py-2">Flag</th>
                 </tr>
               </thead>
               <tbody>
@@ -194,9 +194,9 @@ export default function ReportSimilarityPanel({
                         p.flag_level === "high" ? "bg-red-50" : p.flag_level === "review" ? "bg-yellow-50" : undefined
                       }
                     >
-                      <td className="border border-gray-200 px-3 py-1.5">{p.student_a}</td>
-                      <td className="border border-gray-200 px-3 py-1.5">{p.student_b}</td>
-                      <td className="border border-gray-200 px-3 py-1.5">
+                      <td className="border-b border-gray-200 px-3 py-2">{p.student_a}</td>
+                      <td className="border-b border-gray-200 px-3 py-2">{p.student_b}</td>
+                      <td className="border-b border-gray-200 px-3 py-2">
                         {pct(p.coverage_a)} / {pct(p.coverage_b)}
                         {p.passages.length > 0 && (
                           <button
@@ -208,7 +208,7 @@ export default function ReportSimilarityPanel({
                           </button>
                         )}
                       </td>
-                      <td className="border border-gray-200 px-3 py-1.5">
+                      <td className="border-b border-gray-200 px-3 py-2">
                         {p.semantic_similarity === null ? (
                           <span className="text-gray-400" title="Semantic comparison not available">
                             —
@@ -217,7 +217,7 @@ export default function ReportSimilarityPanel({
                           pct(p.semantic_similarity)
                         )}
                       </td>
-                      <td className="border border-gray-200 px-3 py-1.5">
+                      <td className="border-b border-gray-200 px-3 py-2">
                         {p.flag_level === "high" && <span className="font-semibold text-red-700">⚑ Review</span>}
                         {p.flag_level === "review" && (
                           <span className="font-semibold text-yellow-800">⚑ Review (meaning)</span>

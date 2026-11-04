@@ -32,7 +32,7 @@ export default function SubmissionHistory({ version }: { version: number }) {
   }, [open, version, load]);
 
   return (
-    <section className="mt-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm" data-testid="submission-history">
+    <section className="mt-8 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6" data-testid="submission-history">
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -59,19 +59,19 @@ export default function SubmissionHistory({ version }: { version: number }) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 text-left">
-                    <th className="border border-gray-200 px-3 py-1.5">Subject</th>
-                    <th className="border border-gray-200 px-3 py-1.5">Assignment</th>
-                    <th className="border border-gray-200 px-3 py-1.5">Submitted</th>
-                    <th className="border border-gray-200 px-3 py-1.5">Status</th>
-                    <th className="border border-gray-200 px-3 py-1.5">Marks</th>
+                    <th className="border-b border-gray-200 px-3 py-2">Subject</th>
+                    <th className="border-b border-gray-200 px-3 py-2">Assignment</th>
+                    <th className="border-b border-gray-200 px-3 py-2">Submitted</th>
+                    <th className="border-b border-gray-200 px-3 py-2">Status</th>
+                    <th className="border-b border-gray-200 px-3 py-2">Marks</th>
                   </tr>
                 </thead>
                 <tbody>
                   {submissions.map((s) => (
                     <tr key={s.id}>
-                      <td className="border border-gray-200 px-3 py-1.5">{s.subject_name}</td>
-                      <td className="border border-gray-200 px-3 py-1.5">{s.assignment_name}</td>
-                      <td className="border border-gray-200 px-3 py-1.5">
+                      <td className="border-b border-gray-200 px-3 py-2">{s.subject_name}</td>
+                      <td className="border-b border-gray-200 px-3 py-2">{s.assignment_name}</td>
+                      <td className="border-b border-gray-200 px-3 py-2">
                         {formatDateTime(s.submitted_at)}
                         {s.late_seconds != null && (
                           <div className="text-xs font-semibold text-red-800" data-testid="late-note">
@@ -79,12 +79,12 @@ export default function SubmissionHistory({ version }: { version: number }) {
                           </div>
                         )}
                       </td>
-                      <td className="border border-gray-200 px-3 py-1.5">
+                      <td className="border-b border-gray-200 px-3 py-2">
                         <Badge bold={false} tone={s.status === "graded" ? "bg-green-50 text-green-800" : "bg-yellow-50 text-yellow-800"}>
                           {s.status === "graded" ? "Graded" : "Submitted"}
                         </Badge>
                       </td>
-                      <td className="border border-gray-200 px-3 py-1.5">
+                      <td className="border-b border-gray-200 px-3 py-2">
                         {markWithPenalty(s.raw_mark, s.final_mark, s.max_mark, s.late_penalty_percent, s.late_penalty_marks)}
                       </td>
                     </tr>

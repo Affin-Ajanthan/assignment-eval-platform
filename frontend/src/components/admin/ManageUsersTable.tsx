@@ -142,7 +142,7 @@ export default function ManageUsersTable({
     });
   }
 
-  const cell = "border border-gray-200 px-3 py-1.5";
+  const cell = "border-b border-gray-200 px-3 py-2";
 
   return (
     <>
@@ -225,7 +225,7 @@ export default function ManageUsersTable({
                         <button
                           type="submit"
                           disabled={saving}
-                          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                          className="btn-primary rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
                         >
                           {saving ? "Saving..." : "Save changes"}
                         </button>
@@ -233,7 +233,7 @@ export default function ManageUsersTable({
                           type="button"
                           disabled={saving}
                           onClick={() => setEditingId(null)}
-                          className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+                          className="btn-secondary rounded-md px-4 py-2 text-sm font-semibold"
                         >
                           Cancel
                         </button>

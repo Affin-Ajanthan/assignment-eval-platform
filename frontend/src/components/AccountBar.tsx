@@ -5,14 +5,23 @@ import { useRouter } from "next/navigation";
 import { destinationForRole, logout, UserInfo } from "@/lib/api";
 
 const ROLE_LABEL: Record<UserInfo["role"], string> = {
-  admin: "Admin",
+  admin: "Administrator",
   instructor: "Instructor",
   student: "Student",
 };
 
-/** The header of every signed-in page: the platform's name (back to the user's dashboard), what the page is
- * about (`context`, e.g. the subject open on the dashboard), who is signed in, and Log out. */
-export default function AccountBar({ user, context }: { user: UserInfo; context?: string }) {
+/** The header of every signed-in page: a full-width navy bar with the platform's name (back to the user's
+ * dashboard), what the page is about (`context`, e.g. the subject open on the dashboard), who is signed in, and
+ * Log out. `width` lines its content up with the page below it. */
+export default function AccountBar({
+  user,
+  context,
+  width = "max-w-6xl",
+}: {
+  user: UserInfo;
+  context?: string;
+  width?: string;
+}) {
   const router = useRouter();
 
   async function handleLogout() {
@@ -21,36 +30,47 @@ export default function AccountBar({ user, context }: { user: UserInfo; context?
   }
 
   return (
-    <header className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 pb-4">
-      <div className="flex min-w-0 items-center gap-3">
-        <Link
-          href={destinationForRole(user.role)}
-          className="flex items-center gap-2 font-bold text-gray-900 hover:text-blue-700"
-          aria-label="Assignment Evaluation Platform: go to your dashboard"
-        >
-          <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-600 text-xs text-white">
-            AE
+    <header className="border-b-2 border-accent bg-brand-700 text-white">
+      <div className={`mx-auto flex ${width} flex-wrap items-center justify-between gap-3 px-4 py-3`}>
+        <div className="flex min-w-0 items-center gap-3">
+          <Link
+            href={destinationForRole(user.role)}
+            className="flex items-center gap-2.5 rounded-md font-semibold text-white"
+            aria-label="Assignment Evaluation Platform: go to your dashboard"
+          >
+            <span
+              aria-hidden="true"
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-white/40 bg-white/10 text-xs font-bold tracking-wide"
+            >
+              AE
+            </span>
+            <span className="hidden leading-tight sm:block">
+              <span className="block text-[15px]">Assignment Evaluation Platform</span>
+              <span className="block text-xs font-normal text-brand-100">{ROLE_LABEL[user.role]} portal</span>
+            </span>
+          </Link>
+          {context && (
+            <span
+              className="truncate rounded-md bg-white/10 px-2.5 py-1 text-xs font-semibold text-white"
+              title={context}
+            >
+              {context}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-right text-sm leading-tight">
+            <span className="block font-semibold">{user.full_name}</span>
+            <span className="block text-xs text-brand-100">{ROLE_LABEL[user.role]}</span>
           </span>
-          <span className="hidden sm:inline">Assignment Evaluation Platform</span>
-        </Link>
-        {context && (
-          <span className="truncate rounded-md bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700" title={context}>
-            {context}
-          </span>
-        )}
-      </div>
-      <div className="flex items-center gap-3">
-        <span className="text-right text-sm leading-tight">
-          <span className="block font-semibold text-gray-900">{user.full_name}</span>
-          <span className="block text-xs text-gray-500">{ROLE_LABEL[user.role]}</span>
-        </span>
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="rounded-md bg-gray-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700"
-        >
-          Log out
-        </button>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="rounded-md border border-white/60 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/10"
+          >
+            Log out
+          </button>
+        </div>
       </div>
     </header>
   );

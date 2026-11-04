@@ -32,7 +32,7 @@ import RubricsSection from "@/components/instructor/RubricsSection";
 import PairFilters, { pairMatches, usePairFilters } from "@/components/instructor/PairFilters";
 import CodeCompareView from "@/components/instructor/CodeCompareView";
 import DashboardTabs, { DashboardTab, isDashboardTab, tabPanelProps } from "@/components/instructor/DashboardTabs";
-import { formatDateTime, formatMark } from "@/lib/datetime";
+import { formatDateTime } from "@/lib/datetime";
 import { lateText, markWithPenalty } from "@/lib/late";
 import Message, { MessageState } from "@/components/Message";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
@@ -681,7 +681,7 @@ export default function InstructorPage() {
   const panelClass = (inline: boolean) =>
     inline
       ? "scroll-mt-4 rounded-lg border border-blue-200 bg-white p-4 shadow-sm"
-      : "mt-6 scroll-mt-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm";
+      : "mt-6 scroll-mt-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6";
   const inTable = (id: number | null) => tableSubmissions.some((s) => s.id === id);
 
   function renderAutoevalPanel(inline: boolean) {
@@ -712,14 +712,14 @@ export default function InstructorPage() {
             type="button"
             disabled={autoevalRunning}
             onClick={handleRunAutoeval}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+            className="btn-primary rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
           >
             {autoevalRunning ? "Running..." : "Run auto-evaluation"}
           </button>
           <button
             type="button"
             onClick={() => setAutoevalSubmissionId(null)}
-            className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+            className="btn-secondary rounded-md px-4 py-2 text-sm font-semibold"
           >
             Cancel
           </button>
@@ -747,19 +747,19 @@ export default function InstructorPage() {
             <table className="mt-3 w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-left">
-                  <th className="border border-gray-200 px-3 py-1.5">Criterion</th>
-                  <th className="border border-gray-200 px-3 py-1.5">Score</th>
-                  <th className="border border-gray-200 px-3 py-1.5">Justification</th>
+                  <th className="border-b border-gray-200 px-3 py-2">Criterion</th>
+                  <th className="border-b border-gray-200 px-3 py-2">Score</th>
+                  <th className="border-b border-gray-200 px-3 py-2">Justification</th>
                 </tr>
               </thead>
               <tbody>
                 {autoevalResult.criterion_breakdown.map((c, i) => (
                   <tr key={i}>
-                    <td className="border border-gray-200 px-3 py-1.5">{c.name}</td>
-                    <td className="border border-gray-200 px-3 py-1.5">
+                    <td className="border-b border-gray-200 px-3 py-2">{c.name}</td>
+                    <td className="border-b border-gray-200 px-3 py-2">
                       {c.score} / {c.max_points}
                     </td>
-                    <td className="border border-gray-200 px-3 py-1.5">{c.justification}</td>
+                    <td className="border-b border-gray-200 px-3 py-2">{c.justification}</td>
                   </tr>
                 ))}
               </tbody>
@@ -767,7 +767,7 @@ export default function InstructorPage() {
             <button
               type="button"
               onClick={useAutoevalScoresForGrading}
-              className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+              className="btn-primary mt-3 rounded-md px-4 py-2 text-sm font-semibold"
             >
               Use these scores as starting point for manual grading
             </button>
@@ -913,16 +913,20 @@ export default function InstructorPage() {
               })}
             </div>
 
-            <p className="mt-3 text-sm font-semibold">
-              Final mark:{" "}
-              {criteriaTotal} / {gradingRubric?.max_total ?? 0}
+            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-brand-100 bg-brand-50 px-4 py-3">
+              <p className="text-sm font-semibold text-brand-700" aria-live="polite">
+                Final mark:{" "}
+                <span className="text-xl">
+                  {criteriaTotal} / {gradingRubric?.max_total ?? 0}
+                </span>
+              </p>
               {Object.keys(scoreErrors).length > 0 && (
-                <span className="ml-2 text-xs font-normal text-red-700">Marks shown in red are not counted.</span>
+                <span className="text-xs text-red-700">Marks shown in red are not counted.</span>
               )}
-              <span className="ml-2 text-xs font-normal text-gray-500">
+              <span className="text-xs text-gray-600">
                 Students see this mark, the per-criterion marks and your feedback, never the internal comments.
               </span>
-            </p>
+            </div>
           </>
         )}
 
@@ -957,7 +961,7 @@ export default function InstructorPage() {
             onClick={() => handleSaveGrade()}
             disabled={cannotSave}
             title={cannotSaveReason}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="btn-primary rounded-md px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
           >
             Save grade
           </button>
@@ -967,7 +971,7 @@ export default function InstructorPage() {
               onClick={() => handleSaveGrade(nextUngradedId)}
               disabled={cannotSave}
               title={cannotSaveReason ?? `Save, then grade ${studentLabel(nextUngradedId)}`}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="btn-primary rounded-md px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
             >
               Save &amp; next
             </button>
@@ -975,7 +979,7 @@ export default function InstructorPage() {
           <button
             type="button"
             onClick={() => confirmDiscardThen(() => closeGradingPanel())}
-            className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+            className="btn-secondary rounded-md px-4 py-2 text-sm font-semibold"
           >
             Cancel
           </button>
@@ -987,8 +991,9 @@ export default function InstructorPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
-      <AccountBar user={user} context={currentSubject ? `${currentSubject.name} (${currentSubject.code})` : undefined} />
+    <>
+      <AccountBar user={user} context={currentSubject ? `${currentSubject.name} (${currentSubject.code})` : undefined} width="max-w-6xl" />
+      <main className="mx-auto max-w-6xl px-4 py-8">
 
       <h1 className="text-2xl font-bold">Instructor dashboard</h1>
       <p className="mt-1 text-sm text-gray-600">
@@ -996,7 +1001,7 @@ export default function InstructorPage() {
         starting point -- you always have the final say.
       </p>
 
-      <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
         <label className="block text-sm font-semibold" htmlFor="subject-selector">
           Subject
         </label>
@@ -1039,7 +1044,7 @@ export default function InstructorPage() {
 
           <div {...tabPanelProps("integrity", tab)}>
           {/* Similarity check */}
-          <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+          <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
             <h2 className="text-lg font-bold">Similarity Code Check</h2>
             <p className="mt-1 text-sm text-gray-600">
               Compares every code submission for one assignment pairwise and flags likely copies. The PDF reports
@@ -1065,7 +1070,7 @@ export default function InstructorPage() {
               type="button"
               onClick={handleRunSimilarity}
               disabled={similarityRunning}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+              className="btn-primary rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
             >
               {similarityRunning ? "Comparing code..." : "Check similarity"}
             </button>
@@ -1115,18 +1120,18 @@ export default function InstructorPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-gray-50 text-left">
-                        <th rowSpan={2} className="border border-gray-200 px-3 py-1.5">Student A</th>
-                        <th rowSpan={2} className="border border-gray-200 px-3 py-1.5">Student B</th>
-                        <th colSpan={3} className="border border-gray-200 px-3 py-1.5 text-center">
+                        <th rowSpan={2} className="border-b border-gray-200 px-3 py-2">Student A</th>
+                        <th rowSpan={2} className="border-b border-gray-200 px-3 py-2">Student B</th>
+                        <th colSpan={3} className="border-b border-gray-200 px-3 py-2 text-center">
                           Token / fingerprint
                         </th>
-                        <th rowSpan={2} className="border border-gray-200 px-3 py-1.5">Semantic</th>
-                        <th rowSpan={2} className="border border-gray-200 px-3 py-1.5">Final flag</th>
+                        <th rowSpan={2} className="border-b border-gray-200 px-3 py-2">Semantic</th>
+                        <th rowSpan={2} className="border-b border-gray-200 px-3 py-2">Final flag</th>
                       </tr>
                       <tr className="bg-gray-50 text-left">
-                        <th className="border border-gray-200 px-3 py-1.5">Shared</th>
-                        <th className="border border-gray-200 px-3 py-1.5">Jaccard</th>
-                        <th className="border border-gray-200 px-3 py-1.5">Containment</th>
+                        <th className="border-b border-gray-200 px-3 py-2">Shared</th>
+                        <th className="border-b border-gray-200 px-3 py-2">Jaccard</th>
+                        <th className="border-b border-gray-200 px-3 py-2">Containment</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1139,12 +1144,12 @@ export default function InstructorPage() {
                             p.flag_level === "high" ? "bg-red-50" : p.flag_level === "review" ? "bg-yellow-50" : undefined
                           }
                         >
-                          <td className="border border-gray-200 px-3 py-1.5">{studentLabel(p.submission_a_id)}</td>
-                          <td className="border border-gray-200 px-3 py-1.5">{studentLabel(p.submission_b_id)}</td>
-                          <td className="border border-gray-200 px-3 py-1.5">{p.shared_fingerprints}</td>
-                          <td className="border border-gray-200 px-3 py-1.5">{(p.jaccard * 100).toFixed(0)}%</td>
-                          <td className="border border-gray-200 px-3 py-1.5">{(p.containment * 100).toFixed(0)}%</td>
-                          <td className="border border-gray-200 px-3 py-1.5">
+                          <td className="border-b border-gray-200 px-3 py-2">{studentLabel(p.submission_a_id)}</td>
+                          <td className="border-b border-gray-200 px-3 py-2">{studentLabel(p.submission_b_id)}</td>
+                          <td className="border-b border-gray-200 px-3 py-2">{p.shared_fingerprints}</td>
+                          <td className="border-b border-gray-200 px-3 py-2">{(p.jaccard * 100).toFixed(0)}%</td>
+                          <td className="border-b border-gray-200 px-3 py-2">{(p.containment * 100).toFixed(0)}%</td>
+                          <td className="border-b border-gray-200 px-3 py-2">
                             {p.semantic_similarity === null ? (
                               <span className="text-gray-400" title="Semantic analysis not available for this pair">
                                 —
@@ -1153,7 +1158,7 @@ export default function InstructorPage() {
                               `${(p.semantic_similarity * 100).toFixed(0)}%`
                             )}
                           </td>
-                          <td className="border border-gray-200 px-3 py-1.5">
+                          <td className="border-b border-gray-200 px-3 py-2">
                             {p.flag_level === "high" && <span className="font-semibold text-red-700">⚑ Review</span>}
                             {p.flag_level === "review" && (
                               <span className="font-semibold text-yellow-800">⚑ Review (semantic)</span>
@@ -1237,7 +1242,7 @@ export default function InstructorPage() {
 
           <div {...tabPanelProps("grading", tab)}>
           {/* Submissions */}
-          <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+          <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
             <h2 className="text-lg font-bold">Submissions for this subject</h2>
             <label className="mt-3 block text-sm font-semibold" htmlFor="submissions-assignment">
               Assignment
@@ -1379,13 +1384,13 @@ export default function InstructorPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 text-left">
-                    <th className="border border-gray-200 px-3 py-1.5">Student</th>
-                    <th className="border border-gray-200 px-3 py-1.5">Assignment</th>
-                    <th className="border border-gray-200 px-3 py-1.5">Files submitted</th>
-                    <th className="border border-gray-200 px-3 py-1.5">Submitted</th>
-                    <th className="border border-gray-200 px-3 py-1.5">Status</th>
-                    <th className="border border-gray-200 px-3 py-1.5">Mark</th>
-                    <th className="border border-gray-200 px-3 py-1.5">Actions</th>
+                    <th className="border-b border-gray-200 px-3 py-2">Student</th>
+                    <th className="border-b border-gray-200 px-3 py-2">Assignment</th>
+                    <th className="border-b border-gray-200 px-3 py-2">Files submitted</th>
+                    <th className="border-b border-gray-200 px-3 py-2">Submitted</th>
+                    <th className="border-b border-gray-200 px-3 py-2">Status</th>
+                    <th className="border-b border-gray-200 px-3 py-2">Mark</th>
+                    <th className="border-b border-gray-200 px-3 py-2">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1405,13 +1410,13 @@ export default function InstructorPage() {
                   {tableSubmissions.map((s) => (
                     <Fragment key={s.id}>
                     <tr>
-                      <td className="border border-gray-200 px-3 py-1.5">
+                      <td className="border-b border-gray-200 px-3 py-2">
                         {s.student_name}
                         <br />
                         <small className="text-gray-500">{s.student_email}</small>
                       </td>
-                      <td className="border border-gray-200 px-3 py-1.5">{s.assignment_name}</td>
-                      <td className="border border-gray-200 px-3 py-1.5">
+                      <td className="border-b border-gray-200 px-3 py-2">{s.assignment_name}</td>
+                      <td className="border-b border-gray-200 px-3 py-2">
                         {s.submitted_types.length === 0 ? (
                           <span className="text-gray-400">none</span>
                         ) : (
@@ -1436,7 +1441,7 @@ export default function InstructorPage() {
                           </div>
                         )}
                       </td>
-                      <td className="border border-gray-200 px-3 py-1.5">
+                      <td className="border-b border-gray-200 px-3 py-2">
                         {formatDateTime(s.submitted_at)}
                         {s.late_seconds != null && (
                           <div>
@@ -1450,7 +1455,7 @@ export default function InstructorPage() {
                           </div>
                         )}
                       </td>
-                      <td className="border border-gray-200 px-3 py-1.5">
+                      <td className="border-b border-gray-200 px-3 py-2">
                         <span
                           className={`rounded px-2 py-0.5 text-xs ${
                             s.status === "graded" ? "bg-green-50 text-green-800" : "bg-yellow-50 text-yellow-800"
@@ -1459,17 +1464,17 @@ export default function InstructorPage() {
                           {s.status === "graded" ? "Graded" : "Submitted"}
                         </span>
                       </td>
-                      <td className="border border-gray-200 px-3 py-1.5" data-testid="submission-mark">
+                      <td className="border-b border-gray-200 px-3 py-2" data-testid="submission-mark">
                         {markWithPenalty(s.raw_mark, s.final_mark, s.max_mark, s.late_penalty_percent, s.late_penalty_marks)}
                       </td>
-                      <td className="border border-gray-200 px-3 py-1.5">
+                      <td className="border-b border-gray-200 px-3 py-2">
                         <div className="flex gap-1 whitespace-nowrap">
                           {/* A code challenge is marked from its tests (Tests button), not with the rubric form. */}
                           {!isCodeChallenge(s.assignment_id) && (
                             <button
                               type="button"
                               onClick={() => confirmDiscardThen(() => openGradingPanel(s.id))}
-                              className="rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+                              className="btn-primary rounded-md px-2 py-1 text-xs font-semibold"
                             >
                               {s.status === "graded" ? "Re-grade" : "Grade"}
                             </button>
@@ -1478,7 +1483,7 @@ export default function InstructorPage() {
                             <button
                               type="button"
                               onClick={() => openAutoevalPanel(s.id)}
-                              className="rounded-md bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700"
+                              className="btn-secondary rounded-md px-2 py-1 text-xs font-semibold"
                             >
                               Auto-evaluate
                             </button>
@@ -1488,7 +1493,7 @@ export default function InstructorPage() {
                               type="button"
                               aria-expanded={testsOpenFor === s.id}
                               onClick={() => setTestsOpenFor(testsOpenFor === s.id ? null : s.id)}
-                              className="rounded-md bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700"
+                              className="btn-secondary rounded-md px-2 py-1 text-xs font-semibold"
                             >
                               Tests
                             </button>
@@ -1504,7 +1509,7 @@ export default function InstructorPage() {
                             <button
                               type="button"
                               onClick={() => setTestsOpenFor(null)}
-                              className="rounded-md bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700"
+                              className="btn-secondary rounded-md px-2 py-1 text-xs font-semibold"
                             >
                               Close
                             </button>
@@ -1530,7 +1535,7 @@ export default function InstructorPage() {
                             <button
                               type="button"
                               onClick={() => setFilesOpenFor(null)}
-                              className="rounded-md bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700"
+                              className="btn-secondary rounded-md px-2 py-1 text-xs font-semibold"
                             >
                               Close
                             </button>
@@ -1565,6 +1570,7 @@ export default function InstructorPage() {
           </div>
         </>
       )}
-    </div>
+      </main>
+    </>
   );
 }

@@ -57,8 +57,8 @@ export default function CrossModalConsistencyPanel({ result }: { result: CrossMo
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-left">
-                  <th className="border border-gray-200 px-3 py-1.5">Comparison</th>
-                  <th className="border border-gray-200 px-3 py-1.5 text-right">Similarity</th>
+                  <th className="border-b border-gray-200 px-3 py-2">Comparison</th>
+                  <th className="border-b border-gray-200 px-3 py-2 text-right">Similarity</th>
                 </tr>
               </thead>
               <tbody>
@@ -66,8 +66,8 @@ export default function CrossModalConsistencyPanel({ result }: { result: CrossMo
                   const value = result[row.key];
                   return (
                     <tr key={row.key}>
-                      <td className="border border-gray-200 px-3 py-1.5">{row.label}</td>
-                      <td className="border border-gray-200 px-3 py-1.5 text-right">
+                      <td className="border-b border-gray-200 px-3 py-2">{row.label}</td>
+                      <td className="border-b border-gray-200 px-3 py-2 text-right">
                         {value === null ? (
                           <>
                             <span className="text-gray-400">—</span>
@@ -81,8 +81,8 @@ export default function CrossModalConsistencyPanel({ result }: { result: CrossMo
                   );
                 })}
                 <tr className="font-semibold">
-                  <td className="border border-gray-200 px-3 py-1.5">Overall</td>
-                  <td className="border border-gray-200 px-3 py-1.5 text-right">
+                  <td className="border-b border-gray-200 px-3 py-2">Overall</td>
+                  <td className="border-b border-gray-200 px-3 py-2 text-right">
                     {result.overall === null ? <span className="text-gray-400">—</span> : pct(result.overall)}
                   </td>
                 </tr>

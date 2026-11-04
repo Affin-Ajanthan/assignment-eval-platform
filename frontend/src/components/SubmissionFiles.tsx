@@ -14,7 +14,7 @@ const TEXT_EXTENSIONS = new Set([
 ]);
 const MAX_PREVIEW_BYTES = 1024 * 1024;
 
-const btn = "rounded-md bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700 disabled:opacity-60";
+const btn = "btn-secondary rounded-md px-2 py-1 text-xs font-semibold disabled:opacity-60";
 
 function ext(name: string): string {
   const dot = name.lastIndexOf(".");
