@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { apiFetch, StudentAssignment, UpcomingAssignment } from "@/lib/api";
+import { apiFetch, getToken, setSession, StudentAssignment, UpcomingAssignment, UserInfo } from "@/lib/api";
 import { useRequireRole } from "@/lib/useRequireRole";
 import { formatDateTime } from "@/lib/datetime";
 import AccountBar from "@/components/AccountBar";
 import { MessageState } from "@/components/Message";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import AssignmentCard from "@/components/student/AssignmentCard";
+import JoinSubject from "@/components/student/JoinSubject";
 import SubmissionHistory from "@/components/student/SubmissionHistory";
 import { OpenForm } from "@/components/student/labels";
 import PageLoading from "@/components/PageLoading";
@@ -39,13 +40,28 @@ export default function StudentPage() {
     }
   }, []);
 
-  useEffect(() => {
-    if (!ready || !user) return;
-    load();
+  const loadUpcoming = useCallback(() => {
     apiFetch<UpcomingAssignment[]>("/upcoming-assignments")
       .then(setUpcoming)
       .catch(() => setUpcoming([]));
-  }, [ready, user, load]);
+  }, []);
+
+  useEffect(() => {
+    if (!ready || !user) return;
+    load();
+    loadUpcoming();
+  }, [ready, user, load, loadUpcoming]);
+
+  // How many subjects the student is in. The login keeps a copy of the account, so a subject joined later is
+  // counted here and the copy is refreshed.
+  const [subjectCount, setSubjectCount] = useState<number | null>(null);
+  async function joinedSubject() {
+    const me = await apiFetch<UserInfo>("/auth/me");
+    const token = getToken();
+    if (token) setSession(token, me);
+    setSubjectCount(me.subjects.length);
+    await Promise.all([load(), loadUpcoming()]);
+  }
 
   async function changed(assignmentId: number, text: string) {
     setNotice({ assignmentId, state: { text, kind: "success" } });
@@ -108,9 +124,13 @@ export default function StudentPage() {
         graded; each assignment below says what it accepts.
       </p>
 
-      {user.subjects.length === 0 && (
-        <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">No subjects assigned yet -- ask your admin</p>
+      {(subjectCount ?? user.subjects.length) === 0 && (
+        <p className="mt-4 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-800">
+          You are not in any subject yet. Join one below with the password your instructor gave you.
+        </p>
       )}
+
+      <JoinSubject onJoined={joinedSubject} />
 
       {subjects.length > 1 && (
         <div className="mt-4">

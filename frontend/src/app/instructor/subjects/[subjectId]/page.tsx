@@ -32,6 +32,7 @@ import RubricModelToggle, {
   useRubricModelSetting,
 } from "@/components/instructor/RubricModelToggle";
 import RubricsSection from "@/components/instructor/RubricsSection";
+import SubjectAccessPanel from "@/components/instructor/SubjectAccessPanel";
 import PairFilters, { pairMatches, usePairFilters } from "@/components/instructor/PairFilters";
 import CodeCompareView from "@/components/instructor/CodeCompareView";
 import DashboardTabs, { DashboardTab, isDashboardTab, tabPanelProps } from "@/components/instructor/DashboardTabs";
@@ -1008,6 +1009,7 @@ export default function InstructorSubjectPage() {
           <div {...tabPanelProps("setup", tab)}>
           {subjectId !== null && (
             <>
+              <SubjectAccessPanel subjectId={subjectId} />
               <AssignmentsSection
                 subjectId={subjectId}
                 assignments={assignments}

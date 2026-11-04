@@ -21,6 +21,21 @@ export function subjectLabel(s: Pick<Subject, "name" | "code" | "batch">): strin
   return `${s.name} (${s.code})${s.batch ? ` · Batch ${s.batch}` : ""}`;
 }
 
+/** A subject's student access, as the instructor sets it (GET/PUT /instructor/subjects/{id}/access). */
+export interface SubjectAccess {
+  open: boolean;
+  password: string;
+}
+
+/** A subject an instructor has opened that the student has not joined yet (GET /student/open-subjects). */
+export interface OpenSubject {
+  id: number;
+  name: string;
+  code: string;
+  batch: string;
+  instructors: string[];
+}
+
 export interface UserInfo {
   id: number;
   email: string;

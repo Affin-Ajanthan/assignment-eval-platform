@@ -84,6 +84,11 @@ class Subject(Base):
     # its code and batch together ("" when it has no batch).
     code = Column(String, nullable=False, index=True)
     batch = Column(String, nullable=False, default="", server_default="")
+    # Student access: the admin gives a subject to instructors only. When an instructor opens it, every student
+    # can see it and join it (an Enrollment) by entering join_password. Kept as typed, because the instructor
+    # reads it back to share it.
+    open_to_students = Column(Boolean, nullable=False, default=False, server_default="0")
+    join_password = Column(String, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
 
 

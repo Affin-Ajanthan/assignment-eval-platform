@@ -36,19 +36,23 @@ export default function AdminPage() {
   const [subjectCode, setSubjectCode] = useState("");
   const [subjectBatch, setSubjectBatch] = useState("");
   const [subjectMsg, setSubjectMsg] = useState<MessageState>(null);
+  // The subject whose details the form holds (Edit in the list fills the form), or null while it adds a new one.
+  const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
+  const subjectFormRef = useRef<HTMLFormElement>(null);
 
   const [instructorName, setInstructorName] = useState("");
   const [instructorEmail, setInstructorEmail] = useState("");
   const [instructorPassword, setInstructorPassword] = useState("");
   const [instructorSubjects, setInstructorSubjects] = useState<Set<number>>(new Set());
   const [instructorMsg, setInstructorMsg] = useState<MessageState>(null);
+  const [editingInstructor, setEditingInstructor] = useState<UserInfo | null>(null);
+  const instructorFormRef = useRef<HTMLFormElement>(null);
 
   const [studentName, setStudentName] = useState("");
   const [studentEmail, setStudentEmail] = useState("");
   const [studentPassword, setStudentPassword] = useState("");
   const [studentBatch, setStudentBatch] = useState("");
   const [studentOwnNumber, setStudentOwnNumber] = useState(""); // the last part of TST/<batch>/<number>
-  const [studentSubjects, setStudentSubjects] = useState<Set<number>>(new Set());
   const [studentMsg, setStudentMsg] = useState<MessageState>(null);
   // The student whose details the form holds (Edit in the list fills the form), or null while it adds a new one.
   const [editingStudent, setEditingStudent] = useState<UserInfo | null>(null);
@@ -74,46 +78,104 @@ export default function AdminPage() {
     loadStudents();
   }, [ready, loadSubjects, loadInstructors, loadStudents]);
 
-  async function handleAddSubject(e: FormEvent) {
+  /** Brings a form into view and puts the cursor in its first box (after Edit fills it). */
+  function showForm(form: HTMLFormElement | null) {
+    form?.scrollIntoView({ behavior: "smooth", block: "start" });
+    form?.querySelector("input")?.focus({ preventScroll: true });
+  }
+
+  function clearSubjectForm() {
+    setEditingSubject(null);
+    setSubjectName("");
+    setSubjectCode("");
+    setSubjectBatch("");
+  }
+
+  /** Edit in the subjects list: the form takes the subject's details and comes into view. */
+  function startEditSubject(s: Subject) {
+    setEditingSubject(s);
+    setSubjectName(s.name);
+    setSubjectCode(s.code);
+    setSubjectBatch(s.batch ?? "");
+    setSubjectMsg(null);
+    showForm(subjectFormRef.current);
+  }
+
+  async function handleSaveSubject(e: FormEvent) {
     e.preventDefault();
     setSubjectMsg(null);
+    const editing = editingSubject;
     try {
-      await apiFetch("/admin/subjects", {
-        method: "POST",
-        json: { name: subjectName, code: subjectCode, batch: subjectBatch },
-      });
-      setSubjectMsg({ text: "Subject added.", kind: "success" });
-      setSubjectName("");
-      setSubjectCode("");
-      setSubjectBatch("");
+      const details = { name: subjectName, code: subjectCode, batch: subjectBatch };
+      if (editing) {
+        await apiFetch(`/admin/subjects/${editing.id}`, { method: "PUT", json: details });
+        setSubjectMsg({ text: "Saved.", kind: "success" });
+      } else {
+        await apiFetch("/admin/subjects", { method: "POST", json: details });
+        setSubjectMsg({ text: "Subject added.", kind: "success" });
+      }
+      clearSubjectForm();
       await loadSubjects();
     } catch (err) {
-      setSubjectMsg({ text: `Failed to add subject: ${err instanceof Error ? err.message : err}`, kind: "error" });
+      setSubjectMsg({
+        text: `Failed to ${editing ? "save" : "add"} subject: ${err instanceof Error ? err.message : err}`,
+        kind: "error",
+      });
     }
   }
 
-  async function handleCreateInstructor(e: FormEvent) {
+  function clearInstructorForm() {
+    setEditingInstructor(null);
+    setInstructorName("");
+    setInstructorEmail("");
+    setInstructorPassword("");
+    setInstructorSubjects(new Set());
+  }
+
+  /** Edit in the instructors list: the form takes the instructor's details and comes into view. */
+  function startEditInstructor(u: UserInfo) {
+    setEditingInstructor(u);
+    setInstructorName(u.full_name);
+    setInstructorEmail(u.email);
+    setInstructorPassword("");
+    setInstructorSubjects(new Set(u.subjects.map((x) => x.id)));
+    setInstructorMsg(null);
+    showForm(instructorFormRef.current);
+  }
+
+  // The instructor being edited was deleted from the list: the form goes back to adding a new one.
+  useEffect(() => {
+    if (editingInstructor && !instructors.some((u) => u.id === editingInstructor.id)) clearInstructorForm();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instructors, editingInstructor]);
+
+  async function handleSaveInstructor(e: FormEvent) {
     e.preventDefault();
     setInstructorMsg(null);
+    const editing = editingInstructor;
     try {
-      await apiFetch("/admin/instructors", {
-        method: "POST",
-        json: {
-          full_name: instructorName,
-          email: instructorEmail,
-          password: instructorPassword,
-          subject_ids: Array.from(instructorSubjects),
-        },
-      });
-      setInstructorMsg({ text: "Instructor created.", kind: "success" });
-      setInstructorName("");
-      setInstructorEmail("");
-      setInstructorPassword("");
-      setInstructorSubjects(new Set());
+      const details = { full_name: instructorName, email: instructorEmail, subject_ids: Array.from(instructorSubjects) };
+      if (editing) {
+        // A blank password keeps the current one.
+        await apiFetch(`/admin/instructors/${editing.id}`, {
+          method: "PUT",
+          json: { ...details, password: instructorPassword || null },
+        });
+        setInstructorMsg({
+          text: instructorPassword
+            ? `Saved. The new password is active and ${instructorName} has been logged out of open sessions.`
+            : "Saved.",
+          kind: "success",
+        });
+      } else {
+        await apiFetch("/admin/instructors", { method: "POST", json: { ...details, password: instructorPassword } });
+        setInstructorMsg({ text: "Instructor created.", kind: "success" });
+      }
+      clearInstructorForm();
       await loadInstructors();
     } catch (err) {
       setInstructorMsg({
-        text: `Failed to create instructor: ${err instanceof Error ? err.message : err}`,
+        text: `Failed to ${editing ? "save" : "create"} instructor: ${err instanceof Error ? err.message : err}`,
         kind: "error",
       });
     }
@@ -126,7 +188,6 @@ export default function AdminPage() {
     setStudentPassword("");
     setStudentBatch("");
     setStudentOwnNumber("");
-    setStudentSubjects(new Set());
   }
 
   /** Edit in the students list: the form takes the student's details and comes into view. */
@@ -137,10 +198,8 @@ export default function AdminPage() {
     setStudentPassword("");
     setStudentBatch(s.batch ?? "");
     setStudentOwnNumber(ownNumberOf(s.register_number ?? "", s.batch ?? ""));
-    setStudentSubjects(new Set(s.subjects.map((x) => x.id)));
     setStudentMsg(null);
-    studentFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    studentFormRef.current?.querySelector("input")?.focus({ preventScroll: true });
+    showForm(studentFormRef.current);
   }
 
   // The student being edited was deleted from the list: the form goes back to adding a new one.
@@ -159,7 +218,6 @@ export default function AdminPage() {
         email: studentEmail,
         batch: studentBatch,
         register_number: registerNumberFor(studentBatch, studentOwnNumber),
-        subject_ids: Array.from(studentSubjects),
       };
       if (editing) {
         // A blank password keeps the current one.
@@ -202,7 +260,8 @@ export default function AdminPage() {
 
       <h1 className="text-2xl font-bold">Admin dashboard</h1>
       <p className="mt-1 text-sm text-gray-600">
-        Create subjects, then create instructor and student accounts and assign them to subjects. You can edit
+        Create subjects, then create instructor accounts and assign them to subjects. Students are not assigned to
+        subjects here: an instructor opens a subject with a password and students join it themselves. You can edit
         subjects, instructors and students at any time. Everyone logs in with the credentials you set here --
         there&apos;s no self-signup.
       </p>
@@ -217,7 +276,15 @@ export default function AdminPage() {
       <div {...adminPanelProps("subjects", tab)}>
       <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-bold">Subjects</h2>
-        <form onSubmit={handleAddSubject} className="mt-3">
+        <form
+          ref={subjectFormRef}
+          onSubmit={handleSaveSubject}
+          className={`mt-3 scroll-mt-4 ${editingSubject ? "rounded-md border border-blue-200 bg-blue-50 p-4" : ""}`}
+          data-testid="subject-form"
+        >
+          <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-500">
+            {editingSubject ? `Edit subject: ${editingSubject.name}` : "Add a subject"}
+          </h3>
           <label className="block text-sm font-semibold" htmlFor="subject_name">
             Subject name
           </label>
@@ -252,14 +319,29 @@ export default function AdminPage() {
               testId="subject-batch"
             />
           </div>
-          <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
-            Add subject
-          </button>
+          <div className="flex gap-2">
+            <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+              {editingSubject ? "Save changes" : "Add subject"}
+            </button>
+            {editingSubject && (
+              <button
+                type="button"
+                onClick={clearSubjectForm}
+                className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
           <Message state={subjectMsg} />
         </form>
 
         <h3 className="mt-5 text-sm font-bold uppercase tracking-wide text-gray-500">Existing subjects</h3>
-        <ManageSubjectsTable subjects={subjects} batches={batches} onChanged={loadSubjects} />
+        <ManageSubjectsTable
+          subjects={subjects}
+          onEdit={startEditSubject}
+          highlightId={editingSubject?.id ?? null}
+        />
       </section>
       </div>
 
@@ -267,7 +349,15 @@ export default function AdminPage() {
       <div {...adminPanelProps("instructors", tab)}>
       <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-bold">Instructors</h2>
-        <form onSubmit={handleCreateInstructor} className="mt-3">
+        <form
+          ref={instructorFormRef}
+          onSubmit={handleSaveInstructor}
+          className={`mt-3 scroll-mt-4 ${editingInstructor ? "rounded-md border border-blue-200 bg-blue-50 p-4" : ""}`}
+          data-testid="instructor-form"
+        >
+          <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-500">
+            {editingInstructor ? `Edit instructor: ${editingInstructor.full_name}` : "Add an instructor"}
+          </h3>
           <label className="block text-sm font-semibold" htmlFor="instructor_name">
             Full name
           </label>
@@ -292,14 +382,19 @@ export default function AdminPage() {
             className="mt-1 mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
           />
           <label className="block text-sm font-semibold" htmlFor="instructor_password">
-            Initial password
+            {editingInstructor ? "New password" : "Initial password"}
+            {editingInstructor && (
+              <span className="font-normal text-gray-500"> (leave blank to keep the current one)</span>
+            )}
           </label>
           <input
             id="instructor_password"
-            required
+            required={!editingInstructor}
+            minLength={editingInstructor ? 4 : undefined}
             value={instructorPassword}
+            autoComplete="new-password"
             onChange={(e) => setInstructorPassword(e.target.value)}
-            placeholder="Shown once -- share it with them directly"
+            placeholder={editingInstructor ? "" : "Shown once -- share it with them directly"}
             className="mt-1 mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
           />
           <label className="block text-sm font-semibold">Subjects</label>
@@ -311,14 +406,31 @@ export default function AdminPage() {
               onToggle={(id) => toggleSet(instructorSubjects, id, setInstructorSubjects)}
             />
           </div>
-          <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
-            Create instructor
-          </button>
+          <div className="flex gap-2">
+            <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+              {editingInstructor ? "Save changes" : "Create instructor"}
+            </button>
+            {editingInstructor && (
+              <button
+                type="button"
+                onClick={clearInstructorForm}
+                className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
           <Message state={instructorMsg} />
         </form>
 
         <h3 className="mt-5 text-sm font-bold uppercase tracking-wide text-gray-500">Existing instructors</h3>
-        <ManageUsersTable role="instructor" users={instructors} subjects={subjects} onChanged={loadInstructors} />
+        <ManageUsersTable
+          role="instructor"
+          users={instructors}
+          onChanged={loadInstructors}
+          onEdit={startEditInstructor}
+          highlightId={editingInstructor?.id ?? null}
+        />
       </section>
       </div>
 
@@ -382,15 +494,9 @@ export default function AdminPage() {
             placeholder={editingStudent ? "" : "Shown once -- share it with them directly"}
             className="mt-1 mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
           />
-          <label className="block text-sm font-semibold">Subjects</label>
-          <div className="mt-1 mb-3">
-            <SubjectCheckboxes
-              id="student-subjects"
-              subjects={subjects}
-              checked={studentSubjects}
-              onToggle={(id) => toggleSet(studentSubjects, id, setStudentSubjects)}
-            />
-          </div>
+          <p className="mb-3 text-sm text-gray-600">
+            No subjects here: the student joins a subject themselves, with the password its instructor sets.
+          </p>
           <div className="flex gap-2">
             <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
               {editingStudent ? "Save changes" : "Create student"}
@@ -412,7 +518,6 @@ export default function AdminPage() {
         <ManageUsersTable
           role="student"
           users={students}
-          subjects={subjects}
           onChanged={loadStudents}
           onEdit={startEditStudent}
           highlightId={editingStudent?.id ?? null}

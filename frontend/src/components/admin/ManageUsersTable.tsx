@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, Fragment, useState } from "react";
+import { Fragment, useState } from "react";
 import { apiFetch, Subject, subjectLabel, UserInfo } from "@/lib/api";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import Message, { MessageState } from "@/components/Message";
@@ -64,85 +64,34 @@ function groupByBatch(users: UserInfo[]): UserGroup[] {
 }
 
 /**
- * Existing instructors or students, each with Edit (name, email, new
- * password, subjects) and Delete. Changes go to PUT/DELETE
- * /admin/{instructors|students}/{id}; `onChanged` reloads the list. With `onEdit` (the students) Edit does not
- * open a form in the row: the page fills its own form with the user.
+ * Existing instructors or students, each with Edit and Delete. Delete goes to DELETE
+ * /admin/{instructors|students}/{id}, then `onChanged` reloads the list. Edit does not open a form in the row:
+ * `onEdit` hands the user to the page, which fills its own form with it. `highlightId` is the user that form is
+ * editing: its row is marked.
  * Students are listed as name, register number and email, grouped by batch, and can be searched by name or
  * register number.
  */
 export default function ManageUsersTable({
   role,
   users,
-  subjects,
   onChanged,
   onEdit,
   highlightId = null,
 }: {
   role: "instructor" | "student";
   users: UserInfo[];
-  subjects: Subject[];
   onChanged: () => Promise<void>;
-  /** Edit hands the user over to this function (the page's form) instead of opening the form in the row. */
-  onEdit?: (u: UserInfo) => void;
-  /** The user the page's form is editing: its row is marked. */
+  onEdit: (u: UserInfo) => void;
   highlightId?: number | null;
 }) {
   const base = role === "instructor" ? "/admin/instructors" : "/admin/students";
   const label = role === "instructor" ? "instructor" : "student";
 
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [search, setSearch] = useState(""); // students only
   const [batchFilter, setBatchFilter] = useState("all"); // students only: "all" or a group key (see batchKey)
-  const [subjectIds, setSubjectIds] = useState<Set<number>>(new Set());
-  const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<MessageState>(null);
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const [deleting, setDeleting] = useState(false);
-
-  function startEdit(u: UserInfo) {
-    setEditingId(u.id);
-    setName(u.full_name);
-    setEmail(u.email);
-    setPassword("");
-    setSubjectIds(new Set(u.subjects.map((s) => s.id)));
-    setMsg(null);
-  }
-
-  function toggleSubject(id: number) {
-    const next = new Set(subjectIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setSubjectIds(next);
-  }
-
-  async function save(e: FormEvent) {
-    e.preventDefault();
-    if (editingId === null) return;
-    setSaving(true);
-    setMsg(null);
-    try {
-      await apiFetch(`${base}/${editingId}`, {
-        method: "PUT",
-        json: { full_name: name, email, password: password || null, subject_ids: Array.from(subjectIds) },
-      });
-      await onChanged();
-      setEditingId(null);
-      setMsg({
-        text: password
-          ? `Saved. The new password is active and ${name} has been logged out of open sessions.`
-          : "Saved.",
-        kind: "success",
-      });
-    } catch (err) {
-      setMsg({ text: `Could not save: ${err instanceof Error ? err.message : err}`, kind: "error" });
-    } finally {
-      setSaving(false);
-    }
-  }
 
   function askDelete(u: UserInfo) {
     const count = u.submission_count ?? 0;
@@ -168,7 +117,6 @@ export default function ManageUsersTable({
         setMsg(null);
         try {
           await apiFetch(`${base}/${u.id}`, { method: "DELETE" });
-          if (editingId === u.id) setEditingId(null);
           await onChanged();
           setMsg({ text: `${u.full_name} was deleted.`, kind: "success" });
         } catch (err) {
@@ -282,106 +230,30 @@ export default function ManageUsersTable({
                 </th>
               </tr>
             )}
-            {g.users.map((u) =>
-              editingId === u.id ? (
-                <tr key={u.id} className="bg-blue-50">
-                  <td colSpan={columns} className={cell}>
-                    <form onSubmit={save} className="py-1">
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div>
-                          <label className="block text-sm font-semibold" htmlFor={`edit-name-${u.id}`}>
-                            Full name
-                          </label>
-                          <input
-                            id={`edit-name-${u.id}`}
-                            required
-                            maxLength={200}
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-semibold" htmlFor={`edit-email-${u.id}`}>
-                            Email
-                          </label>
-                          <input
-                            id={`edit-email-${u.id}`}
-                            type="email"
-                            required
-                            maxLength={254}
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
-                          />
-                        </div>
-                      </div>
-                      <label className="mt-3 block text-sm font-semibold" htmlFor={`edit-password-${u.id}`}>
-                        New password <span className="font-normal text-gray-500">(leave blank to keep the current one)</span>
-                      </label>
-                      <input
-                        id={`edit-password-${u.id}`}
-                        value={password}
-                        minLength={4}
-                        maxLength={200}
-                        autoComplete="new-password"
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
-                      />
-                      <label className="mt-3 block text-sm font-semibold">Subjects</label>
-                      <div className="mt-1 bg-white">
-                        <SubjectCheckboxes
-                          id={`edit-subjects-${u.id}`}
-                          subjects={subjects}
-                          checked={subjectIds}
-                          onToggle={toggleSubject}
-                        />
-                      </div>
-                      <div className="mt-3 flex gap-2">
-                        <button
-                          type="submit"
-                          disabled={saving}
-                          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-                        >
-                          {saving ? "Saving..." : "Save changes"}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={saving}
-                          onClick={() => setEditingId(null)}
-                          className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </form>
-                  </td>
-                </tr>
-              ) : (
-                <tr key={u.id} className={highlightId === u.id ? "bg-blue-50" : undefined}>
-                  <td className={cell}>{u.full_name}</td>
-                  {isStudent && <td className={cell}>{u.register_number || "—"}</td>}
-                  <td className={cell}>{u.email}</td>
-                  {!isStudent && <td className={cell}>{subjectNames(u.subjects)}</td>}
-                  <td className={`${cell} whitespace-nowrap`}>
-                    <button
-                      type="button"
-                      onClick={() => (onEdit ? onEdit(u) : startEdit(u))}
-                      className="rounded-md border border-blue-600 px-2.5 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => askDelete(u)}
-                      className="ml-2 rounded-md border border-red-600 px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              )
-            )}
+            {g.users.map((u) => (
+              <tr key={u.id} className={highlightId === u.id ? "bg-blue-50" : undefined}>
+                <td className={cell}>{u.full_name}</td>
+                {isStudent && <td className={cell}>{u.register_number || "—"}</td>}
+                <td className={cell}>{u.email}</td>
+                {!isStudent && <td className={cell}>{subjectNames(u.subjects)}</td>}
+                <td className={`${cell} whitespace-nowrap`}>
+                  <button
+                    type="button"
+                    onClick={() => onEdit(u)}
+                    className="rounded-md border border-blue-600 px-2.5 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => askDelete(u)}
+                    className="ml-2 rounded-md border border-red-600 px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
+                  >
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            ))}
             </Fragment>
             ))}
           </tbody>

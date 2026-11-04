@@ -131,6 +131,7 @@ add_missing_columns("users", {"batch": "VARCHAR", "register_number": "VARCHAR"})
 # Every batch has the same subjects with the same codes, so a subject code is no longer unique.
 make_index_non_unique("subjects", "code")
 add_missing_columns("subjects", {"batch": "VARCHAR NOT NULL DEFAULT ''"})
+add_missing_columns("subjects", {"open_to_students": "BOOLEAN NOT NULL DEFAULT 0", "join_password": "VARCHAR"})
 add_missing_columns("assignments", {"marks_release_at": "DATETIME"})
 add_missing_columns("submissions", {"test_earned": "FLOAT", "test_total": "FLOAT", "tests_run_at": "DATETIME"})
 add_missing_columns("submissions", {"question_results": "JSON"})
@@ -3134,6 +3135,11 @@ app.include_router(_self_check_router)
 from .routers.student_runs import router as _student_run_router  # noqa: E402
 
 app.include_router(_student_run_router)
+
+# An instructor opens a subject to students with a password; students join it: app/routers/subject_access.py.
+from .routers.subject_access import router as _subject_access_router  # noqa: E402
+
+app.include_router(_subject_access_router)
 
 # The instructor's code and report similarity checks and their exports.
 from .routers.similarity import router as _similarity_router  # noqa: E402
