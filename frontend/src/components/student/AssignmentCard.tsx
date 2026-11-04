@@ -101,7 +101,7 @@ export default function AssignmentCard({
   const graded = !!sub && sub.final_mark !== null && !a.marks_release_at;
 
   return (
-    <li className="card" data-testid="student-assignment">
+    <li className="card assignment-card" data-testid="student-assignment">
       {/* Identity: title, subject, and the two kinds of status side by side but never mixed up. */}
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
@@ -186,7 +186,7 @@ export default function AssignmentCard({
         </div>
 
         {/* Dates and the submission, together at the side where the eye looks for them. */}
-        <aside className="self-start rounded-md border border-gray-200 bg-gray-50 p-4 text-sm" aria-label="Dates and your submission">
+        <aside className="self-start rounded-lg border border-[var(--color-surface-border)] bg-gray-50 p-4 text-sm" aria-label="Dates and your submission">
           <div>
             <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Key dates</h4>
             <dl className="mt-2 space-y-2">

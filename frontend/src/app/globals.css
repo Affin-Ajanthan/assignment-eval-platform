@@ -14,7 +14,9 @@
   --color-brand-700: #1f3a5f; /* primary: header, primary buttons */
   --color-brand-800: #172e4b; /* primary hover */
   --color-accent: #b4912f; /* gold: rules and underlines only */
-  --color-page: #f3f5f8;
+  --color-page: #f1f5f9; /* page background: cool and neutral, so white cards stand out */
+  --color-surface-border: #dce3ec; /* an assignment card's edge */
+  --color-surface-border-hover: #b8c9dc;
 
   /* Brand (Tailwind "blue") */
   --color-blue-50: #e8f0f8;
@@ -249,6 +251,28 @@
   @media (min-width: 40rem) {
     .card {
       padding: 1.5rem;
+    }
+  }
+
+  /* An assignment card on the student portal: the shared card with a softer edge, a larger radius and a very light
+     shadow. On hover (or while a control inside has focus) the edge firms up and the card lifts slightly. The
+     background stays white: the card is not clickable itself, and its side panel already uses the light grey. */
+  .assignment-card {
+    border-color: var(--color-surface-border);
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.03);
+    transition:
+      border-color 150ms ease,
+      box-shadow 150ms ease;
+  }
+  .assignment-card:hover,
+  .assignment-card:focus-within {
+    border-color: var(--color-surface-border-hover);
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.05), 0 6px 16px -4px rgb(15 23 42 / 0.08);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .assignment-card {
+      transition: none;
     }
   }
 
