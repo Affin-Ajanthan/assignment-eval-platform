@@ -56,6 +56,8 @@ export type AssignmentStatus = "upcoming" | "open" | "closed";
 
 /** File kinds an assignment accepts. */
 export type SubmissionType = "code" | "report" | "video";
+/** What a late penalty is counted in: a percent of the mark, or marks taken off it. */
+export type LatePenaltyUnit = "percent" | "marks";
 
 /** Instructor view of an assignment. Times are ISO strings with a UTC offset. */
 export interface Assignment {
@@ -102,6 +104,17 @@ export interface Assignment {
   task_password?: string;
   /** A code challenge whose tasks must be handed in in order (missing from an older server). */
   tasks_in_order?: boolean;
+  /** Late work (missing from an older server): minutes after the deadline that still count as on time, the date late
+   *  work is taken until (null: none), the penalty per day late (percent) with its maximum, and how many were late. */
+  late_grace_minutes?: number;
+  late_until?: string | null;
+  late_penalty_percent?: number;
+  late_penalty_max_percent?: number;
+  /** What the penalty is counted in: percent of the mark, or marks (then `late_penalty_marks` per day, at most `late_penalty_max_marks`, null: no limit). */
+  late_penalty_unit?: LatePenaltyUnit;
+  late_penalty_marks?: number;
+  late_penalty_max_marks?: number | null;
+  late_count?: number;
   /** "submission": students upload files; "code_challenge": code only, run against test cases. Fixed at creation. */
   assignment_type: AssignmentKind;
 }
@@ -150,8 +163,14 @@ export interface MySubmission {
   has_code: boolean;
   has_report: boolean;
   has_video: boolean;
+  /** The mark after any late penalty; raw_mark is the mark before it. */
   final_mark: number | null;
   max_mark: number | null;
+  raw_mark?: number | null;
+  /** Handed in after the deadline and its grace period: seconds after the deadline (null: on time) and the percent of the mark that costs. */
+  late_seconds?: number | null;
+  late_penalty_percent?: number;
+  late_penalty_marks?: number;
   /** Per-criterion marks; empty when graded with "Final mark only" or not graded. */
   criterion_marks: { name: string; score: number; max_points: number }[];
   /** The instructor's feedback for the student (never the internal comments). */
@@ -192,6 +211,19 @@ export interface StudentAssignment {
   tasks_unlocked?: boolean;
   /** The tasks must be handed in in order. */
   tasks_in_order?: boolean;
+  /** The deadline has gone. `status` stays "open" while late work is still taken. */
+  past_deadline?: boolean;
+  /** The last moment work is taken, when that is after the deadline (grace period or late date). */
+  accept_until?: string | null;
+  late_grace_minutes?: number;
+  late_penalty_percent?: number;
+  late_penalty_max_percent?: number;
+  late_penalty_unit?: LatePenaltyUnit;
+  late_penalty_marks?: number;
+  late_penalty_max_marks?: number | null;
+  /** What handing in right now would cost, in percent of the mark or in marks (0 inside the grace period). */
+  penalty_now_percent?: number;
+  penalty_now_marks?: number;
   my_submission: MySubmission | null;
 }
 
@@ -270,6 +302,11 @@ export interface CodeWork {
   /** The mark so far: points of the test cases passed out of the points of ALL the tasks. Null before the marks release date, or when nothing is marked. */
   earned: number | null;
   total: number | null;
+  /** Late work: seconds after the deadline (null: on time), the percent of the mark lost for it, and the mark before that. */
+  late_seconds?: number | null;
+  late_penalty_percent?: number;
+  late_penalty_marks?: number;
+  raw_earned?: number | null;
 }
 
 /** One test's outcome from POST /submissions/{id}/run-tests (instructor view). */
@@ -334,8 +371,14 @@ export interface Submission {
   video_path: string | null;
   submitted_at: string;
   status: "submitted" | "graded";
+  /** The mark after any late penalty; raw_mark is the mark before it. */
   final_mark: number | null;
   max_mark: number | null;
+  raw_mark?: number | null;
+  /** Handed in late: seconds after the deadline (null: on time) and the percent of the mark lost for it. */
+  late_seconds?: number | null;
+  late_penalty_percent?: number;
+  late_penalty_marks?: number;
   /** Kinds of file uploaded, in this order: code, report, video. */
   submitted_types: ("code" | "report" | "video")[];
 }

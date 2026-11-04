@@ -4,6 +4,7 @@ import Link from "next/link";
 import { StudentAssignment } from "@/lib/api";
 import { taskName, timedTasks, timeLimitText } from "@/lib/tasks";
 import { formatDateTime, formatMark } from "@/lib/datetime";
+import { lateText, markWithPenalty, penaltyText } from "@/lib/late";
 import Badge from "@/components/Badge";
 import RichText from "@/components/RichText";
 import Message, { MessageState } from "@/components/Message";
@@ -36,6 +37,16 @@ export default function AssignmentCard({
   const isChallenge = a.assignment_type === "code_challenge";
   const useEditor = isChallenge && editorLanguages(a).length > 0;
   const taskCount = a.questions?.length ?? 0;
+  // The late rule as the student is told it: the penalty per day late in the unit the instructor chose, and its limit.
+  const inMarks = a.late_penalty_unit === "marks";
+  const perDay = (inMarks ? a.late_penalty_marks : a.late_penalty_percent) ?? 0;
+  const capText = inMarks
+    ? a.late_penalty_max_marks != null
+      ? penaltyText(0, a.late_penalty_max_marks)
+      : ""
+    : (a.late_penalty_max_percent ?? 100) < 100
+      ? penaltyText(a.late_penalty_max_percent, 0)
+      : "";
   const manyTasks = isChallenge && taskCount > 1;
   const submissionStatus = !sub
     ? "Not submitted"
@@ -122,6 +133,28 @@ export default function AssignmentCard({
         </div>
       )}
 
+      {a.status === "open" && a.past_deadline && (
+        <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800" data-testid="late-notice">
+          The deadline has passed.{" "}
+          {(a.penalty_now_percent ?? 0) > 0 || (a.penalty_now_marks ?? 0) > 0
+            ? `Work handed in now is marked Late and loses ${penaltyText(a.penalty_now_percent, a.penalty_now_marks)}${
+                inMarks ? "" : " of its mark"
+              }${
+                perDay > 0 ? ` (${penaltyText(a.late_penalty_percent, a.late_penalty_marks)} for every day or part of a day late` : ""
+              }${perDay > 0 && capText ? `, at most ${capText}` : ""}${perDay > 0 ? ")" : ""}.`
+            : "Work handed in now still counts as on time (grace period)."}
+          {a.accept_until && ` Work is accepted until ${formatDateTime(a.accept_until)}.`}
+        </p>
+      )}
+      {sub?.late_seconds != null && (
+        <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800" data-testid="submitted-late">
+          You handed this in late: {lateText(sub.late_seconds)} after the deadline
+          {(sub.late_penalty_percent ?? 0) > 0 || (sub.late_penalty_marks ?? 0) > 0
+            ? `, so ${penaltyText(sub.late_penalty_percent, sub.late_penalty_marks)} is taken off the mark`
+            : ""}.
+        </p>
+      )}
+
       <dl className="mt-3 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[max-content_1fr]">
         <dt className="font-semibold">Available from</dt>
         <dd>{formatDateTime(a.available_from)}</dd>
@@ -138,7 +171,7 @@ export default function AssignmentCard({
             <dd data-testid="marks">
               {a.marks_release_at
                 ? `Marks will be released on ${formatDateTime(a.marks_release_at)}`
-                : formatMark(sub.final_mark, sub.max_mark)}
+                : markWithPenalty(sub.raw_mark, sub.final_mark, sub.max_mark, sub.late_penalty_percent, sub.late_penalty_marks)}
             </dd>
           </>
         )}

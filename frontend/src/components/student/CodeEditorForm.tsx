@@ -3,6 +3,7 @@
 import { KeyboardEvent, useEffect, useRef, useState } from "react";
 import { apiFetch, CodeAnswer, CodeQuestion, CodeRun, CodeWork, StudentAssignment } from "@/lib/api";
 import { formatDateTime, formatMark } from "@/lib/datetime";
+import { lateText, markWithPenalty, penaltyText } from "@/lib/late";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import Message, { MessageState } from "@/components/Message";
 import RichText from "@/components/RichText";
@@ -134,7 +135,7 @@ export function MarkBox({ work, releaseAt }: { work: CodeWork; releaseAt: string
   let headline: string;
   let detail: string;
   if (work.earned !== null && work.total !== null) {
-    headline = `${final ? "Your mark" : "Your mark so far"}: ${formatMark(work.earned, work.total)}`;
+    headline = `${final ? "Your mark" : "Your mark so far"}: ${markWithPenalty(work.raw_earned, work.earned, work.total, work.late_penalty_percent, work.late_penalty_marks)}`;
     detail = final
       ? "the points of the test cases you passed"
       : "it adds up as the other tasks are handed in and marked";
@@ -512,6 +513,25 @@ export default function CodeEditorForm({
   return (
     <div className="mt-4 rounded-md border border-gray-200 p-4" data-testid="code-editor">
       <MarkBox work={work} releaseAt={assignment.marks_release_at} />
+      {open && assignment.past_deadline && (
+        <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800" data-testid="late-notice">
+          The deadline has passed.{" "}
+          {(assignment.penalty_now_percent ?? 0) > 0 || (assignment.penalty_now_marks ?? 0) > 0
+            ? `Tasks handed in now are marked Late and lose ${penaltyText(assignment.penalty_now_percent, assignment.penalty_now_marks)}${
+                assignment.late_penalty_unit === "marks" ? "" : " of the mark"
+              }.`
+            : "Tasks handed in now still count as on time (grace period)."}
+          {assignment.accept_until && ` Work is accepted until ${formatDateTime(assignment.accept_until)}.`}
+        </p>
+      )}
+      {work.late_seconds != null && (
+        <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800" data-testid="submitted-late">
+          Handed in late: {lateText(work.late_seconds)} after the deadline
+          {(work.late_penalty_percent ?? 0) > 0 || (work.late_penalty_marks ?? 0) > 0
+            ? `, so ${penaltyText(work.late_penalty_percent, work.late_penalty_marks)} is taken off the mark`
+            : ""}.
+        </p>
+      )}
       {many && (
         <>
           <p className="mb-2 text-sm text-gray-700" data-testid="progress">

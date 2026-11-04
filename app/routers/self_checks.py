@@ -107,10 +107,10 @@ def _self_check_allowed(submission: Submission) -> Optional[str]:
     a = submission.assignment
     if a is None:
         return "Self-checks are only available for assignment submissions."
-    status = a.status_at(utcnow_naive())
-    if status == "upcoming":
+    now = utcnow_naive()
+    if a.status_at(now) == "upcoming":
         return f"'{a.name}' is not open yet."
-    if status == "closed":
+    if now > a.accept_until:  # late work is still taken until then, so it can still be checked
         return f"The deadline for '{a.name}' has passed, so self-checks are closed."
     if submission.status == "graded":
         return "This submission has been graded, so self-checks are closed."

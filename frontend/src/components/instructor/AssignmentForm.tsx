@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { apiFetch, Assignment, AssignmentKind, Rubric, SubmissionType } from "@/lib/api";
+import { apiFetch, Assignment, AssignmentKind, LatePenaltyUnit, Rubric, SubmissionType } from "@/lib/api";
 import { combineLocal, splitLocal } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
 import AutoGrowTextarea from "@/components/AutoGrowTextarea";
@@ -36,6 +36,14 @@ type FormState = {
   testMainFile: string; // the file the tests run (a challenge with one task); "" = picked automatically
   taskPassword: string; // only used by a code challenge: students enter it when they press Do task
   inOrder: boolean; // only used by a code challenge: the tasks must be handed in in order
+  graceMinutes: string; // minutes after the deadline that still count as on time ("" = 0)
+  lateDate: string; // the late submission deadline: work is accepted late until this date and time; both "" = no late work
+  lateTime: string;
+  penaltyUnit: LatePenaltyUnit; // the penalty is counted in percent of the mark, or in marks
+  penaltyPercent: string; // percent of the mark lost for every day (or part of a day) late ("" = 0)
+  penaltyMax: string; // the most that can be lost, in percent ("" = 100)
+  penaltyMarks: string; // or marks lost for every day (or part of a day) late ("" = 0)
+  penaltyMaxMarks: string; // the most that can be lost, in marks ("" = no limit)
 };
 
 export const KIND_OPTIONS: { value: AssignmentKind; title: string; text: string }[] = [
@@ -86,6 +94,14 @@ function emptyForm(kind: AssignmentKind): FormState {
     testMainFile: "",
     taskPassword: "",
     inOrder: false,
+    graceMinutes: "",
+    lateDate: "",
+    lateTime: "",
+    penaltyUnit: "percent",
+    penaltyPercent: "",
+    penaltyMax: "",
+    penaltyMarks: "",
+    penaltyMaxMarks: "",
   };
 }
 
@@ -93,6 +109,7 @@ function formFromAssignment(a: Assignment): FormState {
   const from = splitLocal(a.available_from);
   const due = splitLocal(a.deadline);
   const release = a.marks_release_at ? splitLocal(a.marks_release_at) : { date: "", time: "" };
+  const lateUntil = a.late_until ? splitLocal(a.late_until) : { date: "", time: "" };
   return {
     kind: a.assignment_type ?? "submission",
     name: a.name,
@@ -115,6 +132,14 @@ function formFromAssignment(a: Assignment): FormState {
     testMainFile: a.test_main_file ?? "",
     taskPassword: a.task_password ?? "",
     inOrder: a.tasks_in_order ?? false,
+    graceMinutes: a.late_grace_minutes ? String(a.late_grace_minutes) : "",
+    lateDate: lateUntil.date,
+    lateTime: lateUntil.time,
+    penaltyUnit: a.late_penalty_unit ?? "percent",
+    penaltyPercent: a.late_penalty_percent ? String(a.late_penalty_percent) : "",
+    penaltyMax: a.late_penalty_max_percent != null && a.late_penalty_max_percent !== 100 ? String(a.late_penalty_max_percent) : "",
+    penaltyMarks: a.late_penalty_marks ? String(a.late_penalty_marks) : "",
+    penaltyMaxMarks: a.late_penalty_max_marks != null ? String(a.late_penalty_max_marks) : "",
   };
 }
 
@@ -187,6 +212,29 @@ export default function AssignmentForm({
     if (releaseSet && !release) {
       return setMsg({ text: "Enter both a date and a time to release the marks, or leave both empty.", kind: "error" });
     }
+    // Late work: a grace period, the date late work is taken until, and the penalty with its maximum.
+    const grace = form.graceMinutes.trim() === "" ? 0 : Number(form.graceMinutes);
+    const penalty = form.penaltyPercent.trim() === "" ? 0 : Number(form.penaltyPercent);
+    const penaltyMax = form.penaltyMax.trim() === "" ? 100 : Number(form.penaltyMax);
+    if (!Number.isInteger(grace) || grace < 0 || grace > 7 * 24 * 60) {
+      return setMsg({ text: "The grace period is a whole number of minutes, up to 10080 (7 days).", kind: "error" });
+    }
+    const penaltyMarks = form.penaltyMarks.trim() === "" ? 0 : Number(form.penaltyMarks);
+    const penaltyMaxMarks = form.penaltyMaxMarks.trim() === "" ? null : Number(form.penaltyMaxMarks);
+    if (!(penalty >= 0 && penalty <= 100) || !(penaltyMax >= 0 && penaltyMax <= 100)) {
+      return setMsg({ text: "The late penalty and its maximum are percentages from 0 to 100.", kind: "error" });
+    }
+    if (!(penaltyMarks >= 0 && penaltyMarks <= 1000) || (penaltyMaxMarks !== null && !(penaltyMaxMarks >= 0 && penaltyMaxMarks <= 1000))) {
+      return setMsg({ text: "The late penalty and its maximum, in marks, are numbers from 0 to 1000.", kind: "error" });
+    }
+    const lateSet = form.lateDate !== "" || form.lateTime !== "";
+    const lateUntil = lateSet ? combineLocal(form.lateDate, form.lateTime) : null;
+    if (lateSet && !lateUntil) {
+      return setMsg({ text: "Enter both a date and a time to accept late work until, or leave both empty.", kind: "error" });
+    }
+    if (lateUntil && lateUntil < due) {
+      return setMsg({ text: "Accept late submissions until a date after the deadline.", kind: "error" });
+    }
     // Tasks and test cases belong to code challenges only, and every task needs at least one test case.
     const questionsPayload = challenge ? questionRowsPayload(form.questions) : { questions: [], tests: [], error: null };
     if (questionsPayload.error !== null) return setMsg({ text: questionsPayload.error, kind: "error" });
@@ -215,6 +263,13 @@ export default function AssignmentForm({
       test_main_file: challenge && form.questions.length === 1 ? form.testMainFile.trim() : "",
       task_password: challenge ? form.taskPassword.trim() : "",
       tasks_in_order: challenge && form.inOrder,
+      late_grace_minutes: grace,
+      late_until: lateUntil ? lateUntil.toISOString() : null, // null also stops accepting late work
+      late_penalty_unit: form.penaltyUnit,
+      late_penalty_percent: penalty,
+      late_penalty_max_percent: penaltyMax,
+      late_penalty_marks: penaltyMarks,
+      late_penalty_max_marks: penaltyMaxMarks, // null: no limit
     };
     setSaving(true);
     try {
@@ -491,6 +546,165 @@ export default function AssignmentForm({
         </fieldset>
       </div>
       <p className="mt-1 text-xs text-gray-500">Times are in your local time zone.</p>
+
+      <fieldset className="mt-3" data-testid="late-settings">
+        <legend className="text-sm font-semibold">
+          Late submissions <span className="font-normal text-gray-500">(optional)</span>
+        </legend>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="block text-xs font-semibold" htmlFor="late-grace">
+              Grace period (minutes after the deadline)
+            </label>
+            <input
+              id="late-grace"
+              type="number"
+              min={0}
+              max={10080}
+              step={1}
+              inputMode="numeric"
+              placeholder="0"
+              value={form.graceMinutes}
+              onChange={(e) => set("graceMinutes", e.target.value)}
+              className={input}
+            />
+          </div>
+          <div>
+            <span className="block text-xs font-semibold">Late submission deadline (last time late work is taken)</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="date"
+                aria-label="Accept late until date"
+                value={form.lateDate}
+                onChange={(e) => set("lateDate", e.target.value)}
+                className={`${input} flex-1`}
+              />
+              <input
+                type="time"
+                aria-label="Accept late until time"
+                value={form.lateTime}
+                onChange={(e) => set("lateTime", e.target.value)}
+                className={`${input} flex-1`}
+              />
+              {(form.lateDate || form.lateTime) && (
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, lateDate: "", lateTime: "" }))}
+                  className="mt-1 rounded-md bg-gray-600 px-3 py-2 text-xs font-semibold text-white hover:bg-gray-700"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold" htmlFor="late-penalty-unit">
+              Penalty is counted in
+            </label>
+            <select
+              id="late-penalty-unit"
+              value={form.penaltyUnit}
+              onChange={(e) => set("penaltyUnit", e.target.value as LatePenaltyUnit)}
+              className={input}
+            >
+              <option value="percent">Percentage of the mark</option>
+              <option value="marks">Marks</option>
+            </select>
+          </div>
+          {form.penaltyUnit === "percent" ? (
+            <>
+              <div>
+                <label className="block text-xs font-semibold" htmlFor="late-penalty">
+                  Penalty (% of the mark per day late)
+                </label>
+                <input
+                  id="late-penalty"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="any"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={form.penaltyPercent}
+                  onChange={(e) => set("penaltyPercent", e.target.value)}
+                  className={input}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold" htmlFor="late-penalty-max">
+                  Maximum penalty (% of the mark)
+                </label>
+                <input
+                  id="late-penalty-max"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="any"
+                  inputMode="decimal"
+                  placeholder="100"
+                  value={form.penaltyMax}
+                  onChange={(e) => set("penaltyMax", e.target.value)}
+                  className={input}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <label className="block text-xs font-semibold" htmlFor="late-penalty-marks">
+                  Penalty (marks per day late)
+                </label>
+                <input
+                  id="late-penalty-marks"
+                  type="number"
+                  min={0}
+                  max={1000}
+                  step="any"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={form.penaltyMarks}
+                  onChange={(e) => set("penaltyMarks", e.target.value)}
+                  className={input}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold" htmlFor="late-penalty-max-marks">
+                  Maximum penalty (marks)
+                </label>
+                <input
+                  id="late-penalty-max-marks"
+                  type="number"
+                  min={0}
+                  max={1000}
+                  step="any"
+                  inputMode="decimal"
+                  placeholder="no limit"
+                  value={form.penaltyMaxMarks}
+                  onChange={(e) => set("penaltyMaxMarks", e.target.value)}
+                  className={input}
+                />
+              </div>
+            </>
+          )}
+        </div>
+        <p className="mt-1 text-xs text-gray-500" data-testid="late-summary">
+          {form.lateDate || form.lateTime
+            ? `Work handed in after the deadline${form.graceMinutes ? " and the grace period" : ""} is accepted until the late submission deadline, marked Late, and loses ${
+                form.penaltyUnit === "marks"
+                  ? `${form.penaltyMarks || 0} marks`
+                  : `${form.penaltyPercent || 0}% of its mark`
+              } for every day or part of a day it is late${
+                form.penaltyUnit === "marks"
+                  ? form.penaltyMaxMarks
+                    ? `, at most ${form.penaltyMaxMarks} marks`
+                    : ""
+                  : form.penaltyMax
+                    ? `, at most ${form.penaltyMax}%`
+                    : ""
+              }. After it, nothing is accepted.`
+            : "No late submission deadline: nothing is accepted after the deadline (plus the grace period, if you give one). Work inside the grace period counts as on time."}
+        </p>
+      </fieldset>
 
       <fieldset className="mt-3">
         <legend className="text-sm font-semibold">
