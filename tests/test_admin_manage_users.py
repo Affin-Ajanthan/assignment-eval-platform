@@ -1,5 +1,5 @@
 """Admin edit and delete of instructor and student accounts:
-PUT/DELETE /admin/instructors/{id} and /admin/students/{id}."""
+PUT/DELETE /admin/instructors/{id} and /admin/students/{id}, and the edit of a subject: PUT /admin/subjects/{id}."""
 
 import io
 import sys
@@ -72,6 +72,28 @@ def test_edit_validation():
     assert client.put(url, headers=H(admin), json={"password": "abc"}).status_code == 400
     assert client.put(url, headers=H(admin), json={"subject_ids": [999999]}).status_code == 400
     assert client.put(url, headers=H(admin), json={"email": a["email"]}).status_code == 200  # own email is fine
+
+
+def test_admin_edits_a_subjects_name_and_code():
+    admin = admin_token(client)
+    a, b = create_subject(client, admin), create_subject(client, admin)
+    _, inst_tok = create_instructor(client, admin, [a["id"]])
+    url = f"/admin/subjects/{a['id']}"
+
+    r = client.put(url, headers=H(admin), json={"name": "  Renamed   Subject ", "code": " NEW-1 "})
+    assert r.status_code == 200, r.text
+    assert (r.json()["id"], r.json()["name"], r.json()["code"]) == (a["id"], "Renamed Subject", "NEW-1")
+    assert client.put(url, headers=H(admin), json={"name": "Only the name"}).json()["code"] == "NEW-1"  # kept
+    # The people in the subject see the change, since they refer to it by id.
+    mine = client.get("/auth/me", headers=H(inst_tok)).json()["subjects"]
+    assert [(s["id"], s["name"], s["code"]) for s in mine] == [(a["id"], "Only the name", "NEW-1")]
+
+    assert client.put(url, headers=H(admin), json={"code": b["code"]}).status_code == 400  # taken by another subject
+    assert client.put(url, headers=H(admin), json={"name": "   "}).status_code == 400
+    assert client.put(url, headers=H(admin), json={"code": " "}).status_code == 400
+    assert client.put(url, headers=H(admin), json={"code": "NEW-1"}).status_code == 200  # its own code is fine
+    assert client.put("/admin/subjects/999999", headers=H(admin), json={"name": "X"}).status_code == 404
+    assert client.put(url, headers=H(inst_tok), json={"name": "Not allowed"}).status_code == 403
 
 
 def test_role_must_match_the_path_and_only_admins_may_edit_or_delete():
