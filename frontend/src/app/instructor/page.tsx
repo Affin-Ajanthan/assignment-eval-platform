@@ -63,7 +63,10 @@ export default function InstructorHomePage() {
                   data-testid="subject-card"
                 >
                   <span className="block text-lg font-bold">{s.name}</span>
-                  <span className="block text-xs text-gray-500">{s.code}</span>
+                  <span className="block text-xs text-gray-500">
+                    {s.code}
+                    {s.batch ? ` · Batch ${s.batch}` : ""}
+                  </span>
                   {counts && (
                     <span className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
                       <span className="rounded bg-gray-100 px-2 py-0.5 text-gray-700">

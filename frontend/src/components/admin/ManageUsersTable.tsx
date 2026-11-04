@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, Fragment, useState } from "react";
-import { apiFetch, Subject, UserInfo } from "@/lib/api";
+import { apiFetch, Subject, subjectLabel, UserInfo } from "@/lib/api";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import Message, { MessageState } from "@/components/Message";
 
@@ -24,7 +24,7 @@ export function SubjectCheckboxes({
       {subjects.map((s) => (
         <label key={s.id} className="flex items-center gap-2 text-sm font-normal">
           <input type="checkbox" checked={checked.has(s.id)} onChange={() => onToggle(s.id)} className="h-4 w-4" />
-          {s.name} ({s.code})
+          {subjectLabel(s)}
         </label>
       ))}
     </div>

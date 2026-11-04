@@ -80,7 +80,10 @@ class Subject(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
-    code = Column(String, nullable=False, unique=True, index=True)
+    # Not unique on its own: every batch has the same subjects with the same codes, so a subject is told apart by
+    # its code and batch together ("" when it has no batch).
+    code = Column(String, nullable=False, index=True)
+    batch = Column(String, nullable=False, default="", server_default="")
     created_at = Column(DateTime, default=_utcnow)
 
 

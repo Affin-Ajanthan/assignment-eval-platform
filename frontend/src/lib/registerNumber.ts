@@ -1,5 +1,3 @@
-import { UserInfo } from "@/lib/api";
-
 /** Every register number is TST/<batch>/<own number>, e.g. TST/01/001 (REGISTER_PREFIX in app/main.py). */
 export const REGISTER_PREFIX = "TST";
 
@@ -18,8 +16,8 @@ export function ownNumberOf(registerNumber: string, batch: string): string {
   return registerNumber.startsWith(prefix) ? registerNumber.slice(prefix.length) : registerNumber;
 }
 
-/** The batches the students are in, each once, in order: the choices of the Batch box. */
-export function batchList(students: UserInfo[]): string[] {
-  const batches = new Set(students.map((s) => (s.batch ?? "").trim()).filter(Boolean));
+/** The batches the students and subjects are in, each once, in order: the choices of the Batch box. */
+export function batchList(items: { batch?: string }[]): string[] {
+  const batches = new Set(items.map((s) => (s.batch ?? "").trim()).filter(Boolean));
   return Array.from(batches).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }

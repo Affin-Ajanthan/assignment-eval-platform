@@ -3,21 +3,25 @@
 import { FormEvent, useState } from "react";
 import { apiFetch, Subject } from "@/lib/api";
 import Message, { MessageState } from "@/components/Message";
+import { BatchCombobox } from "@/components/admin/StudentIdFields";
 
 /**
- * Existing subjects, each with Edit (name and code). Changes go to PUT /admin/subjects/{id};
- * `onChanged` reloads the list.
+ * Existing subjects, each with Edit (name, code and batch). Changes go to PUT /admin/subjects/{id};
+ * `onChanged` reloads the list. `batches` are the choices of the Batch box.
  */
 export default function ManageSubjectsTable({
   subjects,
+  batches,
   onChanged,
 }: {
   subjects: Subject[];
+  batches: string[];
   onChanged: () => Promise<void>;
 }) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
+  const [batch, setBatch] = useState("");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<MessageState>(null);
 
@@ -25,6 +29,7 @@ export default function ManageSubjectsTable({
     setEditingId(s.id);
     setName(s.name);
     setCode(s.code);
+    setBatch(s.batch ?? "");
     setMsg(null);
   }
 
@@ -34,7 +39,7 @@ export default function ManageSubjectsTable({
     setSaving(true);
     setMsg(null);
     try {
-      await apiFetch(`/admin/subjects/${editingId}`, { method: "PUT", json: { name, code } });
+      await apiFetch(`/admin/subjects/${editingId}`, { method: "PUT", json: { name, code, batch } });
       await onChanged();
       setEditingId(null);
       setMsg({ text: "Saved.", kind: "success" });
@@ -55,13 +60,14 @@ export default function ManageSubjectsTable({
           <tr className="bg-gray-50 text-left">
             <th className={cell}>Name</th>
             <th className={cell}>Code</th>
+            <th className={cell}>Batch</th>
             <th className={cell}>Actions</th>
           </tr>
         </thead>
         <tbody>
           {subjects.length === 0 && (
             <tr>
-              <td colSpan={3} className={`${cell} text-gray-500`}>
+              <td colSpan={4} className={`${cell} text-gray-500`}>
                 No subjects yet.
               </td>
             </tr>
@@ -69,9 +75,9 @@ export default function ManageSubjectsTable({
           {subjects.map((s) =>
             editingId === s.id ? (
               <tr key={s.id} className="bg-blue-50">
-                <td colSpan={3} className={cell}>
+                <td colSpan={4} className={cell}>
                   <form onSubmit={save} className="py-1">
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid gap-3 sm:grid-cols-3">
                       <div>
                         <label className="block text-sm font-semibold" htmlFor={`edit-subject-name-${s.id}`}>
                           Subject name
@@ -96,6 +102,18 @@ export default function ManageSubjectsTable({
                           value={code}
                           onChange={(e) => setCode(e.target.value)}
                           className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold" htmlFor={`edit-subject-batch-${s.id}`}>
+                          Batch
+                        </label>
+                        <BatchCombobox
+                          id={`edit-subject-batch-${s.id}`}
+                          value={batch}
+                          onChange={setBatch}
+                          options={batches}
+                          testId="edit-subject-batch"
                         />
                       </div>
                     </div>
@@ -123,6 +141,7 @@ export default function ManageSubjectsTable({
               <tr key={s.id}>
                 <td className={cell}>{s.name}</td>
                 <td className={cell}>{s.code}</td>
+                <td className={cell}>{s.batch || <span className="text-gray-400">-</span>}</td>
                 <td className={`${cell} whitespace-nowrap`}>
                   <button
                     type="button"

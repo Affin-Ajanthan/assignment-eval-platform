@@ -48,6 +48,18 @@ def add_missing_columns(table: str, columns: dict[str, str]) -> None:
                 conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}")
 
 
+def make_index_non_unique(table: str, column: str) -> None:
+    """Forward-only migration for a column that used to be unique: `create_all` never alters an existing table, so an
+    old portal.db keeps its UNIQUE index (ix_<table>_<column>) after the model drops unique=True. Recreate it plain."""
+    index = f"ix_{table}_{column}"
+    with engine.begin() as conn:
+        # fetchall(): the PRAGMA's cursor must be finished before the schema changes, or SQLite says "table is locked".
+        indexes = conn.exec_driver_sql(f"PRAGMA index_list({table})").fetchall()
+        if any(row[1] == index and row[2] for row in indexes):
+            conn.exec_driver_sql(f"DROP INDEX {index}")
+            conn.exec_driver_sql(f"CREATE INDEX {index} ON {table} ({column})")
+
+
 def get_db():
     """FastAPI dependency: one session per request, always closed."""
     db = SessionLocal()

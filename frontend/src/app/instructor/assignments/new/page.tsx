@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiFetch, AssignmentKind, Rubric } from "@/lib/api";
+import { apiFetch, AssignmentKind, Rubric, subjectLabel } from "@/lib/api";
 import { useRequireRole } from "@/lib/useRequireRole";
 import { setFlash } from "@/lib/flash";
 import AssignmentForm, { KIND_OPTIONS } from "@/components/instructor/AssignmentForm";
@@ -45,7 +45,7 @@ export default function NewAssignmentPage() {
       user={user}
       backHref={back}
       title={kindTitle ? `New ${kindTitle.toLowerCase()}` : "New assignment"}
-      subtitle={subject ? `${subject.name} (${subject.code})` : undefined}
+      subtitle={subject ? subjectLabel(subject) : undefined}
     >
       {error ? (
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700" data-testid="page-error">

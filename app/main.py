@@ -63,7 +63,7 @@ from .auth import (
     student_subject_ids,
     verify_password,
 )
-from .db import BASE_DIR, UPLOAD_DIR, Base, SessionLocal, add_missing_columns, engine, get_db
+from .db import BASE_DIR, UPLOAD_DIR, Base, SessionLocal, add_missing_columns, engine, get_db, make_index_non_unique
 from .evaluator.document_extraction import (
     SUPPORTED_REPORT_EXTENSIONS,
     ReportValidationError,
@@ -128,6 +128,9 @@ add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON", "ai_
 add_missing_columns("submissions", {"assignment_id": "INTEGER REFERENCES assignments(id)"})
 add_missing_columns("grades", {"feedback": "TEXT"})
 add_missing_columns("users", {"batch": "VARCHAR", "register_number": "VARCHAR"})
+# Every batch has the same subjects with the same codes, so a subject code is no longer unique.
+make_index_non_unique("subjects", "code")
+add_missing_columns("subjects", {"batch": "VARCHAR NOT NULL DEFAULT ''"})
 add_missing_columns("assignments", {"marks_release_at": "DATETIME"})
 add_missing_columns("submissions", {"test_earned": "FLOAT", "test_total": "FLOAT", "tests_run_at": "DATETIME"})
 add_missing_columns("submissions", {"question_results": "JSON"})
@@ -169,18 +172,21 @@ class LoginIn(BaseModel):
 class SubjectCreate(BaseModel):
     name: str
     code: str
+    batch: str = Field(default="", max_length=100)
 
 
 class SubjectUpdate(BaseModel):
     """Admin edit of a subject. Fields left out are kept."""
     name: Optional[str] = Field(default=None, max_length=200)
     code: Optional[str] = Field(default=None, max_length=50)
+    batch: Optional[str] = Field(default=None, max_length=100)
 
 
 class SubjectOut(BaseModel):
     id: int
     name: str
     code: str
+    batch: str = ""
     created_at: UTCDateTime
 
     model_config = ConfigDict(from_attributes=True)
@@ -872,11 +878,22 @@ def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
 
 # ---- Admin: subjects ---------------------------------------------------------
 
+def _check_subject_code_free(db: Session, code: str, batch: str, own_id: Optional[int] = None) -> None:
+    """The same subject code is fine in different batches (each batch has the same subjects), but not twice in one
+    batch, where the two subjects could not be told apart. Or the HTTP error saying so."""
+    query = db.query(Subject).filter(Subject.code == code, Subject.batch == batch)
+    if own_id is not None:
+        query = query.filter(Subject.id != own_id)
+    if query.first():
+        where = f"batch '{batch}'" if batch else "the subjects without a batch"
+        raise HTTPException(400, f"Subject code '{code}' already exists in {where}")
+
+
 @app.post("/admin/subjects", response_model=SubjectOut)
 def create_subject(payload: SubjectCreate, _admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    if db.query(Subject).filter(Subject.code == payload.code).first():
-        raise HTTPException(400, f"Subject code '{payload.code}' already exists")
-    subject = Subject(name=payload.name, code=payload.code)
+    batch = _student_batch(payload.batch) or ""
+    _check_subject_code_free(db, payload.code, batch)
+    subject = Subject(name=payload.name, code=payload.code, batch=batch)
     db.add(subject)
     db.commit()
     db.refresh(subject)
@@ -892,7 +909,7 @@ def list_subjects(_admin: User = Depends(require_admin), db: Session = Depends(g
 def update_subject(
     subject_id: int, payload: SubjectUpdate, _admin: User = Depends(require_admin), db: Session = Depends(get_db)
 ):
-    """Rename a subject or change its code. Everything else refers to it by id, so nothing else moves."""
+    """Rename a subject or change its code or batch. Everything else refers to it by id, so nothing else moves."""
     subject = db.get(Subject, subject_id)
     if not subject:
         raise HTTPException(404, "Subject not found")
@@ -905,9 +922,11 @@ def update_subject(
         code = payload.code.strip()
         if not code:
             raise HTTPException(400, "Subject code can't be empty")
-        if db.query(Subject).filter(Subject.code == code, Subject.id != subject.id).first():
-            raise HTTPException(400, f"Subject code '{code}' already exists")
         subject.code = code
+    if payload.batch is not None:
+        subject.batch = _student_batch(payload.batch) or ""
+    if payload.code is not None or payload.batch is not None:
+        _check_subject_code_free(db, subject.code, subject.batch, subject.id)
     db.commit()
     db.refresh(subject)
     return subject

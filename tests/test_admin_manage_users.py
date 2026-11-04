@@ -78,7 +78,7 @@ def test_edit_validation():
 
 def test_admin_edits_a_subjects_name_and_code():
     admin = admin_token(client)
-    a, b = create_subject(client, admin), create_subject(client, admin)
+    a = create_subject(client, admin)
     _, inst_tok = create_instructor(client, admin, [a["id"]])
     url = f"/admin/subjects/{a['id']}"
 
@@ -90,12 +90,57 @@ def test_admin_edits_a_subjects_name_and_code():
     mine = client.get("/auth/me", headers=H(inst_tok)).json()["subjects"]
     assert [(s["id"], s["name"], s["code"]) for s in mine] == [(a["id"], "Only the name", "NEW-1")]
 
-    assert client.put(url, headers=H(admin), json={"code": b["code"]}).status_code == 400  # taken by another subject
     assert client.put(url, headers=H(admin), json={"name": "   "}).status_code == 400
     assert client.put(url, headers=H(admin), json={"code": " "}).status_code == 400
     assert client.put(url, headers=H(admin), json={"code": "NEW-1"}).status_code == 200  # its own code is fine
     assert client.put("/admin/subjects/999999", headers=H(admin), json={"name": "X"}).status_code == 404
     assert client.put(url, headers=H(inst_tok), json={"name": "Not allowed"}).status_code == 403
+
+
+def _new_subject(admin, code, batch=None):
+    body = {"name": "Algorithms", "code": code, **({} if batch is None else {"batch": batch})}
+    return client.post("/admin/subjects", headers=H(admin), json=body)
+
+
+def test_a_subject_has_a_batch_and_the_same_code_can_be_in_every_batch():
+    """Every batch has the same subjects with the same codes: the code is unique only within a batch."""
+    admin = admin_token(client)
+    code = f"DUP-{uuid.uuid4().hex[:8]}"
+
+    plain = _new_subject(admin, code)
+    assert plain.status_code == 200 and plain.json()["batch"] == ""  # a batch is optional
+    first = _new_subject(admin, code, " 01 ")
+    assert first.status_code == 200, first.text
+    assert first.json()["batch"] == "01"  # spaces trimmed
+    second = _new_subject(admin, code, "02")
+    assert second.status_code == 200, second.text
+    assert len({plain.json()["id"], first.json()["id"], second.json()["id"]}) == 3
+
+    # ...but not twice in one batch (or twice with no batch)
+    assert _new_subject(admin, code, "01").status_code == 400
+    assert _new_subject(admin, code).status_code == 400
+    assert _new_subject(admin, code, "a/b").status_code == 400  # a batch is part of a register number
+
+    listed = {s["id"]: s["batch"] for s in client.get("/admin/subjects", headers=H(admin)).json() if s["code"] == code}
+    assert listed == {plain.json()["id"]: "", first.json()["id"]: "01", second.json()["id"]: "02"}
+
+
+def test_admin_edits_a_subjects_batch():
+    admin = admin_token(client)
+    code = f"ED-{uuid.uuid4().hex[:8]}"
+    a = _new_subject(admin, code, "01").json()
+    b = _new_subject(admin, code, "02").json()
+    _, inst_tok = create_instructor(client, admin, [a["id"]])
+
+    r = client.put(f"/admin/subjects/{a['id']}", headers=H(admin), json={"batch": "03"})
+    assert r.status_code == 200 and (r.json()["batch"], r.json()["code"]) == ("03", code)
+    assert client.put(f"/admin/subjects/{a['id']}", headers=H(admin), json={"name": "Renamed"}).json()["batch"] == "03"
+    mine = client.get("/auth/me", headers=H(inst_tok)).json()["subjects"]
+    assert [(s["id"], s["batch"]) for s in mine] == [(a["id"], "03")]  # people in the subject see it
+
+    assert client.put(f"/admin/subjects/{a['id']}", headers=H(admin), json={"batch": "02"}).status_code == 400  # b has it
+    assert client.put(f"/admin/subjects/{b['id']}", headers=H(admin), json={"batch": "02"}).status_code == 200  # own
+    assert client.put(f"/admin/subjects/{a['id']}", headers=H(admin), json={"batch": ""}).json()["batch"] == ""
 
 
 def _new_student(admin, **extra):

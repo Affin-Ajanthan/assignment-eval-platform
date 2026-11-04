@@ -12,6 +12,7 @@ import {
   Grade,
   Submission,
   SubmissionFile,
+  subjectLabel,
 } from "@/lib/api";
 import { useRequireRole } from "@/lib/useRequireRole";
 import AccountBar from "@/components/AccountBar";
@@ -987,13 +988,13 @@ export default function InstructorSubjectPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
-      <AccountBar user={user} context={currentSubject ? `${currentSubject.name} (${currentSubject.code})` : undefined} />
+      <AccountBar user={user} context={currentSubject ? subjectLabel(currentSubject) : undefined} />
 
       <Link href="/instructor" className="text-sm font-semibold text-blue-700 hover:underline">
         ← All subjects
       </Link>
       <h1 className="mt-2 text-2xl font-bold" data-testid="subject-title">
-        {currentSubject ? `${currentSubject.name} (${currentSubject.code})` : "Subject"}
+        {currentSubject ? subjectLabel(currentSubject) : "Subject"}
       </h1>
       <p className="mt-1 text-sm text-gray-600">
         Set up assignments and rubrics, run the automated evaluator, then grade manually or accept its scores as a

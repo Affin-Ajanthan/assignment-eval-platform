@@ -7,7 +7,7 @@ import AccountBar from "@/components/AccountBar";
 import Message, { MessageState } from "@/components/Message";
 import AdminTabs, { adminPanelProps, AdminTab, isAdminTab } from "@/components/admin/AdminTabs";
 import ManageSubjectsTable from "@/components/admin/ManageSubjectsTable";
-import StudentIdFields from "@/components/admin/StudentIdFields";
+import StudentIdFields, { BatchCombobox } from "@/components/admin/StudentIdFields";
 import { batchList, ownNumberOf, registerNumberFor } from "@/lib/registerNumber";
 import ManageUsersTable, { SubjectCheckboxes } from "@/components/admin/ManageUsersTable";
 import PageLoading from "@/components/PageLoading";
@@ -34,6 +34,7 @@ export default function AdminPage() {
 
   const [subjectName, setSubjectName] = useState("");
   const [subjectCode, setSubjectCode] = useState("");
+  const [subjectBatch, setSubjectBatch] = useState("");
   const [subjectMsg, setSubjectMsg] = useState<MessageState>(null);
 
   const [instructorName, setInstructorName] = useState("");
@@ -63,6 +64,9 @@ export default function AdminPage() {
     setStudents(await apiFetch<UserInfo[]>("/admin/students"));
   }, []);
 
+  // The batches there are (students' and subjects'), the choices of every Batch box.
+  const batches = batchList([...students, ...subjects]);
+
   useEffect(() => {
     if (!ready) return;
     loadSubjects();
@@ -74,10 +78,14 @@ export default function AdminPage() {
     e.preventDefault();
     setSubjectMsg(null);
     try {
-      await apiFetch("/admin/subjects", { method: "POST", json: { name: subjectName, code: subjectCode } });
+      await apiFetch("/admin/subjects", {
+        method: "POST",
+        json: { name: subjectName, code: subjectCode, batch: subjectBatch },
+      });
       setSubjectMsg({ text: "Subject added.", kind: "success" });
       setSubjectName("");
       setSubjectCode("");
+      setSubjectBatch("");
       await loadSubjects();
     } catch (err) {
       setSubjectMsg({ text: `Failed to add subject: ${err instanceof Error ? err.message : err}`, kind: "error" });
@@ -232,6 +240,18 @@ export default function AdminPage() {
             placeholder="CS201"
             className="mt-1 mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
           />
+          <label className="block text-sm font-semibold" htmlFor="subject_batch">
+            Batch <span className="font-normal text-gray-500">(pick one or type; the same code can be in every batch)</span>
+          </label>
+          <div className="mb-3">
+            <BatchCombobox
+              id="subject_batch"
+              value={subjectBatch}
+              onChange={setSubjectBatch}
+              options={batches}
+              testId="subject-batch"
+            />
+          </div>
           <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
             Add subject
           </button>
@@ -239,7 +259,7 @@ export default function AdminPage() {
         </form>
 
         <h3 className="mt-5 text-sm font-bold uppercase tracking-wide text-gray-500">Existing subjects</h3>
-        <ManageSubjectsTable subjects={subjects} onChanged={loadSubjects} />
+        <ManageSubjectsTable subjects={subjects} batches={batches} onChanged={loadSubjects} />
       </section>
       </div>
 
@@ -345,7 +365,7 @@ export default function AdminPage() {
               onBatchChange={setStudentBatch}
               own={studentOwnNumber}
               onOwnChange={setStudentOwnNumber}
-              batches={batchList(students)}
+              batches={batches}
             />
           </div>
           <label className="block text-sm font-semibold" htmlFor="student_password">

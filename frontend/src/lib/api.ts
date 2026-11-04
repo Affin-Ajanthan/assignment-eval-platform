@@ -12,7 +12,13 @@ export interface Subject {
   id: number;
   name: string;
   code: string;
+  batch?: string;
   created_at: string;
+}
+
+/** "Algorithms (CS101)", or "Algorithms (CS101) · Batch 01" for a subject that has a batch. */
+export function subjectLabel(s: Pick<Subject, "name" | "code" | "batch">): string {
+  return `${s.name} (${s.code})${s.batch ? ` · Batch ${s.batch}` : ""}`;
 }
 
 export interface UserInfo {

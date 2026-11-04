@@ -10,16 +10,18 @@ const part = "rounded-md bg-gray-100 px-2 py-2 text-sm font-semibold text-gray-7
  * A drop-down that can also be typed in: the arrow opens the list of the batches there are, a click picks one, and
  * anything typed is the value too (a new batch). Typing narrows the list; ArrowUp/ArrowDown, Enter and Escape work.
  */
-function BatchCombobox({
+export function BatchCombobox({
   id,
   value,
   onChange,
   options,
+  testId = "student-batch",
 }: {
   id: string;
   value: string;
   onChange: (value: string) => void;
   options: string[];
+  testId?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [showAll, setShowAll] = useState(true); // opened with the arrow: every batch; typing narrows the list
@@ -96,7 +98,7 @@ function BatchCombobox({
         onKeyDown={onKeyDown}
         placeholder="01"
         className={`${input} pr-9`}
-        data-testid="student-batch"
+        data-testid={testId}
       />
       <button
         type="button"
@@ -104,7 +106,7 @@ function BatchCombobox({
         aria-label="Show the batches"
         onClick={toggle}
         className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-gray-500 hover:text-gray-800"
-        data-testid="student-batch-toggle"
+        data-testid={`${testId}-toggle`}
       >
         <svg aria-hidden="true" viewBox="0 0 20 20" className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`}>
           <path d="M5 7.5l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />

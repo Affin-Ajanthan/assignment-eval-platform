@@ -56,7 +56,11 @@ def seed_demo_data(db: Session, path: Path | None = None) -> None:
     password = data["password"]
 
     subject_data = data["subject"]
-    subject = db.query(Subject).filter(Subject.code == subject_data["code"]).first()
+    subject = (
+        db.query(Subject)
+        .filter(Subject.code == subject_data["code"], Subject.name == subject_data["name"])
+        .first()
+    )
     if subject is None:
         subject = Subject(name=subject_data["name"], code=subject_data["code"])
         db.add(subject)
