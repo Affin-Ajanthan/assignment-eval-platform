@@ -737,9 +737,12 @@ def test_students_see_each_questions_title_and_statement_but_never_a_test_case(f
         (1, 1, "Doubles"), (2, 1, "HIDDEN-NAME"), (3, 2, "Triples"), (4, 2, "Wrong on purpose")]
 
     seen = client.get(f"/assignments/{assignment['id']}", headers=auth_headers(stok)).json()
+    # time_limit_seconds is for the student too: their card shows a timed task's limit (0: not timed).
     assert seen["questions"] == [
-        {"id": 1, "title": "Double it", "statement": "Print twice the number.", "starter_code": "", "time_limit_seconds": 0},
-        {"id": 2, "title": "Triple it", "statement": "Print three times the number.", "starter_code": "", "time_limit_seconds": 0}]
+        {"id": 1, "title": "Double it", "statement": "Print twice the number.", "starter_code": "",
+         "time_limit_seconds": 0},
+        {"id": 2, "title": "Triple it", "statement": "Print three times the number.", "starter_code": "",
+         "time_limit_seconds": 0}]
     listed = json.dumps(client.get("/assignments", headers=auth_headers(stok)).json())
     for secret in ("Doubles", "Triples", "HIDDEN", "Wrong on purpose", "test_cases", "expected_output"):
         assert secret not in listed and secret not in json.dumps(seen), secret
@@ -1102,8 +1105,9 @@ def test_a_task_password_hides_the_questions_and_blocks_running_until_it_is_ente
 
     locked = _seen_by(assignment, stok)
     assert (locked["has_task_password"], locked["tasks_unlocked"]) == (True, False)
-    assert locked["questions"] == [{"id": 1, "title": "Double it", "statement": "", "starter_code": "", "time_limit_seconds": 0},
-                                   {"id": 2, "title": "Triple it", "statement": "", "starter_code": "", "time_limit_seconds": 0}]
+    assert locked["questions"] == [
+        {"id": 1, "title": "Double it", "statement": "", "starter_code": "", "time_limit_seconds": 0},
+        {"id": 2, "title": "Triple it", "statement": "", "starter_code": "", "time_limit_seconds": 0}]
     assert "open sesame" not in json.dumps(locked) and "open sesame" not in json.dumps(
         client.get("/assignments", headers=auth_headers(stok)).json())
     assert _run(assignment, stok).status_code == 403 and _submit_question(assignment, stok, 1, "print(1)").status_code == 403
