@@ -32,7 +32,7 @@ export default function SubmissionHistory({ version }: { version: number }) {
   }, [open, version, load]);
 
   return (
-    <section className="mt-8 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6" data-testid="submission-history">
+    <section className="mt-8 card" data-testid="submission-history">
       <button
         type="button"
         onClick={() => setOpen(!open)}

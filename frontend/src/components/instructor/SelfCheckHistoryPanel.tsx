@@ -52,7 +52,7 @@ export default function SelfCheckHistoryPanel({ assignments }: { assignments: As
   const selected = assignments.find((a) => a.id === assignmentId);
 
   return (
-    <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+    <section className="mt-6 card">
       <h2 className="text-xl font-semibold">Student Self-Check History</h2>
       <p className="mt-1 text-sm text-gray-600">
         How often each student checked their own submission before the deadline. For monitoring and troubleshooting

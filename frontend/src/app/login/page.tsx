@@ -12,11 +12,19 @@ export default function LoginPage() {
   const [message, setMessage] = useState<MessageState>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // If already logged in, skip straight to the right dashboard.
+  // If already logged in, skip straight to the right dashboard. Otherwise say why the reader is here, when
+  // another page sent them (?reason=expired after a 401, ?reason=signed-out after Log out).
   useEffect(() => {
     const user = getUser();
     if (getToken() && user) {
       router.replace(destinationForRole(user.role));
+      return;
+    }
+    const reason = new URLSearchParams(window.location.search).get("reason");
+    if (reason === "expired") {
+      setMessage({ text: "Your session has expired. Please log in again to continue.", kind: "info" });
+    } else if (reason === "signed-out") {
+      setMessage({ text: "You have logged out.", kind: "success" });
     }
   }, [router]);
 

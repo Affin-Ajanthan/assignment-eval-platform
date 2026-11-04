@@ -37,6 +37,7 @@ import { lateText, markWithPenalty } from "@/lib/late";
 import Message, { MessageState } from "@/components/Message";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import PageLoading from "@/components/PageLoading";
+import PageHeader from "@/components/PageHeader";
 
 /** Inline error for one criterion's mark, or null when it is fine. An empty box
  * is not an error (it is saved as 0). */
@@ -681,7 +682,7 @@ export default function InstructorPage() {
   const panelClass = (inline: boolean) =>
     inline
       ? "scroll-mt-4 rounded-lg border border-blue-200 bg-white p-4 shadow-sm"
-      : "mt-6 scroll-mt-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6";
+      : "mt-6 scroll-mt-4 card";
   const inTable = (id: number | null) => tableSubmissions.some((s) => s.id === id);
 
   function renderAutoevalPanel(inline: boolean) {
@@ -995,35 +996,37 @@ export default function InstructorPage() {
       <AccountBar user={user} context={currentSubject ? `${currentSubject.name} (${currentSubject.code})` : undefined} width="max-w-6xl" />
       <main className="mx-auto max-w-6xl px-4 py-8">
 
-      <h1 className="text-2xl font-semibold">Instructor dashboard</h1>
-      <p className="mt-1 text-sm text-gray-600">
-        Set up assignments and rubrics, run the automated evaluator, then grade manually or accept its scores as a
-        starting point -- you always have the final say.
-      </p>
-
-      <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
-        <label className="block text-sm font-semibold" htmlFor="subject-selector">
-          Subject
-        </label>
-        {user.subjects.length === 0 ? (
-          <p className="mt-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-            You haven&apos;t been assigned to any subjects yet -- ask your admin to assign you to one.
-          </p>
-        ) : (
-          <select
-            id="subject-selector"
-            value={subjectId ?? ""}
-            onChange={(e) => setSubjectId(parseInt(e.target.value, 10))}
-            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-          >
-            {user.subjects.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} ({s.code})
-              </option>
-            ))}
-          </select>
+      <PageHeader
+        divider={false}
+        title="Instructor dashboard"
+        description="Set up assignments and rubrics, run the automated evaluator, then grade manually or accept its scores as a starting point -- you always have the final say."
+      >
+        {user.subjects.length > 0 && (
+          <div className="w-full sm:w-80">
+            <label className="block text-sm font-semibold" htmlFor="subject-selector">
+              Subject
+            </label>
+            <select
+              id="subject-selector"
+              value={subjectId ?? ""}
+              onChange={(e) => setSubjectId(parseInt(e.target.value, 10))}
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            >
+              {user.subjects.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.code})
+                </option>
+              ))}
+            </select>
+          </div>
         )}
-      </section>
+      </PageHeader>
+      {user.subjects.length === 0 && (
+        <p className="empty-state">
+          You haven&apos;t been assigned to any subjects yet. Ask your administrator to assign you to one; your
+          assignments, submissions and grading will appear here.
+        </p>
+      )}
 
       {user.subjects.length > 0 && (
         <>
@@ -1044,7 +1047,7 @@ export default function InstructorPage() {
 
           <div {...tabPanelProps("integrity", tab)}>
           {/* Similarity check */}
-          <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+          <section className="mt-6 card">
             <h2 className="text-xl font-semibold">Similarity Code Check</h2>
             <p className="mt-1 text-sm text-gray-600">
               Compares every code submission for one assignment pairwise and flags likely copies. The PDF reports
@@ -1242,7 +1245,7 @@ export default function InstructorPage() {
 
           <div {...tabPanelProps("grading", tab)}>
           {/* Submissions */}
-          <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+          <section className="mt-6 card">
             <h2 className="text-xl font-semibold">Submissions for this subject</h2>
             <label className="mt-3 block text-sm font-semibold" htmlFor="submissions-assignment">
               Assignment

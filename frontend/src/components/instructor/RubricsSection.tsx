@@ -181,7 +181,7 @@ export default function RubricsSection({
   }
 
   return (
-    <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+    <section className="mt-6 card">
       <h2 className="text-xl font-semibold">Rubrics</h2>
       <p className="mt-1 text-sm text-gray-600">
         A rubric holds all of its criteria. Use <strong>+ Add criterion</strong> to add more to the same rubric.

@@ -81,7 +81,7 @@ export default function AssignmentCard({
     ) : null;
 
   return (
-    <li className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-5" data-testid="student-assignment">
+    <li className="card" data-testid="student-assignment">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 className="text-lg font-semibold">{a.name}</h3>
@@ -189,9 +189,15 @@ export default function AssignmentCard({
       </dl>
 
       {sub && sub.final_mark !== null && (sub.criterion_marks.length > 0 || sub.feedback) && (
-        <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3" data-testid="my-feedback">
+        <div className="mt-4 rounded-md border border-gray-200 border-l-4 border-l-green-700 bg-gray-50 p-4" data-testid="my-feedback">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h4 className="text-base font-semibold">Your marks and feedback</h4>
+            <span className="text-xl font-semibold text-brand-700">
+              {markWithPenalty(sub.raw_mark, sub.final_mark, sub.max_mark, sub.late_penalty_percent, sub.late_penalty_marks)}
+            </span>
+          </div>
           {sub.criterion_marks.length > 0 && (
-            <table className="w-full text-sm">
+            <table className="mt-2 w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-gray-500">
                   <th className="pb-1 font-semibold">Criterion</th>
@@ -211,7 +217,7 @@ export default function AssignmentCard({
           {sub.feedback && (
             <div className={sub.criterion_marks.length > 0 ? "mt-3" : ""}>
               <p className="text-sm font-semibold">Feedback from your instructor</p>
-              <p className="whitespace-pre-wrap text-sm text-gray-700">{sub.feedback}</p>
+              <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-gray-800">{sub.feedback}</p>
             </div>
           )}
         </div>

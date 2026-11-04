@@ -26,7 +26,7 @@ export default function AccountBar({
 
   async function handleLogout() {
     await logout();
-    router.replace("/login");
+    router.replace("/login?reason=signed-out");
   }
 
   return (

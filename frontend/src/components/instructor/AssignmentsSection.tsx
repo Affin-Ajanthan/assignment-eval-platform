@@ -71,7 +71,7 @@ export default function AssignmentsSection({
   }
 
   return (
-    <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+    <section className="mt-6 card">
       <h2 className="text-xl font-semibold">Assignments</h2>
       <p className="mt-1 text-sm text-gray-600">
         Choose the kind of assignment to create: its details (name, instructions, dates and, for a code challenge, the
