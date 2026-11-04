@@ -235,7 +235,7 @@ export default function RubricsSection({
       </form>
 
       <h3 className="mt-6 text-sm font-bold uppercase tracking-wide text-gray-500">Rubrics in this subject</h3>
-      {rubrics.length === 0 && <p className="mt-2 text-sm text-gray-600">No rubrics yet.</p>}
+      {rubrics.length === 0 && <p className="empty-state mt-2">No rubrics yet.</p>}
       <ul className="mt-2 space-y-3">
         {rubrics.map((r) => (
           <li key={r.id} className="rounded-md border border-gray-200 p-4" data-testid="rubric-card">

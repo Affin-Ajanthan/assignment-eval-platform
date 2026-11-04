@@ -151,7 +151,7 @@ export default function StudentPage() {
         {assignments === null ? (
           !loadError && <p className="mt-2 text-sm text-gray-500">Loading your assignments...</p>
         ) : open.length === 0 ? (
-          <p className="mt-2 text-sm text-gray-600">There are no assignments open for submission right now.</p>
+          <p className="empty-state mt-2">There are no assignments open for submission right now.</p>
         ) : (
           <ul className="mt-3 space-y-4">{open.map(card)}</ul>
         )}

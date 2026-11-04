@@ -52,7 +52,7 @@ export default function SubmissionHistory({ version }: { version: number }) {
           <Message state={msg} />
           {submissions === null && !msg && <p className="mt-2 text-sm text-gray-500">Loading...</p>}
           {submissions !== null && submissions.length === 0 && (
-            <p className="mt-2 text-sm text-gray-600">You haven&apos;t submitted anything yet.</p>
+            <p className="empty-state mt-2">You haven&apos;t submitted anything yet.</p>
           )}
           {submissions !== null && submissions.length > 0 && (
             <div className="mt-2 overflow-x-auto">

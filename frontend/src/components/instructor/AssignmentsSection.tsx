@@ -98,19 +98,23 @@ export default function AssignmentsSection({
 
       <h3 className="mt-6 text-sm font-bold uppercase tracking-wide text-gray-500">Assignments in this subject</h3>
       {assignments.length === 0 ? (
-        <p className="mt-2 text-sm text-gray-600">No assignments yet.</p>
+        <p className="empty-state mt-2">No assignments yet. Choose a kind above to create the first one.</p>
       ) : (
         <ul className="mt-2 space-y-3">
           {assignments.map((a) => (
             <li key={a.id} className="rounded-md border border-gray-200 p-4" data-testid="assignment-card">
               <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <h4 className="font-bold">{a.name}</h4>
-                  {a.assignment_type === "code_challenge" && (
-                    <Badge tone="bg-purple-50 text-purple-800">Code challenge</Badge>
-                  )}
-                  <Badge tone={STATUS_STYLE[a.status].cls}>{STATUS_STYLE[a.status].text}</Badge>
-                  <p className="mt-1 text-xs text-gray-600">Accepts: {a.submission_types.map(typeLabel).join(", ")}</p>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h4 className="font-bold">{a.name}</h4>
+                    {a.assignment_type === "code_challenge" && (
+                      <Badge tone="bg-purple-50 text-purple-800">Code challenge</Badge>
+                    )}
+                    <Badge tone={STATUS_STYLE[a.status].cls}>{STATUS_STYLE[a.status].text}</Badge>
+                  </div>
+                  {/* The settings in one wrapping row instead of a stack of single lines. */}
+                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5">
+                  <p className="text-xs text-gray-600">Accepts: {a.submission_types.map(typeLabel).join(", ")}</p>
                   {a.submission_types.includes("code") && a.code_languages?.length > 0 && (
                     <p className="text-xs text-gray-600">Language: {languageNames(a.code_languages)}</p>
                   )}
@@ -150,6 +154,7 @@ export default function AssignmentsSection({
                       </span>
                     )}
                   </p>
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <Link

@@ -120,7 +120,7 @@
   .overflow-x-auto > table td[colspan] > * {
     position: sticky;
     left: 0;
-    max-width: calc(100vw - 4.5rem);
+    max-width: calc(100vw - 5.5rem); /* the scroll area less the cell's padding */
   }
   thead th {
     color: var(--color-gray-600);
@@ -178,5 +178,25 @@
   .btn-danger:disabled {
     cursor: not-allowed;
     opacity: 0.6;
+  }
+  /* With a mouse a small button is fine (at least 24px, WCAG 2.5.8); on a touch screen every button is at least
+     40px tall so it is easy to tap. */
+  @media (pointer: coarse) {
+    .btn-primary,
+    .btn-secondary,
+    .btn-danger {
+      min-height: 2.5rem;
+    }
+  }
+
+  /* "Nothing here yet": one look everywhere, clearly a message and not missing content. */
+  .empty-state {
+    border: 1px dashed var(--color-gray-200);
+    border-radius: 0.5rem;
+    background-color: var(--color-gray-50);
+    color: var(--color-gray-600);
+    font-size: 0.875rem;
+    padding: 1.5rem 1rem;
+    text-align: center;
   }
 }

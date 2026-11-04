@@ -59,7 +59,7 @@ export default function SelfCheckHistoryPanel({ assignments }: { assignments: As
         only: repeated checks usually mean a student is improving their work, not misconduct.
       </p>
       {assignments.length === 0 ? (
-        <p className="mt-2 text-sm text-gray-600">No assignments yet.</p>
+        <p className="empty-state mt-2">No assignments yet.</p>
       ) : (
         <>
           <label className="mt-3 block text-sm font-semibold" htmlFor="self-check-assignment">
@@ -95,7 +95,7 @@ export default function SelfCheckHistoryPanel({ assignments }: { assignments: As
             </p>
           )}
           <Message state={msg} />
-          {rows && rows.length === 0 && <p className="mt-3 text-sm text-gray-600">No submissions yet.</p>}
+          {rows && rows.length === 0 && <p className="empty-state mt-3">No submissions yet.</p>}
           {rows && rows.length > 0 && (
             <div className="mt-3 overflow-x-auto">
               <table className="w-full text-sm">
