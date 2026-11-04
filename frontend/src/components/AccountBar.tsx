@@ -11,15 +11,12 @@ const ROLE_LABEL: Record<UserInfo["role"], string> = {
 };
 
 /** The header of every signed-in page: a full-width navy bar with the platform's name (back to the user's
- * dashboard), what the page is about (`context`, e.g. the subject open on the dashboard), who is signed in, and
- * Log out. `width` lines its content up with the page below it. */
+ * dashboard), who is signed in, and Log out. `width` lines its content up with the page below it. */
 export default function AccountBar({
   user,
-  context,
   width = "max-w-6xl",
 }: {
   user: UserInfo;
-  context?: string;
   width?: string;
 }) {
   const router = useRouter();
@@ -49,14 +46,6 @@ export default function AccountBar({
               <span className="block text-xs font-normal text-brand-100">{ROLE_LABEL[user.role]} portal</span>
             </span>
           </Link>
-          {context && (
-            <span
-              className="truncate rounded-md bg-white/10 px-2.5 py-1 text-xs font-semibold text-white"
-              title={context}
-            >
-              {context}
-            </span>
-          )}
         </div>
         <div className="flex items-center gap-3">
           <span className="text-right text-sm leading-tight">

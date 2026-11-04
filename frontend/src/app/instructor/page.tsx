@@ -675,7 +675,6 @@ export default function InstructorPage() {
   }
 
   if (!ready || !user) return <PageLoading />;
-  const currentSubject = user.subjects.find((s) => s.id === subjectId);
 
   // The panels open under the clicked row (inline), or at the bottom of the page when that row is not
   // in the table (the status filter or the search hides it).
@@ -993,7 +992,7 @@ export default function InstructorPage() {
 
   return (
     <>
-      <AccountBar user={user} context={currentSubject ? `${currentSubject.name} (${currentSubject.code})` : undefined} width="max-w-6xl" />
+      <AccountBar user={user} width="max-w-6xl" />
       <main className="mx-auto max-w-6xl px-4 py-8">
 
       <PageHeader
