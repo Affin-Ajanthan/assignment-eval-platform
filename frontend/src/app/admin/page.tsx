@@ -5,6 +5,7 @@ import { apiFetch, Subject, UserInfo } from "@/lib/api";
 import { useRequireRole } from "@/lib/useRequireRole";
 import AccountBar from "@/components/AccountBar";
 import Message, { MessageState } from "@/components/Message";
+import ManageSubjectsTable from "@/components/admin/ManageSubjectsTable";
 import ManageUsersTable, { SubjectCheckboxes } from "@/components/admin/ManageUsersTable";
 import PageLoading from "@/components/PageLoading";
 
@@ -128,8 +129,9 @@ export default function AdminPage() {
 
       <h1 className="text-2xl font-bold">Admin dashboard</h1>
       <p className="mt-1 text-sm text-gray-600">
-        Create subjects, then create instructor and student accounts and assign them to subjects. Everyone logs
-        in with the credentials you set here -- there&apos;s no self-signup.
+        Create subjects, then create instructor and student accounts and assign them to subjects. You can edit
+        subjects, instructors and students at any time. Everyone logs in with the credentials you set here --
+        there&apos;s no self-signup.
       </p>
 
       {/* Subjects */}
@@ -165,22 +167,7 @@ export default function AdminPage() {
         </form>
 
         <h3 className="mt-5 text-sm font-bold uppercase tracking-wide text-gray-500">Existing subjects</h3>
-        <table className="mt-2 w-full text-sm">
-          <thead>
-            <tr className="bg-gray-50 text-left">
-              <th className="border border-gray-200 px-3 py-1.5">Name</th>
-              <th className="border border-gray-200 px-3 py-1.5">Code</th>
-            </tr>
-          </thead>
-          <tbody>
-            {subjects.map((s) => (
-              <tr key={s.id}>
-                <td className="border border-gray-200 px-3 py-1.5">{s.name}</td>
-                <td className="border border-gray-200 px-3 py-1.5">{s.code}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <ManageSubjectsTable subjects={subjects} onChanged={loadSubjects} />
       </section>
 
       {/* Instructors */}
