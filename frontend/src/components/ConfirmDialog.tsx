@@ -48,7 +48,7 @@ export default function ConfirmDialog({
         className="w-full max-w-md rounded-lg bg-white p-6 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id="confirm-title" className="text-lg font-bold">
+        <h2 id="confirm-title" className="text-lg font-semibold">
           {request.title}
         </h2>
         <p id="confirm-message" className="mt-2 whitespace-pre-line text-sm text-gray-700">
@@ -60,7 +60,7 @@ export default function ConfirmDialog({
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700 disabled:opacity-60"
+            className="btn-secondary rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
           >
             Cancel
           </button>

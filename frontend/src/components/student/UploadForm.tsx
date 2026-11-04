@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useRef, useState } from "react";
-import { apiFetch, StudentAssignment, Submission, SubmissionType } from "@/lib/api";
+import { apiUpload, StudentAssignment, Submission, SubmissionType, UploadCancelled } from "@/lib/api";
 import Message, { MessageState } from "@/components/Message";
 import SubmissionFiles from "@/components/SubmissionFiles";
 import { TYPE_LABEL } from "@/components/student/labels";
@@ -36,6 +36,9 @@ export default function UploadForm({
   const videoRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState<MessageState>(null);
   const [submitting, setSubmitting] = useState(false);
+  // While uploading: the share sent so far (0..1), and how to stop it.
+  const [progress, setProgress] = useState<number | null>(null);
+  const upload = useRef<AbortController | null>(null);
   const id = (field: string) => `${field}-${assignment.id}`;
   const accepts = (kind: SubmissionType) => assignment.submission_types.includes(kind);
   // The instructor may require particular languages; otherwise every supported one.
@@ -73,20 +76,29 @@ export default function UploadForm({
       return;
     }
     setSubmitting(true);
+    setProgress(0);
+    upload.current = new AbortController();
     try {
       if (mode === "submit") {
         formData.append("subject_id", String(assignment.subject_id));
         formData.append("assignment_id", String(assignment.id));
-        const submission = await apiFetch<Submission>("/submissions", { method: "POST", body: formData });
+        const submission = await apiUpload<Submission>("/submissions", "POST", formData, setProgress, upload.current.signal);
         await onDone(`Submitted! Your submission id is ${submission.id}.`);
       } else {
-        await apiFetch(`/submissions/${assignment.my_submission!.id}`, { method: "PUT", body: formData });
+        const path = `/submissions/${assignment.my_submission!.id}`;
+        await apiUpload(path, "PUT", formData, setProgress, upload.current.signal);
         await onDone("Submission updated.");
       }
     } catch (err) {
-      setMessage({ text: `Submission failed: ${err instanceof Error ? err.message : err}`, kind: "error" });
+      setMessage(
+        err instanceof UploadCancelled
+          ? { text: "Upload cancelled. Nothing was changed: choose your files again when you are ready.", kind: "info" }
+          : { text: `Submission failed: ${err instanceof Error ? err.message : err}`, kind: "error" },
+      );
     } finally {
       setSubmitting(false);
+      setProgress(null);
+      upload.current = null;
     }
   }
 
@@ -160,18 +172,38 @@ export default function UploadForm({
         <button
           type="submit"
           disabled={submitting}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+          className="btn-primary rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
         >
           {submitting ? "Submitting..." : mode === "submit" ? "Submit assignment" : "Save changes"}
         </button>
         <button
           type="button"
-          onClick={onCancel}
-          className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+          onClick={() => (submitting ? upload.current?.abort() : onCancel())}
+          // Once every byte is sent the server is saving: stopping then could not undo it.
+          disabled={progress !== null && progress >= 1}
+          className="btn-secondary rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
         >
-          Cancel
+          {submitting ? "Cancel upload" : "Cancel"}
         </button>
       </div>
+      {progress !== null && (
+        <div className="mt-3" data-testid="upload-progress">
+          <div className="flex justify-between text-xs text-gray-600">
+            <span>{progress < 1 ? "Uploading your files..." : "Upload complete: checking your files..."}</span>
+            <span>{Math.round(progress * 100)}%</span>
+          </div>
+          <div
+            role="progressbar"
+            aria-label="Upload progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(progress * 100)}
+            className="mt-1 h-2 overflow-hidden rounded bg-gray-200"
+          >
+            <div className="h-full bg-blue-600 transition-[width]" style={{ width: `${progress * 100}%` }} />
+          </div>
+        </div>
+      )}
       <Message state={message} />
     </form>
   );

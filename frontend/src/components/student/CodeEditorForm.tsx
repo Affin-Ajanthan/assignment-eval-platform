@@ -147,7 +147,7 @@ export function MarkBox({ work, releaseAt }: { work: CodeWork; releaseAt: string
   }
   return (
     <p className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-900" data-testid="submit-mark">
-      <span className="text-base font-bold">{headline}</span>
+      <span className="text-base font-semibold">{headline}</span>
       <span className="ml-2 text-xs">({detail})</span>
     </p>
   );
@@ -200,7 +200,7 @@ function HandedIn({
             type="button"
             onClick={onGetMarks}
             disabled={gettingMarks}
-            className="mt-2 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+            className="btn-primary mt-2 rounded-md px-3 py-1.5 text-xs font-semibold disabled:opacity-60"
           >
             {gettingMarks ? "Getting your marks…" : "Get my marks"}
           </button>
@@ -210,7 +210,7 @@ function HandedIn({
         <button
           type="button"
           onClick={onNext}
-          className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+          className="btn-primary mt-3 rounded-md px-4 py-2 text-sm font-semibold"
           data-testid="next-question"
         >
           Go to {taskName(next)} →
@@ -326,7 +326,10 @@ export default function CodeEditorForm({
   const live = questions.filter((q) => ends[q.id] !== undefined && handedIn(q.id) === null);
   const secondsLeft = ends[question.id] !== undefined ? Math.max(0, Math.ceil((ends[question.id] - nowMs) / 1000)) : null;
   const latest = useRef({ live: [] as number[], answerOf });
-  latest.current = { live: live.map((q) => q.id), answerOf };
+  useEffect(() => {
+    // After every render, so the draft timer below always reads this render's tasks and code.
+    latest.current = { live: live.map((q) => q.id), answerOf };
+  });
 
   useEffect(() => setEnds(endsFrom(work)), [work]); // the server's reading is the truth: take it after every answer
   useEffect(() => {
@@ -355,15 +358,6 @@ export default function CodeEditorForm({
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live.length > 0, assignment.id]);
-  useEffect(() => {
-    // Every render (cheap): a timed task whose time is up is handed in once, with the code in its box.
-    for (const q of live) {
-      if (nowMs >= ends[q.id] && !autoHandedIn.current.has(q.id)) {
-        autoHandedIn.current.add(q.id);
-        void submit(q.id, true);
-      }
-    }
-  });
 
   /** A change to a task's code or language makes its last Run's result stale: drop it. */
   function change(id: number, patch: Partial<Answer>) {
@@ -468,6 +462,17 @@ export default function CodeEditorForm({
       setSubmitting(false);
     }
   }
+
+  // After submit is declared, which it calls.
+  useEffect(() => {
+    // Every render (cheap): a timed task whose time is up is handed in once, with the code in its box.
+    for (const q of live) {
+      if (nowMs >= ends[q.id] && !autoHandedIn.current.has(q.id)) {
+        autoHandedIn.current.add(q.id);
+        void submit(q.id, true);
+      }
+    }
+  });
 
   /** Opens a task that has a time limit: its clock starts on the server now, and the page gets the seconds it has. */
   async function startTask() {
@@ -624,7 +629,7 @@ export default function CodeEditorForm({
       >
         {gated ? (
           <div className="mb-3 rounded-md bg-gray-50 p-3" data-testid="start-task">
-            <p className="text-sm font-bold">{heading}</p>
+            <p className="text-sm font-semibold">{heading}</p>
             <p className="mt-2 text-sm text-gray-700">
               This task has a time limit of <strong>{timeLimitText(limit)}</strong>. The clock starts when you press Start and
               does not stop, even if you close this page. When it runs out, the code in your box is handed in as it is and
@@ -634,7 +639,7 @@ export default function CodeEditorForm({
               type="button"
               onClick={startTask}
               disabled={starting}
-              className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+              className="btn-primary mt-3 rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
               data-testid="start-task-button"
             >
               {starting ? "Starting…" : `Start ${heading}`}
@@ -643,7 +648,7 @@ export default function CodeEditorForm({
         ) : (
         <>
         <div className="mb-3 rounded-md bg-gray-50 p-3" data-testid="question-statement">
-          <p className="text-sm font-bold">{heading}</p>
+          <p className="text-sm font-semibold">{heading}</p>
           {hasQuestion && (
             <>
               <p className="mt-2 text-xs font-semibold text-gray-600">Question</p>
@@ -716,7 +721,7 @@ export default function CodeEditorForm({
               type="button"
               onClick={runCode}
               disabled={busy}
-              className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700 disabled:opacity-60"
+              className="btn-secondary rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
             >
               {running ? "Running…" : many ? "Run this task" : "Run"}
             </button>
@@ -724,7 +729,7 @@ export default function CodeEditorForm({
               type="button"
               onClick={askToSubmit}
               disabled={busy}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+              className="btn-primary rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
             >
               {submitting ? "Submitting…" : many ? "Submit this task" : "Submit"}
             </button>

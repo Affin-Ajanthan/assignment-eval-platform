@@ -11,5 +11,5 @@ export default function AutoGrowTextarea({
 }: { value: string } & Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "value">) {
   const ref = useRef<HTMLTextAreaElement>(null);
   useAutoHeight(ref, value);
-  return <textarea ref={ref} value={value} className={`block resize-none leading-5 ${className}`} {...props} />;
+  return <textarea ref={ref} value={value} className={`block resize-none leading-6 ${className}`} {...props} />;
 }

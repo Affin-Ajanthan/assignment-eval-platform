@@ -54,7 +54,7 @@ export default function TaskPasswordForm({
       <button
         type="submit"
         disabled={busy}
-        className="mt-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+        className="btn-primary mt-2 rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
         data-testid="task-password-submit"
       >
         {busy ? "Checking…" : "Start"}

@@ -32,14 +32,14 @@ export default function SubmissionHistory({ version }: { version: number }) {
   }, [open, version, load]);
 
   return (
-    <section className="mt-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm" data-testid="submission-history">
+    <section className="mt-8 card" data-testid="submission-history">
       <button
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         className="flex w-full items-center justify-between gap-2 text-left"
       >
-        <h2 className="text-lg font-bold">My submission history</h2>
+        <h2 className="text-xl font-semibold">My submission history</h2>
         <span className="text-xs font-semibold text-blue-700">{open ? "Close ▴" : "Open ▾"}</span>
       </button>
       {!open && (
@@ -52,26 +52,26 @@ export default function SubmissionHistory({ version }: { version: number }) {
           <Message state={msg} />
           {submissions === null && !msg && <p className="mt-2 text-sm text-gray-500">Loading...</p>}
           {submissions !== null && submissions.length === 0 && (
-            <p className="mt-2 text-sm text-gray-600">You haven&apos;t submitted anything yet.</p>
+            <p className="empty-state mt-2">You haven&apos;t submitted anything yet.</p>
           )}
           {submissions !== null && submissions.length > 0 && (
             <div className="mt-2 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 text-left">
-                    <th className="border border-gray-200 px-3 py-1.5">Subject</th>
-                    <th className="border border-gray-200 px-3 py-1.5">Assignment</th>
-                    <th className="border border-gray-200 px-3 py-1.5">Submitted</th>
-                    <th className="border border-gray-200 px-3 py-1.5">Status</th>
-                    <th className="border border-gray-200 px-3 py-1.5">Marks</th>
+                    <th className="border-b border-gray-200 px-3 py-2">Subject</th>
+                    <th className="border-b border-gray-200 px-3 py-2">Assignment</th>
+                    <th className="border-b border-gray-200 px-3 py-2">Submitted</th>
+                    <th className="border-b border-gray-200 px-3 py-2">Status</th>
+                    <th className="border-b border-gray-200 px-3 py-2">Marks</th>
                   </tr>
                 </thead>
                 <tbody>
                   {submissions.map((s) => (
                     <tr key={s.id}>
-                      <td className="border border-gray-200 px-3 py-1.5">{s.subject_name}</td>
-                      <td className="border border-gray-200 px-3 py-1.5">{s.assignment_name}</td>
-                      <td className="border border-gray-200 px-3 py-1.5">
+                      <td className="border-b border-gray-200 px-3 py-2">{s.subject_name}</td>
+                      <td className="border-b border-gray-200 px-3 py-2">{s.assignment_name}</td>
+                      <td className="border-b border-gray-200 px-3 py-2">
                         {formatDateTime(s.submitted_at)}
                         {s.late_seconds != null && (
                           <div className="text-xs font-semibold text-red-800" data-testid="late-note">
@@ -79,12 +79,12 @@ export default function SubmissionHistory({ version }: { version: number }) {
                           </div>
                         )}
                       </td>
-                      <td className="border border-gray-200 px-3 py-1.5">
+                      <td className="border-b border-gray-200 px-3 py-2">
                         <Badge bold={false} tone={s.status === "graded" ? "bg-green-50 text-green-800" : "bg-yellow-50 text-yellow-800"}>
                           {s.status === "graded" ? "Graded" : "Submitted"}
                         </Badge>
                       </td>
-                      <td className="border border-gray-200 px-3 py-1.5">
+                      <td className="border-b border-gray-200 px-3 py-2">
                         {markWithPenalty(s.raw_mark, s.final_mark, s.max_mark, s.late_penalty_percent, s.late_penalty_marks)}
                       </td>
                     </tr>

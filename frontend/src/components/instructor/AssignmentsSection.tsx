@@ -71,15 +71,15 @@ export default function AssignmentsSection({
   }
 
   return (
-    <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-bold">Assignments</h2>
+    <section className="mt-6 card">
+      <h2 className="text-xl font-semibold">Assignments</h2>
       <p className="mt-1 text-sm text-gray-600">
         Choose the kind of assignment to create: its details (name, instructions, dates and, for a code challenge, the
         tasks and test cases) are entered on the next page. Create rubrics below.
       </p>
 
       <div className="mt-3" data-testid="assignment-type-chooser">
-        <h3 className="text-sm font-bold">Create assignment</h3>
+        <h3 className="text-sm font-semibold">Create assignment</h3>
         <div className="mt-2 grid gap-3 sm:grid-cols-2">
           {KIND_OPTIONS.map((o) => (
             <Link
@@ -88,7 +88,7 @@ export default function AssignmentsSection({
               className="rounded-md border border-gray-300 p-4 text-left hover:border-blue-500 hover:bg-blue-50"
               data-testid={`create-${o.value}`}
             >
-              <span className="block font-bold">{o.title}</span>
+              <span className="block font-semibold">{o.title}</span>
               <span className="mt-1 block text-sm text-gray-600">{o.text}</span>
             </Link>
           ))}
@@ -96,21 +96,25 @@ export default function AssignmentsSection({
       </div>
       <Message state={msg} />
 
-      <h3 className="mt-6 text-sm font-bold uppercase tracking-wide text-gray-500">Assignments in this subject</h3>
+      <h3 className="mt-6 text-xs font-semibold uppercase tracking-wide text-gray-500">Assignments in this subject</h3>
       {assignments.length === 0 ? (
-        <p className="mt-2 text-sm text-gray-600">No assignments yet.</p>
+        <p className="empty-state mt-2">No assignments yet. Choose a kind above to create the first one.</p>
       ) : (
         <ul className="mt-2 space-y-3">
           {assignments.map((a) => (
             <li key={a.id} className="rounded-md border border-gray-200 p-4" data-testid="assignment-card">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <h4 className="font-bold">{a.name}</h4>
-                  {a.assignment_type === "code_challenge" && (
-                    <Badge tone="bg-purple-50 text-purple-800">Code challenge</Badge>
-                  )}
-                  <Badge tone={STATUS_STYLE[a.status].cls}>{STATUS_STYLE[a.status].text}</Badge>
-                  <p className="mt-1 text-xs text-gray-600">Accepts: {a.submission_types.map(typeLabel).join(", ")}</p>
+              <div className="flex flex-wrap items-start justify-between gap-2 sm:flex-nowrap">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h4 className="text-base font-semibold">{a.name}</h4>
+                    {a.assignment_type === "code_challenge" && (
+                      <Badge tone="bg-purple-50 text-purple-800">Code challenge</Badge>
+                    )}
+                    <Badge tone={STATUS_STYLE[a.status].cls}>{STATUS_STYLE[a.status].text}</Badge>
+                  </div>
+                  {/* The settings in one wrapping row instead of a stack of single lines. */}
+                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5">
+                  <p className="text-xs text-gray-600">Accepts: {a.submission_types.map(typeLabel).join(", ")}</p>
                   {a.submission_types.includes("code") && a.code_languages?.length > 0 && (
                     <p className="text-xs text-gray-600">Language: {languageNames(a.code_languages)}</p>
                   )}
@@ -150,25 +154,26 @@ export default function AssignmentsSection({
                       </span>
                     )}
                   </p>
+                  </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex shrink-0 gap-2">
                   <Link
                     href={`/instructor/assignments/${a.id}`}
-                    className="rounded-md bg-gray-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-700"
+                    className="btn-secondary rounded-md px-3 py-1.5 text-xs font-semibold"
                   >
                     Edit
                   </Link>
                   <button
                     type="button"
                     onClick={() => askDelete(a)}
-                    className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700"
+                    className="btn-danger rounded-md px-3 py-1.5 text-xs font-semibold"
                   >
                     Delete
                   </button>
                 </div>
               </div>
               {a.description && <RichText text={a.description} className="mt-2 text-sm text-gray-700" />}
-              <dl className="mt-2 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[max-content_1fr]">
+              <dl className="mt-3 grid gap-x-6 gap-y-1 border-t border-gray-100 pt-3 text-sm sm:grid-cols-[max-content_1fr] lg:grid-cols-[max-content_1fr_max-content_1fr]">
                 <dt className="font-semibold">Available from</dt>
                 <dd>{formatDateTime(a.available_from)}</dd>
                 <dt className="font-semibold">Deadline</dt>

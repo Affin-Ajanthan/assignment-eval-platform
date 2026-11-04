@@ -19,7 +19,8 @@ from .evaluator.document_extraction import extract_report_text, load_extraction
 from .models import Assignment, Submission
 from .notebook import read_code
 from .similarity import report_similarity as _report_sim
-from .similarity.core import Fingerprint, common_hashes, compare_all, fingerprint_source, subtract_starter
+from .similarity.core import (Fingerprint, common_hashes, compare_all, fingerprint_source, matched_line_ranges,
+                              subtract_starter)
 from .similarity.python_cleanup import names_in
 from .similarity.semantic import (apply_semantic_signal, get_semantic_service, normalize_code, strip_junk,
                                   submissions_needing_semantic)
@@ -81,16 +82,20 @@ def code_similarity_run(db: Session, subject_id: int, assignment_name: str,
     code submissions. Stores nothing: the instructor's check stores flags,
     a student self-check never does. Code most of the class shares is left
     out when the assignment's ``ignore_common_code`` option is on (default)."""
-    # Starter code every student was given is subtracted from each file's
-    # fingerprint (same extension only) so shared boilerplate can't flag a
-    # pair on its own. The semantic path below still sees the full files.
+    starter_fp, remove_common = _code_settings(db, subject_id, assignment_name, submissions)
+    return code_similarity_for_dirs({str(s.id): BASE_DIR / s.code_path for s in submissions}, starter_fp,
+                                    remove_common=remove_common)
+
+
+def _code_settings(db: Session, subject_id: int, assignment_name: str, submissions: list):
+    """(starter-code fingerprint or None, whether to drop code most of the class shares) for this assignment.
+    Starter code every student was given is subtracted from each file's fingerprint (same extension only) so
+    shared boilerplate can't flag a pair on its own; the semantic path still sees the full files."""
     assignment = find_assignment(db, subject_id, assignment_name, submissions)
     starter_fp = None
     if assignment and assignment.starter_code and assignment.starter_code_filename:
         starter_fp = fingerprint_source("starter", assignment.starter_code_filename, assignment.starter_code)
-    remove_common = on_flag(assignment.ignore_common_code) if assignment else True
-    return code_similarity_for_dirs({str(s.id): BASE_DIR / s.code_path for s in submissions}, starter_fp,
-                                    remove_common=remove_common)
+    return starter_fp, (on_flag(assignment.ignore_common_code) if assignment else True)
 
 
 def code_similarity_for_dirs(code_dirs: dict[str, Path], starter_fp=None,
@@ -100,6 +105,28 @@ def code_similarity_for_dirs(code_dirs: dict[str, Path], starter_fp=None,
     labelled test sets without a database."""
     # 1-4: read + normalize each submission once, fingerprint it, and
     # compare every unordered pair (A-B only, never B-A) on tokens.
+    fingerprints, files_by_submission, semantic_sources, common_removed = _fingerprint_dirs(
+        code_dirs, starter_fp, remove_common)
+    pairs = compare_all(fingerprints)
+
+    # 5-7: UniXcoder as an extra signal. The expensive step -- model
+    # inference -- runs once per submission (cached by content), and
+    # only for submissions in at least one pair the token check didn't
+    # already flag; pair scores are then cosine similarities between
+    # the stored vectors. A failure here leaves the token results intact.
+    needed = submissions_needing_semantic(pairs)
+    batch = get_semantic_service().embed_submissions(
+        {sid: text for sid, text in semantic_sources.items() if sid in needed}
+    )
+    stats = apply_semantic_signal(pairs, batch.embeddings) if batch.status == "ok" else {}
+    return CodeSimilarityRun(pairs=pairs, batch=batch, stats=stats, starter_fp=starter_fp,
+                             fingerprints=fingerprints, files_by_submission=files_by_submission,
+                             common_removed=common_removed)
+
+
+def _fingerprint_dirs(code_dirs: dict[str, Path], starter_fp, remove_common: bool):
+    """Each submission's files read once and fingerprinted: (fingerprints, files_by_submission,
+    semantic_sources, common_removed). The token part of the check, without the model."""
     fingerprints: dict[str, "Fingerprint"] = {}
     files_by_submission: dict[str, list] = {}
     semantic_sources: dict[str, str] = {}
@@ -133,21 +160,37 @@ def code_similarity_for_dirs(code_dirs: dict[str, Path], starter_fp=None,
         semantic_sources[sid] = "\n".join(f for f in normalized_files if f)
 
     common_removed = remove_common_code(fingerprints, files_by_submission) if remove_common else 0
-    pairs = compare_all(fingerprints)
+    return fingerprints, files_by_submission, semantic_sources, common_removed
 
-    # 5-7: UniXcoder as an extra signal. The expensive step -- model
-    # inference -- runs once per submission (cached by content), and
-    # only for submissions in at least one pair the token check didn't
-    # already flag; pair scores are then cosine similarities between
-    # the stored vectors. A failure here leaves the token results intact.
-    needed = submissions_needing_semantic(pairs)
-    batch = get_semantic_service().embed_submissions(
-        {sid: text for sid, text in semantic_sources.items() if sid in needed}
-    )
-    stats = apply_semantic_signal(pairs, batch.embeddings) if batch.status == "ok" else {}
-    return CodeSimilarityRun(pairs=pairs, batch=batch, stats=stats, starter_fp=starter_fp,
-                             fingerprints=fingerprints, files_by_submission=files_by_submission,
-                             common_removed=common_removed)
+
+# The compare view shows at most this many lines of one file; the matched ranges are given for the whole file.
+MAX_COMPARE_LINES = 2000
+
+
+def code_pair_matches(db: Session, subject_id: int, assignment_name: str, submissions: list,
+                      a_id: int, b_id: int) -> dict:
+    """Two submissions' code side by side, for the instructor: each file with the line ranges that carry a
+    fingerprint the other submission has too. Fingerprinted exactly as the check does (the whole class, so
+    code most of it shares is left out the same way), but without the semantic model."""
+    starter_fp, remove_common = _code_settings(db, subject_id, assignment_name, submissions)
+    fingerprints, files_by_submission, _, common_removed = _fingerprint_dirs(
+        {str(s.id): BASE_DIR / s.code_path for s in submissions}, starter_fp, remove_common)
+    a, b = str(a_id), str(b_id)
+    shared = fingerprints[a].hashes & fingerprints[b].hashes
+
+    def side(sid: str) -> list[dict]:
+        out = []
+        for f in files_by_submission[sid]:
+            lines = f.source.splitlines()
+            fingerprinted = f.source if f.fingerprinted is None else f.fingerprinted
+            ranges = matched_line_ranges(fingerprinted, f.name, shared & f.hashes)
+            out.append({"name": f.name, "source": "\n".join(lines[:MAX_COMPARE_LINES]), "line_count": len(lines),
+                        "truncated": len(lines) > MAX_COMPARE_LINES,
+                        "ranges": [{"start": start, "end": end} for start, end in ranges]})
+        return out
+
+    return {"shared_fingerprints": len(shared), "common_code_removed": common_removed,
+            "a_files": side(a), "b_files": side(b)}
 
 
 def report_similarity_text(submission: Submission) -> tuple[Optional[str], Optional[str]]:

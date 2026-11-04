@@ -88,7 +88,7 @@ export default function TestCasesEditor({
               <button
                 type="button"
                 onClick={() => onChange(rows.filter((_, j) => j !== i))}
-                className="rounded-md bg-gray-600 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-700"
+                className="btn-secondary rounded-md px-2 py-1 text-xs font-semibold"
               >
                 Remove
               </button>
@@ -176,7 +176,7 @@ export default function TestCasesEditor({
           type="button"
           onClick={() => onChange([...rows, emptyTestRow()])}
           disabled={!canAdd}
-          className="rounded-md bg-gray-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-700 disabled:opacity-60"
+          className="btn-secondary rounded-md px-3 py-1.5 text-xs font-semibold disabled:opacity-60"
         >
           + Add test case
         </button>

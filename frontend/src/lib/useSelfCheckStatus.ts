@@ -32,6 +32,17 @@ export function useSelfCheckStatus(submissionId: number, submittedAt: string) {
     return () => window.clearInterval(timer);
   }, [running, load]);
 
+  // A used-up check frees up at its next_available time: reload then, so its button comes back on its own.
+  const nextFree = Object.values(status?.next_available ?? {})
+    .filter((t): t is string => !!t)
+    .map((t) => new Date(t).getTime())
+    .sort((a, b) => a - b)[0];
+  useEffect(() => {
+    if (nextFree === undefined) return;
+    const timer = window.setTimeout(load, Math.max(0, nextFree - Date.now()) + 1000);
+    return () => window.clearTimeout(timer);
+  }, [nextFree, load]);
+
   async function start(kind: SelfCheckKind) {
     setMsg(null);
     setStarting(kind);

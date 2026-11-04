@@ -239,6 +239,16 @@ def test_five_checks_per_hour_per_kind(tmp_path):
     assert limited.status_code == 429 and "minute" in limited.json()["detail"]
     status = client.get(f"/submissions/{sid_a}/self-checks", headers=auth_headers(tok_a)).json()
     assert status["remaining"] == {"code_similarity": 0, "report_similarity": 5, "ai_content": 5}
+    # The used-up kind says when it frees up: an hour after its oldest check of the hour.
+    db = SessionLocal()
+    try:
+        oldest = (db.query(SelfCheck).filter(SelfCheck.submission_id == sid_a, SelfCheck.kind == "code_similarity")
+                  .order_by(SelfCheck.created_at).first())
+        expected = oldest.created_at.replace(tzinfo=timezone.utc) + timedelta(hours=1)
+    finally:
+        db.close()
+    assert datetime.fromisoformat(status["next_available"]["code_similarity"].replace("Z", "+00:00")) == expected
+    assert status["next_available"]["report_similarity"] is None
     assert _run(tok_a, sid_a, "report_similarity").status_code == 202  # separate limit
 
 

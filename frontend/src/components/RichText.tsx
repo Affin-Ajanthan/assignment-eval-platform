@@ -20,8 +20,8 @@ const SIZE_CLASS: Record<TextSize, string> = {
   small: "text-xs",
   normal: "",
   large: "text-base font-semibold",
-  larger: "text-lg font-bold",
-  largest: "text-2xl font-bold",
+  larger: "text-lg font-semibold",
+  largest: "text-2xl font-semibold",
 };
 
 const FENCE = /^```/;

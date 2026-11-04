@@ -40,7 +40,7 @@ function missingNote(c: CrossModalConsistency, parts: ConsistencyComponent[]): s
 export default function CrossModalConsistencyPanel({ result }: { result: CrossModalConsistency | null }) {
   return (
     <div className="mt-4 rounded-md border border-gray-200 p-4">
-      <h4 className="font-bold">Cross-Modal Semantic Consistency</h4>
+      <h4 className="text-base font-semibold">Cross-Modal Semantic Consistency</h4>
       <p className="mt-1 text-xs text-gray-600">
         Compares the <em>meaning</em> of the code documentation (comments and docstrings), the report and the video
         transcript with a local sentence-embedding model. Similar wording is not required for a high score.
@@ -57,8 +57,8 @@ export default function CrossModalConsistencyPanel({ result }: { result: CrossMo
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-left">
-                  <th className="border border-gray-200 px-3 py-1.5">Comparison</th>
-                  <th className="border border-gray-200 px-3 py-1.5 text-right">Similarity</th>
+                  <th className="border-b border-gray-200 px-3 py-2">Comparison</th>
+                  <th className="border-b border-gray-200 px-3 py-2 text-right">Similarity</th>
                 </tr>
               </thead>
               <tbody>
@@ -66,8 +66,8 @@ export default function CrossModalConsistencyPanel({ result }: { result: CrossMo
                   const value = result[row.key];
                   return (
                     <tr key={row.key}>
-                      <td className="border border-gray-200 px-3 py-1.5">{row.label}</td>
-                      <td className="border border-gray-200 px-3 py-1.5 text-right">
+                      <td className="border-b border-gray-200 px-3 py-2">{row.label}</td>
+                      <td className="border-b border-gray-200 px-3 py-2 text-right">
                         {value === null ? (
                           <>
                             <span className="text-gray-400">—</span>
@@ -81,8 +81,8 @@ export default function CrossModalConsistencyPanel({ result }: { result: CrossMo
                   );
                 })}
                 <tr className="font-semibold">
-                  <td className="border border-gray-200 px-3 py-1.5">Overall</td>
-                  <td className="border border-gray-200 px-3 py-1.5 text-right">
+                  <td className="border-b border-gray-200 px-3 py-2">Overall</td>
+                  <td className="border-b border-gray-200 px-3 py-2 text-right">
                     {result.overall === null ? <span className="text-gray-400">—</span> : pct(result.overall)}
                   </td>
                 </tr>

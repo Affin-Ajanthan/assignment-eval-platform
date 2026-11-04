@@ -106,7 +106,7 @@ export default function TestRunPanel({
     }
   }
 
-  const button = "rounded-md px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60";
+  const button = "rounded-md px-3 py-1.5 text-xs font-semibold";
   return (
     <div data-testid="test-run-panel">
       <div className="flex flex-wrap gap-2">
@@ -116,7 +116,7 @@ export default function TestRunPanel({
             onClick={() => start(true)}
             disabled={running}
             title="Runs every test again and saves the points of the tests passed as the mark, replacing any earlier mark (a student's code is already marked when they press Submit)"
-            className={`${button} bg-blue-600 hover:bg-blue-700`}
+            className={`${button} btn-primary`}
           >
             {running ? "Running…" : `Run ${testCount} test${testCount === 1 ? "" : "s"} and save as mark`}
           </button>
@@ -125,7 +125,7 @@ export default function TestRunPanel({
           type="button"
           onClick={() => start(false)}
           disabled={running}
-          className={`${button} ${isChallenge ? "bg-gray-600 hover:bg-gray-700" : "bg-blue-600 hover:bg-blue-700"}`}
+          className={`${button} ${isChallenge ? "btn-secondary" : "btn-primary"}`}
         >
           {running ? "Running…" : isChallenge ? "Run without saving" : run ? "Run again" : `Run ${testCount} test${testCount === 1 ? "" : "s"}`}
         </button>

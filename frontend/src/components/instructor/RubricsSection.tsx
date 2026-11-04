@@ -9,9 +9,9 @@ type Row = { name: string; description: string; maxPoints: string };
 const emptyRow = (): Row => ({ name: "", description: "", maxPoints: "" });
 
 const input = "w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm";
-const grayBtn = "rounded-md bg-gray-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-700 disabled:opacity-60";
-const redBtn = "rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700";
-const blueBtn = "rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60";
+const grayBtn = "btn-secondary rounded-md px-3 py-1.5 text-xs font-semibold disabled:opacity-60";
+const redBtn = "btn-danger rounded-md px-3 py-1.5 text-xs font-semibold";
+const blueBtn = "btn-primary rounded-md px-3 py-1.5 text-xs font-semibold disabled:opacity-60";
 
 function errText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -181,14 +181,14 @@ export default function RubricsSection({
   }
 
   return (
-    <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-bold">Rubrics</h2>
+    <section className="mt-6 card">
+      <h2 className="text-xl font-semibold">Rubrics</h2>
       <p className="mt-1 text-sm text-gray-600">
         A rubric holds all of its criteria. Use <strong>+ Add criterion</strong> to add more to the same rubric.
       </p>
 
       <form onSubmit={handleCreate} className="mt-3">
-        <h3 className="text-sm font-bold">Create rubric</h3>
+        <h3 className="text-sm font-semibold">Create rubric</h3>
         <label className="mt-2 block text-sm font-semibold" htmlFor="rubric_name">
           Rubric name
         </label>
@@ -228,14 +228,14 @@ export default function RubricsSection({
         <p className="mt-2 text-sm">
           Total maximum points: <strong>{createTotal}</strong>
         </p>
-        <button className="mt-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+        <button className="btn-primary mt-2 rounded-md px-4 py-2 text-sm font-semibold">
           Save rubric
         </button>
         <Message state={createMsg} />
       </form>
 
-      <h3 className="mt-6 text-sm font-bold uppercase tracking-wide text-gray-500">Rubrics in this subject</h3>
-      {rubrics.length === 0 && <p className="mt-2 text-sm text-gray-600">No rubrics yet.</p>}
+      <h3 className="mt-6 text-xs font-semibold uppercase tracking-wide text-gray-500">Rubrics in this subject</h3>
+      {rubrics.length === 0 && <p className="empty-state mt-2">No rubrics yet.</p>}
       <ul className="mt-2 space-y-3">
         {rubrics.map((r) => (
           <li key={r.id} className="rounded-md border border-gray-200 p-4" data-testid="rubric-card">
@@ -265,7 +265,7 @@ export default function RubricsSection({
                 </div>
               ) : (
                 <div className="min-w-0 flex-1">
-                  <h4 className="break-words font-bold">{r.name}</h4>
+                  <h4 className="break-words text-base font-semibold">{r.name}</h4>
                   <p className="text-sm text-gray-600">
                     {r.criteria.length} criteria · Total maximum points: <strong>{r.max_total}</strong>
                     {r.assignment_names.length > 0 && ` · Used by: ${r.assignment_names.join(", ")}`}

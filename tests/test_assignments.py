@@ -786,7 +786,8 @@ def test_a_challenge_can_have_several_questions_with_their_own_tests():
     assert {t["question"] for t in single["test_cases"]} == {1}
     titled = _new_assignment(itok, subject, "One titled question", test_cases=SORT_TESTS,
                              questions=[{"title": "Sorting", "statement": "Sort them."}]).json()
-    assert titled["questions"] == [{"id": 1, "title": "Sorting", "statement": "Sort them.", "starter_code": "", "time_limit_seconds": 0}]
+    assert titled["questions"] == [
+        {"id": 1, "title": "Sorting", "statement": "Sort them.", "starter_code": "", "time_limit_seconds": 0}]
     assert _new_assignment(itok, subject, "Plain").json()["questions"] == []  # other assignments have none
 
 

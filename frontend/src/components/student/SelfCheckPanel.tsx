@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { MySubmission, SelfCheckKind, StudentAssignment } from "@/lib/api";
-import { formatDateTime } from "@/lib/datetime";
+import { formatDateTime, formatTime } from "@/lib/datetime";
 import Message from "@/components/Message";
 import { AiResult, SimilarityResult } from "@/components/student/SelfCheckResults";
 import { CHECKS } from "@/lib/selfCheckBands";
@@ -59,14 +59,16 @@ function SelfCheckBody({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold">{c.label}</p>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">
-                    {left} of {status.limit_per_hour} left this hour
+                  <span className={`text-xs ${left === 0 ? "font-semibold text-amber-800" : "text-gray-500"}`}>
+                    {left === 0 && status.next_available?.[c.kind]
+                      ? `All ${status.limit_per_hour} used: next check from ${formatTime(status.next_available[c.kind]!)}`
+                      : `${left} of ${status.limit_per_hour} left this hour`}
                   </span>
                   <button
                     type="button"
                     onClick={() => start(c.kind)}
                     disabled={busy || left === 0}
-                    className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                    className="btn-primary rounded-md px-3 py-1.5 text-xs font-semibold disabled:opacity-60"
                   >
                     {busy ? "Checking..." : c.button}
                   </button>
@@ -126,7 +128,7 @@ export default function SelfCheckPanel({ assignment, submission }: { assignment:
         aria-expanded={open}
         className="flex w-full items-center justify-between gap-2 text-left"
       >
-        <span className="font-bold">Check my submission</span>
+        <span className="font-semibold">Check my submission</span>
         <span className="text-xs font-semibold text-blue-700">{open ? "Close ▴" : "Open ▾"}</span>
       </button>
       {!open && (

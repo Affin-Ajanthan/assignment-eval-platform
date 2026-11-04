@@ -6,6 +6,8 @@ import { useRequireRole } from "@/lib/useRequireRole";
 import AccountBar from "@/components/AccountBar";
 import Message, { MessageState } from "@/components/Message";
 import ManageUsersTable, { SubjectCheckboxes } from "@/components/admin/ManageUsersTable";
+import PageLoading from "@/components/PageLoading";
+import PageHeader, { StatTile } from "@/components/PageHeader";
 
 export default function AdminPage() {
   const { user, ready } = useRequireRole("admin");
@@ -119,22 +121,30 @@ export default function AdminPage() {
     setter(next);
   }
 
-  if (!ready || !user) return null;
+  if (!ready || !user) return <PageLoading />;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <AccountBar user={user} />
+    <>
+      <AccountBar user={user} width="max-w-6xl" />
+      <main className="mx-auto max-w-6xl px-4 py-8">
 
-      <h1 className="text-2xl font-bold">Admin dashboard</h1>
-      <p className="mt-1 text-sm text-gray-600">
-        Create subjects, then create instructor and student accounts and assign them to subjects. Everyone logs
-        in with the credentials you set here -- there&apos;s no self-signup.
-      </p>
+      <PageHeader
+        title="Admin dashboard"
+        description="Create subjects, then create instructor and student accounts and assign them to subjects. Everyone logs in with the credentials you set here -- there's no self-signup."
+      />
+      <div className="grid grid-cols-3 gap-3" data-testid="admin-overview">
+        <StatTile label="Subjects" value={subjects.length} href="#subjects" />
+        <StatTile label="Instructors" value={instructors.length} href="#instructors" />
+        <StatTile label="Students" value={students.length} href="#students" />
+      </div>
 
       {/* Subjects */}
-      <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-bold">Subjects</h2>
-        <form onSubmit={handleAddSubject} className="mt-3">
+      <section className="mt-6 card scroll-mt-4" id="subjects">
+        <h2 className="text-xl font-semibold">Subjects</h2>
+        {/* The form beside the list on wide screens, so nothing is a long scroll away. */}
+        <div className="mt-4 grid items-start gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
+        <form onSubmit={handleAddSubject} className="rounded-md border border-gray-200 bg-gray-50 p-4">
+          <h3 className="mb-3 text-base font-semibold">Add a subject</h3>
           <label className="block text-sm font-semibold" htmlFor="subject_name">
             Subject name
           </label>
@@ -157,35 +167,41 @@ export default function AdminPage() {
             placeholder="CS201"
             className="mt-1 mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
           />
-          <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+          <button className="btn-primary rounded-md px-4 py-2 text-sm font-semibold">
             Add subject
           </button>
           <Message state={subjectMsg} />
         </form>
 
-        <h3 className="mt-5 text-sm font-bold uppercase tracking-wide text-gray-500">Existing subjects</h3>
+        <div className="min-w-0">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Existing subjects</h3>
         <table className="mt-2 w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-left">
-              <th className="border border-gray-200 px-3 py-1.5">Name</th>
-              <th className="border border-gray-200 px-3 py-1.5">Code</th>
+              <th className="border-b border-gray-200 px-3 py-2">Name</th>
+              <th className="border-b border-gray-200 px-3 py-2">Code</th>
             </tr>
           </thead>
           <tbody>
             {subjects.map((s) => (
               <tr key={s.id}>
-                <td className="border border-gray-200 px-3 py-1.5">{s.name}</td>
-                <td className="border border-gray-200 px-3 py-1.5">{s.code}</td>
+                <td className="border-b border-gray-200 px-3 py-2">{s.name}</td>
+                <td className="border-b border-gray-200 px-3 py-2">{s.code}</td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
+        </div>
       </section>
 
       {/* Instructors */}
-      <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-bold">Instructors</h2>
-        <form onSubmit={handleCreateInstructor} className="mt-3">
+      <section className="mt-6 card scroll-mt-4" id="instructors">
+        <h2 className="text-xl font-semibold">Instructors</h2>
+        {/* The form beside the list on wide screens, so nothing is a long scroll away. */}
+        <div className="mt-4 grid items-start gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
+        <form onSubmit={handleCreateInstructor} className="rounded-md border border-gray-200 bg-gray-50 p-4">
+          <h3 className="mb-3 text-base font-semibold">Create an instructor account</h3>
           <label className="block text-sm font-semibold" htmlFor="instructor_name">
             Full name
           </label>
@@ -229,20 +245,26 @@ export default function AdminPage() {
               onToggle={(id) => toggleSet(instructorSubjects, id, setInstructorSubjects)}
             />
           </div>
-          <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+          <button className="btn-primary rounded-md px-4 py-2 text-sm font-semibold">
             Create instructor
           </button>
           <Message state={instructorMsg} />
         </form>
 
-        <h3 className="mt-5 text-sm font-bold uppercase tracking-wide text-gray-500">Existing instructors</h3>
+        <div className="min-w-0">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Existing instructors</h3>
         <ManageUsersTable role="instructor" users={instructors} subjects={subjects} onChanged={loadInstructors} />
+        </div>
+        </div>
       </section>
 
       {/* Students */}
-      <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-bold">Students</h2>
-        <form onSubmit={handleCreateStudent} className="mt-3">
+      <section className="mt-6 card scroll-mt-4" id="students">
+        <h2 className="text-xl font-semibold">Students</h2>
+        {/* The form beside the list on wide screens, so nothing is a long scroll away. */}
+        <div className="mt-4 grid items-start gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
+        <form onSubmit={handleCreateStudent} className="rounded-md border border-gray-200 bg-gray-50 p-4">
+          <h3 className="mb-3 text-base font-semibold">Create a student account</h3>
           <label className="block text-sm font-semibold" htmlFor="student_name">
             Full name
           </label>
@@ -286,15 +308,19 @@ export default function AdminPage() {
               onToggle={(id) => toggleSet(studentSubjects, id, setStudentSubjects)}
             />
           </div>
-          <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+          <button className="btn-primary rounded-md px-4 py-2 text-sm font-semibold">
             Create student
           </button>
           <Message state={studentMsg} />
         </form>
 
-        <h3 className="mt-5 text-sm font-bold uppercase tracking-wide text-gray-500">Existing students</h3>
+        <div className="min-w-0">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Existing students</h3>
         <ManageUsersTable role="student" users={students} subjects={subjects} onChanged={loadStudents} />
+        </div>
+        </div>
       </section>
-    </div>
+      </main>
+    </>
   );
 }

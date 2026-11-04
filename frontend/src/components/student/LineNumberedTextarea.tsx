@@ -27,7 +27,7 @@ export default function LineNumberedTextarea({
       <div
         ref={numbers}
         aria-hidden="true"
-        className="absolute inset-y-0 left-0 w-12 select-none overflow-hidden border-r border-gray-200 bg-gray-50 pb-8 pr-2 pt-3 text-right font-mono text-sm leading-5 text-gray-400"
+        className="absolute inset-y-0 left-0 w-12 select-none overflow-hidden border-r border-gray-200 bg-gray-50 pb-8 pr-2 pt-3 text-right font-mono text-sm leading-6 text-gray-400"
         data-testid="line-numbers"
       >
         {Array.from({ length: lines }, (_, i) => (
@@ -37,7 +37,7 @@ export default function LineNumberedTextarea({
       <textarea
         value={value}
         onScroll={handleScroll}
-        className={`block w-full overflow-auto bg-white py-3 pl-14 pr-3 font-mono text-sm leading-5 ${className}`}
+        className={`block w-full overflow-auto bg-white py-3 pl-14 pr-3 font-mono text-sm leading-6 ${className}`}
         {...props}
       />
     </div>
