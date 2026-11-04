@@ -56,6 +56,10 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     password_salt = Column(String, nullable=False)
     created_at = Column(DateTime, default=_utcnow)
+    # A student's batch (e.g. "2022-2026") and register number, both optional and unused for other roles.
+    # No two students share a register number; the API checks that (existing rows have none).
+    batch = Column(String, nullable=True)
+    register_number = Column(String, nullable=True)
 
     instructor_assignments = relationship(
         "InstructorAssignment",

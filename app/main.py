@@ -127,6 +127,7 @@ add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON", "ai_
 # their free-text assignment_name); nothing else about them changes.
 add_missing_columns("submissions", {"assignment_id": "INTEGER REFERENCES assignments(id)"})
 add_missing_columns("grades", {"feedback": "TEXT"})
+add_missing_columns("users", {"batch": "VARCHAR", "register_number": "VARCHAR"})
 add_missing_columns("assignments", {"marks_release_at": "DATETIME"})
 add_missing_columns("submissions", {"test_earned": "FLOAT", "test_total": "FLOAT", "tests_run_at": "DATETIME"})
 add_missing_columns("submissions", {"question_results": "JSON"})
@@ -194,6 +195,9 @@ class UserOut(BaseModel):
     # Admin lists only: how many submissions a student has (shown before
     # deleting the account, which deletes them too).
     submission_count: int = 0
+    # A student's batch and register number ("" when not given, and for other roles).
+    batch: str = ""
+    register_number: str = ""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -219,6 +223,8 @@ class StudentCreate(BaseModel):
     full_name: str
     password: str = Field(min_length=4)
     subject_ids: list[int] = []
+    batch: str = Field(default="", max_length=100)
+    register_number: str = Field(default="", max_length=50)
 
 
 class UserUpdate(BaseModel):
@@ -228,6 +234,10 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = Field(default=None, max_length=200)
     password: Optional[str] = Field(default=None, max_length=200)
     subject_ids: Optional[list[int]] = None
+    # Students only (ignored for an instructor); "" clears them. The register number is TST/<batch>/<number>
+    # (e.g. TST/01/001) and needs the batch, which is the middle part.
+    batch: Optional[str] = Field(default=None, max_length=100)
+    register_number: Optional[str] = Field(default=None, max_length=50)
 
 
 class Criterion(BaseModel):
@@ -280,6 +290,7 @@ _TASK_PASSWORD_MAX = 100
 _TASK_TIME_MAX = 24 * 3600  # a task's time limit, in seconds
 _LATE_GRACE_MAX = 7 * 24 * 60  # the grace period after a deadline, in minutes
 _LATE_MARKS_MAX = 1000  # the most marks a late penalty can take (per day or in all)
+REGISTER_PREFIX = "TST"  # every register number starts with it: TST/<batch>/<number>, e.g. TST/01/001
 LatePenaltyUnit = Literal["percent", "marks"]  # what a late penalty is counted in
 
 
@@ -782,7 +793,8 @@ def _user_out(user: User, db: Session) -> UserOut:
         subjects = [row.subject for row in rows]
     else:
         subjects = []
-    return UserOut(id=user.id, email=user.email, full_name=user.full_name, role=user.role, subjects=subjects)
+    return UserOut(id=user.id, email=user.email, full_name=user.full_name, role=user.role, subjects=subjects,
+                   batch=user.batch or "", register_number=user.register_number or "")
 
 
 def _set_instructor_subjects(db: Session, instructor: User, subject_ids: list[int]) -> None:
@@ -933,6 +945,39 @@ def _admin_managed_user(db: Session, user_id: int, role: str) -> User:
     return user
 
 
+def _student_batch(value: Optional[str]) -> Optional[str]:
+    """A batch as stored (e.g. "01"): extra spaces removed, None when blank. It is the middle part of the
+    student's register number, so it can't hold the "/" that separates the parts."""
+    batch = " ".join((value or "").split()) or None
+    if batch and "/" in batch:
+        raise HTTPException(400, "A batch can't contain '/'")
+    return batch
+
+
+def _student_register_number(db: Session, value: Optional[str], batch: Optional[str],
+                             own_id: Optional[int] = None) -> Optional[str]:
+    """A register number as stored, None when blank. It is <REGISTER_PREFIX>/<the student's batch>/<own number>,
+    e.g. TST/01/001, so it needs the batch. Or the HTTP error saying what is wrong with it, or that another
+    student has it already. ``own_id`` is the student being edited, who may keep their own."""
+    number = (value or "").strip()
+    if not number:
+        return None
+    if not batch:
+        raise HTTPException(400, f"Enter the student's batch first: a register number is "
+                                 f"{REGISTER_PREFIX}/<batch>/<number>")
+    prefix = f"{REGISTER_PREFIX}/{batch}/"
+    last = number[len(prefix):]
+    if not number.startswith(prefix) or not last or "/" in last or any(c.isspace() for c in last):
+        raise HTTPException(400, f"The register number must look like {prefix}001: {REGISTER_PREFIX}, the batch, "
+                                 "then the student's own number")
+    others = db.query(User).filter(User.role == "student", func.lower(User.register_number) == number.lower())
+    if own_id is not None:
+        others = others.filter(User.id != own_id)
+    if others.first():
+        raise HTTPException(400, f"Register number '{number}' already belongs to another student")
+    return number
+
+
 def _update_user(db: Session, user: User, payload: UserUpdate) -> UserOut:
     if payload.full_name is not None:
         name = payload.full_name.strip()
@@ -947,6 +992,13 @@ def _update_user(db: Session, user: User, payload: UserUpdate) -> UserOut:
         if clash:
             raise HTTPException(400, f"An account with email '{email}' already exists")
         user.email = email
+    if user.role == "student" and (payload.batch is not None or payload.register_number is not None):
+        # An instructor has neither. The register number holds the batch, so the two are checked together: the
+        # one left out of the request is the stored one.
+        batch = _student_batch(payload.batch) if payload.batch is not None else user.batch
+        number = payload.register_number if payload.register_number is not None else user.register_number
+        user.register_number = _student_register_number(db, number, batch, user.id)
+        user.batch = batch
     password_changed = False
     if payload.password:  # blank or missing: keep the current password
         if len(payload.password) < 4:
@@ -1034,10 +1086,13 @@ def create_student(payload: StudentCreate, _admin: User = Depends(require_admin)
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(400, f"An account with email '{payload.email}' already exists")
     _require_subjects_exist(db, payload.subject_ids)
+    batch = _student_batch(payload.batch)
+    register_number = _student_register_number(db, payload.register_number, batch)
     password_hash, salt = hash_password(payload.password)
     student = User(
         email=payload.email, full_name=payload.full_name, role="student",
         password_hash=password_hash, password_salt=salt,
+        batch=batch, register_number=register_number,
     )
     db.add(student)
     db.commit()

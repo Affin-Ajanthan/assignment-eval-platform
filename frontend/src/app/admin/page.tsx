@@ -1,12 +1,14 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch, Subject, UserInfo } from "@/lib/api";
 import { useRequireRole } from "@/lib/useRequireRole";
 import AccountBar from "@/components/AccountBar";
 import Message, { MessageState } from "@/components/Message";
 import AdminTabs, { adminPanelProps, AdminTab, isAdminTab } from "@/components/admin/AdminTabs";
 import ManageSubjectsTable from "@/components/admin/ManageSubjectsTable";
+import StudentIdFields from "@/components/admin/StudentIdFields";
+import { batchList, ownNumberOf, registerNumberFor } from "@/lib/registerNumber";
 import ManageUsersTable, { SubjectCheckboxes } from "@/components/admin/ManageUsersTable";
 import PageLoading from "@/components/PageLoading";
 
@@ -43,8 +45,13 @@ export default function AdminPage() {
   const [studentName, setStudentName] = useState("");
   const [studentEmail, setStudentEmail] = useState("");
   const [studentPassword, setStudentPassword] = useState("");
+  const [studentBatch, setStudentBatch] = useState("");
+  const [studentOwnNumber, setStudentOwnNumber] = useState(""); // the last part of TST/<batch>/<number>
   const [studentSubjects, setStudentSubjects] = useState<Set<number>>(new Set());
   const [studentMsg, setStudentMsg] = useState<MessageState>(null);
+  // The student whose details the form holds (Edit in the list fills the form), or null while it adds a new one.
+  const [editingStudent, setEditingStudent] = useState<UserInfo | null>(null);
+  const studentFormRef = useRef<HTMLFormElement>(null);
 
   const loadSubjects = useCallback(async () => {
     setSubjects(await apiFetch<Subject[]>("/admin/subjects"));
@@ -104,27 +111,71 @@ export default function AdminPage() {
     }
   }
 
-  async function handleCreateStudent(e: FormEvent) {
+  function clearStudentForm() {
+    setEditingStudent(null);
+    setStudentName("");
+    setStudentEmail("");
+    setStudentPassword("");
+    setStudentBatch("");
+    setStudentOwnNumber("");
+    setStudentSubjects(new Set());
+  }
+
+  /** Edit in the students list: the form takes the student's details and comes into view. */
+  function startEditStudent(s: UserInfo) {
+    setEditingStudent(s);
+    setStudentName(s.full_name);
+    setStudentEmail(s.email);
+    setStudentPassword("");
+    setStudentBatch(s.batch ?? "");
+    setStudentOwnNumber(ownNumberOf(s.register_number ?? "", s.batch ?? ""));
+    setStudentSubjects(new Set(s.subjects.map((x) => x.id)));
+    setStudentMsg(null);
+    studentFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    studentFormRef.current?.querySelector("input")?.focus({ preventScroll: true });
+  }
+
+  // The student being edited was deleted from the list: the form goes back to adding a new one.
+  useEffect(() => {
+    if (editingStudent && !students.some((s) => s.id === editingStudent.id)) clearStudentForm();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [students, editingStudent]);
+
+  async function handleSaveStudent(e: FormEvent) {
     e.preventDefault();
     setStudentMsg(null);
+    const editing = editingStudent;
     try {
-      await apiFetch("/admin/students", {
-        method: "POST",
-        json: {
-          full_name: studentName,
-          email: studentEmail,
-          password: studentPassword,
-          subject_ids: Array.from(studentSubjects),
-        },
-      });
-      setStudentMsg({ text: "Student created.", kind: "success" });
-      setStudentName("");
-      setStudentEmail("");
-      setStudentPassword("");
-      setStudentSubjects(new Set());
+      const details = {
+        full_name: studentName,
+        email: studentEmail,
+        batch: studentBatch,
+        register_number: registerNumberFor(studentBatch, studentOwnNumber),
+        subject_ids: Array.from(studentSubjects),
+      };
+      if (editing) {
+        // A blank password keeps the current one.
+        await apiFetch(`/admin/students/${editing.id}`, {
+          method: "PUT",
+          json: { ...details, password: studentPassword || null },
+        });
+        setStudentMsg({
+          text: studentPassword
+            ? `Saved. The new password is active and ${studentName} has been logged out of open sessions.`
+            : "Saved.",
+          kind: "success",
+        });
+      } else {
+        await apiFetch("/admin/students", { method: "POST", json: { ...details, password: studentPassword } });
+        setStudentMsg({ text: "Student created.", kind: "success" });
+      }
+      clearStudentForm();
       await loadStudents();
     } catch (err) {
-      setStudentMsg({ text: `Failed to create student: ${err instanceof Error ? err.message : err}`, kind: "error" });
+      setStudentMsg({
+        text: `Failed to ${editing ? "save" : "create"} student: ${err instanceof Error ? err.message : err}`,
+        kind: "error",
+      });
     }
   }
 
@@ -255,7 +306,15 @@ export default function AdminPage() {
       <div {...adminPanelProps("students", tab)}>
       <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-bold">Students</h2>
-        <form onSubmit={handleCreateStudent} className="mt-3">
+        <form
+          ref={studentFormRef}
+          onSubmit={handleSaveStudent}
+          className={`mt-3 scroll-mt-4 ${editingStudent ? "rounded-md border border-blue-200 bg-blue-50 p-4" : ""}`}
+          data-testid="student-form"
+        >
+          <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-500">
+            {editingStudent ? `Edit student: ${editingStudent.full_name}` : "Add a student"}
+          </h3>
           <label className="block text-sm font-semibold" htmlFor="student_name">
             Full name
           </label>
@@ -279,15 +338,28 @@ export default function AdminPage() {
             placeholder="ada@example.com"
             className="mt-1 mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
           />
+          <div className="mb-3">
+            <StudentIdFields
+              idPrefix="new-student"
+              batch={studentBatch}
+              onBatchChange={setStudentBatch}
+              own={studentOwnNumber}
+              onOwnChange={setStudentOwnNumber}
+              batches={batchList(students)}
+            />
+          </div>
           <label className="block text-sm font-semibold" htmlFor="student_password">
-            Initial password
+            {editingStudent ? "New password" : "Initial password"}
+            {editingStudent && <span className="font-normal text-gray-500"> (leave blank to keep the current one)</span>}
           </label>
           <input
             id="student_password"
-            required
+            required={!editingStudent}
+            minLength={editingStudent ? 4 : undefined}
             value={studentPassword}
+            autoComplete="new-password"
             onChange={(e) => setStudentPassword(e.target.value)}
-            placeholder="Shown once -- share it with them directly"
+            placeholder={editingStudent ? "" : "Shown once -- share it with them directly"}
             className="mt-1 mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
           />
           <label className="block text-sm font-semibold">Subjects</label>
@@ -299,14 +371,32 @@ export default function AdminPage() {
               onToggle={(id) => toggleSet(studentSubjects, id, setStudentSubjects)}
             />
           </div>
-          <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
-            Create student
-          </button>
+          <div className="flex gap-2">
+            <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+              {editingStudent ? "Save changes" : "Create student"}
+            </button>
+            {editingStudent && (
+              <button
+                type="button"
+                onClick={clearStudentForm}
+                className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
           <Message state={studentMsg} />
         </form>
 
         <h3 className="mt-5 text-sm font-bold uppercase tracking-wide text-gray-500">Existing students</h3>
-        <ManageUsersTable role="student" users={students} subjects={subjects} onChanged={loadStudents} />
+        <ManageUsersTable
+          role="student"
+          users={students}
+          subjects={subjects}
+          onChanged={loadStudents}
+          onEdit={startEditStudent}
+          highlightId={editingStudent?.id ?? null}
+        />
       </section>
       </div>
     </div>

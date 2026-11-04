@@ -23,6 +23,9 @@ export interface UserInfo {
   subjects: Subject[];
   /** Admin student list only: number of submissions. */
   submission_count?: number;
+  /** A student's batch and register number ("" when not given, and for other roles). */
+  batch?: string;
+  register_number?: string;
 }
 
 export interface LoginResult {
