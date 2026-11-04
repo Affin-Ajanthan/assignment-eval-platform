@@ -170,6 +170,12 @@ class SubjectCreate(BaseModel):
     code: str
 
 
+class SubjectUpdate(BaseModel):
+    """Admin edit of a subject. Fields left out are kept."""
+    name: Optional[str] = Field(default=None, max_length=200)
+    code: Optional[str] = Field(default=None, max_length=50)
+
+
 class SubjectOut(BaseModel):
     id: int
     name: str
@@ -868,6 +874,31 @@ def create_subject(payload: SubjectCreate, _admin: User = Depends(require_admin)
 @app.get("/admin/subjects", response_model=list[SubjectOut])
 def list_subjects(_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     return db.query(Subject).order_by(Subject.name).all()
+
+
+@app.put("/admin/subjects/{subject_id}", response_model=SubjectOut)
+def update_subject(
+    subject_id: int, payload: SubjectUpdate, _admin: User = Depends(require_admin), db: Session = Depends(get_db)
+):
+    """Rename a subject or change its code. Everything else refers to it by id, so nothing else moves."""
+    subject = db.get(Subject, subject_id)
+    if not subject:
+        raise HTTPException(404, "Subject not found")
+    if payload.name is not None:
+        name = " ".join(payload.name.split())
+        if not name:
+            raise HTTPException(400, "Subject name can't be empty")
+        subject.name = name
+    if payload.code is not None:
+        code = payload.code.strip()
+        if not code:
+            raise HTTPException(400, "Subject code can't be empty")
+        if db.query(Subject).filter(Subject.code == code, Subject.id != subject.id).first():
+            raise HTTPException(400, f"Subject code '{code}' already exists")
+        subject.code = code
+    db.commit()
+    db.refresh(subject)
+    return subject
 
 
 # ---- Admin: instructors -------------------------------------------------------
