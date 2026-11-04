@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { MySubmission, SelfCheckKind, StudentAssignment } from "@/lib/api";
-import { formatDateTime } from "@/lib/datetime";
+import { formatDateTime, formatTime } from "@/lib/datetime";
 import Message from "@/components/Message";
 import { AiResult, SimilarityResult } from "@/components/student/SelfCheckResults";
 import { CHECKS } from "@/lib/selfCheckBands";
@@ -59,8 +59,10 @@ function SelfCheckBody({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold">{c.label}</p>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">
-                    {left} of {status.limit_per_hour} left this hour
+                  <span className={`text-xs ${left === 0 ? "font-semibold text-amber-800" : "text-gray-500"}`}>
+                    {left === 0 && status.next_available?.[c.kind]
+                      ? `All ${status.limit_per_hour} used: next check from ${formatTime(status.next_available[c.kind]!)}`
+                      : `${left} of ${status.limit_per_hour} left this hour`}
                   </span>
                   <button
                     type="button"

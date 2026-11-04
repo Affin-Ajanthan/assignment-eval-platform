@@ -7,6 +7,7 @@ import { useRequireRole } from "@/lib/useRequireRole";
 import { setFlash } from "@/lib/flash";
 import AssignmentForm, { KIND_OPTIONS } from "@/components/instructor/AssignmentForm";
 import AssignmentPageLayout from "@/components/instructor/AssignmentPageLayout";
+import PageLoading from "@/components/PageLoading";
 
 /**
  * Add the details of a new assignment: /instructor/assignments/new?subject=<id>&kind=submission|code_challenge,
@@ -34,9 +35,9 @@ export default function NewAssignmentPage() {
       .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }, [ready, user]);
 
-  if (!ready || !user) return null;
+  if (!ready || !user) return <PageLoading />;
 
-  const back = target ? `/instructor?subject=${target.subjectId}` : "/instructor";
+  const back = target ? `/instructor?subject=${target.subjectId}&tab=setup` : "/instructor";
   const kindTitle = KIND_OPTIONS.find((o) => o.value === target?.kind)?.title;
   const subject = user.subjects.find((s) => s.id === target?.subjectId);
   return (

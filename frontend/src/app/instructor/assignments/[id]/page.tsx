@@ -7,6 +7,7 @@ import { useRequireRole } from "@/lib/useRequireRole";
 import { setFlash } from "@/lib/flash";
 import AssignmentForm from "@/components/instructor/AssignmentForm";
 import AssignmentPageLayout from "@/components/instructor/AssignmentPageLayout";
+import PageLoading from "@/components/PageLoading";
 
 /** Edit an assignment: /instructor/assignments/<id>, opened by Edit on the instructor dashboard. */
 export default function EditAssignmentPage() {
@@ -30,9 +31,9 @@ export default function EditAssignmentPage() {
     })();
   }, [ready, user, id]);
 
-  if (!ready || !user) return null;
+  if (!ready || !user) return <PageLoading />;
 
-  const back = assignment ? `/instructor?subject=${assignment.subject_id}` : "/instructor";
+  const back = assignment ? `/instructor?subject=${assignment.subject_id}&tab=setup` : "/instructor";
   return (
     <AssignmentPageLayout
       user={user}

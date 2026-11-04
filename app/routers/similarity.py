@@ -21,7 +21,7 @@ from ..common import instructor_subject
 from ..db import get_db
 from ..models import SimilarityFlag, Submission, User
 from ..similarity.semantic import MODEL_NAME as _SEMANTIC_MODEL
-from ..similarity_runs import code_similarity_run, report_similarity_run
+from ..similarity_runs import code_pair_matches, code_similarity_run, report_similarity_run
 
 router = APIRouter()
 
@@ -68,6 +68,33 @@ class SimilarityCheckOut(BaseModel):
     # Distinct code patterns ignored because most of the class shares them
     # (0 when the assignment's "ignore common code" option is off).
     common_code_removed: int = 0
+
+
+class CodeRangeOut(BaseModel):
+    start: int  # first and last line (1-based) of a stretch that carries shared fingerprints
+    end: int
+
+
+class CodeCompareFileOut(BaseModel):
+    name: str  # the file's path inside the submission
+    source: str  # its first MAX_COMPARE_LINES lines
+    line_count: int
+    truncated: bool
+    ranges: list[CodeRangeOut]
+
+
+class CodeCompareSideOut(BaseModel):
+    submission_id: int
+    student: str
+    files: list[CodeCompareFileOut]
+
+
+class CodeCompareOut(BaseModel):
+    assignment_name: str
+    shared_fingerprints: int
+    common_code_removed: int
+    a: CodeCompareSideOut
+    b: CodeCompareSideOut
 
 
 class ReportPassageOut(BaseModel):
@@ -132,15 +159,9 @@ class ReportSimilarityOut(BaseModel):
 
 # ---- Similarity check across one subject's assignment submissions ---------
 
-@router.post("/subjects/{subject_id}/assignments/{assignment_name}/check-similarity",
-             response_model=SimilarityCheckOut)
-def check_similarity(
-    subject_id: int, assignment_name: str, instructor: User = Depends(require_instructor), db: Session = Depends(get_db)
-):
-    if subject_id not in instructor_subject_ids(db, instructor):
-        raise HTTPException(403, "You are not assigned to this subject")
-
-    submissions = (
+def _code_submissions(db: Session, subject_id: int, assignment_name: str) -> list[Submission]:
+    """The submissions with code to one assignment of a subject: what the code check compares."""
+    return (
         db.query(Submission)
         .filter(
             Submission.subject_id == subject_id,
@@ -149,6 +170,39 @@ def check_similarity(
         )
         .all()
     )
+
+
+@router.get("/subjects/{subject_id}/assignments/{assignment_name}/code-compare", response_model=CodeCompareOut)
+def code_compare(
+    subject_id: int, assignment_name: str, a: int, b: int,
+    instructor: User = Depends(require_instructor), db: Session = Depends(get_db),
+):
+    """One pair of the code check side by side: both submissions' files and the lines they share.
+    Stores nothing and changes no flag; the semantic model is not run."""
+    if subject_id not in instructor_subject_ids(db, instructor):
+        raise HTTPException(403, "You are not assigned to this subject")
+    submissions = _code_submissions(db, subject_id, assignment_name)
+    by_id = {s.id: s for s in submissions}
+    if a == b or a not in by_id or b not in by_id:
+        raise HTTPException(404, "Both submissions must be code submissions to this assignment")
+    m = code_pair_matches(db, subject_id, assignment_name, submissions, a, b)
+    return CodeCompareOut(
+        assignment_name=assignment_name, shared_fingerprints=m["shared_fingerprints"],
+        common_code_removed=m["common_code_removed"],
+        a=CodeCompareSideOut(submission_id=a, student=by_id[a].student_name, files=m["a_files"]),
+        b=CodeCompareSideOut(submission_id=b, student=by_id[b].student_name, files=m["b_files"]),
+    )
+
+
+@router.post("/subjects/{subject_id}/assignments/{assignment_name}/check-similarity",
+             response_model=SimilarityCheckOut)
+def check_similarity(
+    subject_id: int, assignment_name: str, instructor: User = Depends(require_instructor), db: Session = Depends(get_db)
+):
+    if subject_id not in instructor_subject_ids(db, instructor):
+        raise HTTPException(403, "You are not assigned to this subject")
+
+    submissions = _code_submissions(db, subject_id, assignment_name)
     if len(submissions) < 2:
         raise HTTPException(400, "Need at least 2 code submissions for this assignment to compare")
 

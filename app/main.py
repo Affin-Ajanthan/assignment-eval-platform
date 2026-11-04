@@ -1613,6 +1613,31 @@ def list_assignments(
     return [_assignment_out(db, a) for a in query.all()]
 
 
+class UpcomingAssignmentOut(BaseModel):
+    """An assignment that has not opened yet, as a student sees it in "Coming soon": only when it opens and
+    closes. Its description, tasks and settings stay hidden until it opens (the instructor may still be
+    changing them)."""
+    name: str
+    subject_name: str
+    assignment_type: str
+    available_from: UTCDateTime
+    deadline: UTCDateTime
+
+
+@app.get("/upcoming-assignments", response_model=list[UpcomingAssignmentOut])
+def list_upcoming_assignments(student: User = Depends(require_student), db: Session = Depends(get_db)):
+    """The not-yet-open assignments of the student's subjects, soonest first. GET /assignments still lists
+    only opened ones, and an upcoming assignment's own page stays 404 until it opens."""
+    now = _utcnow_naive()
+    upcoming = (db.query(Assignment)
+                .filter(Assignment.subject_id.in_(student_subject_ids(db, student)), Assignment.available_from > now)
+                .order_by(Assignment.available_from).all())
+    return [UpcomingAssignmentOut(name=a.name, subject_name=a.subject.name if a.subject else "",
+                                  assignment_type=a.kind, available_from=_as_utc(a.available_from),
+                                  deadline=_as_utc(a.deadline))
+            for a in upcoming]
+
+
 @app.get("/assignments/{assignment_id}")
 def get_assignment(assignment_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     assignment = db.get(Assignment, assignment_id)

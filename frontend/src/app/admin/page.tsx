@@ -6,6 +6,7 @@ import { useRequireRole } from "@/lib/useRequireRole";
 import AccountBar from "@/components/AccountBar";
 import Message, { MessageState } from "@/components/Message";
 import ManageUsersTable, { SubjectCheckboxes } from "@/components/admin/ManageUsersTable";
+import PageLoading from "@/components/PageLoading";
 
 export default function AdminPage() {
   const { user, ready } = useRequireRole("admin");
@@ -119,7 +120,7 @@ export default function AdminPage() {
     setter(next);
   }
 
-  if (!ready || !user) return null;
+  if (!ready || !user) return <PageLoading />;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">

@@ -4,8 +4,16 @@ import { Fragment, useEffect, useState } from "react";
 import { apiFetch, ReportSimilarityPair, ReportSimilarityResult } from "@/lib/api";
 import Message, { MessageState } from "@/components/Message";
 import DownloadExcelButton from "@/components/instructor/DownloadExcelButton";
+import PairFilters, { pairMatches, usePairFilters } from "@/components/instructor/PairFilters";
 
 const pct = (x: number) => `${(x * 100).toFixed(0)}%`;
+
+type ReportPairSort = "flag" | "identical" | "semantic";
+const REPORT_PAIR_SORTS: { value: ReportPairSort; label: string }[] = [
+  { value: "flag", label: "Flag, then identical text" },
+  { value: "identical", label: "Identical text" },
+  { value: "semantic", label: "Semantic" },
+];
 
 /**
  * Report (PDF) similarity for one assignment, shown inside the Similarity
@@ -26,6 +34,7 @@ export default function ReportSimilarityPanel({
   const [msg, setMsg] = useState<MessageState>(null);
   const [running, setRunning] = useState(false);
   const [openPair, setOpenPair] = useState<string | null>(null);
+  const filters = usePairFilters<ReportPairSort>("flag");
 
   // Keep the selection valid as the subject's assignments change.
   useEffect(() => {
@@ -59,7 +68,7 @@ export default function ReportSimilarityPanel({
         text: flagged
           ? `Compared ${res.compared} reports -- ${flagged} pair(s) worth a closer look.`
           : `Compared ${res.compared} reports -- no pairs flagged.`,
-        kind: flagged ? "error" : "success",
+        kind: flagged ? "warning" : "success",
       });
     } catch (err) {
       setMsg({ text: `Report similarity check failed: ${err instanceof Error ? err.message : err}`, kind: "error" });
@@ -69,14 +78,19 @@ export default function ReportSimilarityPanel({
   }
 
   const key = (p: ReportSimilarityPair) => `${p.submission_a_id}-${p.submission_b_id}`;
-  const pairs = result
-    ? [...result.pairs].sort(
-        (a, b) =>
-          Number(!!b.flag_level) - Number(!!a.flag_level) ||
-          Math.max(b.coverage_a, b.coverage_b) - Math.max(a.coverage_a, a.coverage_b) ||
-          (b.semantic_similarity ?? 0) - (a.semantic_similarity ?? 0)
-      )
-    : [];
+  const allPairs = result?.pairs ?? [];
+  const coverage = (p: ReportSimilarityPair) => Math.max(p.coverage_a, p.coverage_b);
+  const semantic = (p: ReportSimilarityPair) => p.semantic_similarity ?? -1;
+  const byFlag = (a: ReportSimilarityPair, b: ReportSimilarityPair) =>
+    Number(!!b.flag_level) - Number(!!a.flag_level) || coverage(b) - coverage(a) || semantic(b) - semantic(a);
+  const order: Record<ReportPairSort, (a: ReportSimilarityPair, b: ReportSimilarityPair) => number> = {
+    flag: byFlag,
+    identical: (a, b) => coverage(b) - coverage(a) || byFlag(a, b),
+    semantic: (a, b) => semantic(b) - semantic(a) || byFlag(a, b),
+  };
+  const pairs = allPairs
+    .filter((p) => (!filters.flaggedOnly || p.flag_level) && pairMatches(filters.search, p.student_a, p.student_b))
+    .sort(order[filters.sort]);
   const citedWords = Object.values(result?.cited_words_removed ?? {}).reduce((sum, n) => sum + n, 0);
 
   return (
@@ -142,7 +156,7 @@ export default function ReportSimilarityPanel({
         </details>
       )}
 
-      {result && pairs.length > 0 && (
+      {result && allPairs.length > 0 && (
         <>
           <dl className="mt-4 grid gap-x-4 gap-y-1 text-xs text-gray-600 sm:grid-cols-[max-content_1fr]">
             <dt className="font-semibold">Identical text</dt>
@@ -153,6 +167,14 @@ export default function ReportSimilarityPanel({
               score fairly high; a pair is only flagged when it stands out from the rest of the class.
             </dd>
           </dl>
+          <PairFilters
+            idPrefix="report-pairs"
+            filters={filters}
+            sortOptions={REPORT_PAIR_SORTS}
+            shown={pairs.length}
+            total={allPairs.length}
+            flaggedTotal={allPairs.filter((p) => p.flag_level).length}
+          />
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>

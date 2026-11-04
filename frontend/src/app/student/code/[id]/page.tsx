@@ -13,6 +13,7 @@ import Badge from "@/components/Badge";
 import RichText from "@/components/RichText";
 import CodeEditorForm, { editorLanguages } from "@/components/student/CodeEditorForm";
 import TaskPasswordForm from "@/components/student/TaskPasswordForm";
+import PageLoading from "@/components/PageLoading";
 
 /**
  * A code challenge's own page, opened with Do assignment on its card on the student portal. It first shows only
@@ -55,7 +56,7 @@ export default function CodeChallengePage() {
     load();
   }, [ready, user, load]);
 
-  if (!ready || !user) return null;
+  if (!ready || !user) return <PageLoading />;
 
   const open = assignment?.status === "open";
   const taskCount = assignment?.questions?.length ?? 0;
