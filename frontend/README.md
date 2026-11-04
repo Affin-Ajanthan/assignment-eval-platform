@@ -4,7 +4,8 @@ role/screen:
 
 - `/login` -- single login page, redirects to the right dashboard by role
 - `/admin` -- create subjects, instructors, students; assign subjects
-- `/instructor` -- rubrics, similarity check, auto-evaluate, manual grading
+- `/instructor` -- the instructor's subjects as boxes
+- `/instructor/subjects/<id>` -- one subject: assignments, rubrics, similarity check, auto-evaluate, manual grading
 - `/student` -- upload code/report/video for an enrolled subject
 
 Stack: Next.js 16 (App Router, Turbopack), React 19, TypeScript, Tailwind

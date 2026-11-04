@@ -21,7 +21,7 @@ export default function AssignmentPageLayout({
     <div className="mx-auto max-w-4xl px-4 py-8">
       <AccountBar user={user} />
       <Link href={backHref} className="text-sm font-semibold text-blue-700 hover:underline">
-        ← Back to the instructor dashboard
+        ← Back to the subject
       </Link>
       <h1 className="mt-4 text-2xl font-bold">{title}</h1>
       {subtitle && <p className="mt-1 text-sm text-gray-600">{subtitle}</p>}
