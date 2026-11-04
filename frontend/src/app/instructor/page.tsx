@@ -691,7 +691,7 @@ export default function InstructorPage() {
         ref={autoevalPanelRef}
         className={panelClass(inline)}
       >
-        <h2 className="text-lg font-bold">
+        <h2 className="text-xl font-semibold">
           Auto-evaluation {studentLabel(autoevalSubmissionId)}
         </h2>
         <p className="mt-1 text-sm text-gray-600">
@@ -728,7 +728,7 @@ export default function InstructorPage() {
 
         {autoevalResult && (
           <div className="mt-4">
-            <h3 className="font-bold">
+            <h3 className="text-base font-semibold">
               Recommended score: {autoevalResult.recommended_score} / {autoevalResult.recommended_max} (
               {autoevalResult.model ? `${autoevalResult.grader}, model ${autoevalResult.model}` : autoevalResult.grader} grader)
             </h3>
@@ -784,7 +784,7 @@ export default function InstructorPage() {
         ref={gradingPanelRef}
         className={panelClass(inline)}
       >
-        <h2 className="text-lg font-bold">Grade submission {studentLabel(gradingSubmissionId)}</h2>
+        <h2 className="text-xl font-semibold">Grade submission {studentLabel(gradingSubmissionId)}</h2>
         {loadingSavedGrade && <p className="mt-1 text-sm text-gray-500">Loading the saved grade...</p>}
         {savedGradeNote && (
           <p className="mt-2 rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">{savedGradeNote}</p>
@@ -995,7 +995,7 @@ export default function InstructorPage() {
       <AccountBar user={user} context={currentSubject ? `${currentSubject.name} (${currentSubject.code})` : undefined} width="max-w-6xl" />
       <main className="mx-auto max-w-6xl px-4 py-8">
 
-      <h1 className="text-2xl font-bold">Instructor dashboard</h1>
+      <h1 className="text-2xl font-semibold">Instructor dashboard</h1>
       <p className="mt-1 text-sm text-gray-600">
         Set up assignments and rubrics, run the automated evaluator, then grade manually or accept its scores as a
         starting point -- you always have the final say.
@@ -1045,7 +1045,7 @@ export default function InstructorPage() {
           <div {...tabPanelProps("integrity", tab)}>
           {/* Similarity check */}
           <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
-            <h2 className="text-lg font-bold">Similarity Code Check</h2>
+            <h2 className="text-xl font-semibold">Similarity Code Check</h2>
             <p className="mt-1 text-sm text-gray-600">
               Compares every code submission for one assignment pairwise and flags likely copies. The PDF reports
               can be compared below.
@@ -1243,7 +1243,7 @@ export default function InstructorPage() {
           <div {...tabPanelProps("grading", tab)}>
           {/* Submissions */}
           <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
-            <h2 className="text-lg font-bold">Submissions for this subject</h2>
+            <h2 className="text-xl font-semibold">Submissions for this subject</h2>
             <label className="mt-3 block text-sm font-semibold" htmlFor="submissions-assignment">
               Assignment
             </label>

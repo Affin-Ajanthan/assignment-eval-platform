@@ -131,7 +131,7 @@ export default function QuestionsEditor({
         {rows.map((row, i) => (
           <div key={i} className="rounded-md border border-gray-300 bg-gray-50 p-3" data-testid="question-block">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-bold">
+              <span className="text-sm font-semibold">
                 Task {i + 1}
                 {row.title.trim() && <span className="ml-2 font-normal text-gray-600">{row.title.trim()}</span>}
               </span>

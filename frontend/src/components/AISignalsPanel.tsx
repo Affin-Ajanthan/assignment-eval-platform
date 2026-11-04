@@ -47,7 +47,7 @@ export default function AISignalsPanel({ result }: { result: AutoEvaluation }) {
   const signals = result.ai_signals;
   return (
     <div className="mt-4 rounded-md border border-gray-200 p-4">
-      <h4 className="font-bold">AI-content signals</h4>
+      <h4 className="text-base font-semibold">AI-content signals</h4>
       <p className="mt-1 text-xs text-gray-600">
         Statistical estimates of whether the report or code looks machine-generated. These are review signals, not
         proof: they misfire on formal or non-native English writing and on tidy code, and they never change the

@@ -209,7 +209,7 @@ export default function BatchEvaluateSection({
 
   return (
     <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
-      <h2 className="text-lg font-bold">Evaluate a whole assignment</h2>
+      <h2 className="text-xl font-semibold">Evaluate a whole assignment</h2>
       <p className="mt-1 text-sm text-gray-600">
         Runs the automated evaluation for every submission of one assignment (one after another, or several at a time
         when the server is set up for it). Run the similarity

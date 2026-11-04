@@ -40,7 +40,7 @@ function missingNote(c: CrossModalConsistency, parts: ConsistencyComponent[]): s
 export default function CrossModalConsistencyPanel({ result }: { result: CrossModalConsistency | null }) {
   return (
     <div className="mt-4 rounded-md border border-gray-200 p-4">
-      <h4 className="font-bold">Cross-Modal Semantic Consistency</h4>
+      <h4 className="text-base font-semibold">Cross-Modal Semantic Consistency</h4>
       <p className="mt-1 text-xs text-gray-600">
         Compares the <em>meaning</em> of the code documentation (comments and docstrings), the report and the video
         transcript with a local sentence-embedding model. Similar wording is not required for a high score.

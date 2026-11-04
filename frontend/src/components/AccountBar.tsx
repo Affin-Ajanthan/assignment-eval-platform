@@ -40,12 +40,12 @@ export default function AccountBar({
           >
             <span
               aria-hidden="true"
-              className="flex h-9 w-9 items-center justify-center rounded-md border border-white/40 bg-white/10 text-xs font-bold tracking-wide"
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-white/40 bg-white/10 text-xs font-semibold tracking-wide"
             >
               AE
             </span>
             <span className="hidden leading-tight sm:block">
-              <span className="block text-[15px]">Assignment Evaluation Platform</span>
+              <span className="block text-base">Assignment Evaluation Platform</span>
               <span className="block text-xs font-normal text-brand-100">{ROLE_LABEL[user.role]} portal</span>
             </span>
           </Link>

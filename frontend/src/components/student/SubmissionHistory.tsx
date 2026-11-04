@@ -39,7 +39,7 @@ export default function SubmissionHistory({ version }: { version: number }) {
         aria-expanded={open}
         className="flex w-full items-center justify-between gap-2 text-left"
       >
-        <h2 className="text-lg font-bold">My submission history</h2>
+        <h2 className="text-xl font-semibold">My submission history</h2>
         <span className="text-xs font-semibold text-blue-700">{open ? "Close ▴" : "Open ▾"}</span>
       </button>
       {!open && (

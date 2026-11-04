@@ -182,13 +182,13 @@ export default function RubricsSection({
 
   return (
     <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
-      <h2 className="text-lg font-bold">Rubrics</h2>
+      <h2 className="text-xl font-semibold">Rubrics</h2>
       <p className="mt-1 text-sm text-gray-600">
         A rubric holds all of its criteria. Use <strong>+ Add criterion</strong> to add more to the same rubric.
       </p>
 
       <form onSubmit={handleCreate} className="mt-3">
-        <h3 className="text-sm font-bold">Create rubric</h3>
+        <h3 className="text-sm font-semibold">Create rubric</h3>
         <label className="mt-2 block text-sm font-semibold" htmlFor="rubric_name">
           Rubric name
         </label>
@@ -234,7 +234,7 @@ export default function RubricsSection({
         <Message state={createMsg} />
       </form>
 
-      <h3 className="mt-6 text-sm font-bold uppercase tracking-wide text-gray-500">Rubrics in this subject</h3>
+      <h3 className="mt-6 text-xs font-semibold uppercase tracking-wide text-gray-500">Rubrics in this subject</h3>
       {rubrics.length === 0 && <p className="empty-state mt-2">No rubrics yet.</p>}
       <ul className="mt-2 space-y-3">
         {rubrics.map((r) => (
@@ -265,7 +265,7 @@ export default function RubricsSection({
                 </div>
               ) : (
                 <div className="min-w-0 flex-1">
-                  <h4 className="break-words font-bold">{r.name}</h4>
+                  <h4 className="break-words text-base font-semibold">{r.name}</h4>
                   <p className="text-sm text-gray-600">
                     {r.criteria.length} criteria · Total maximum points: <strong>{r.max_total}</strong>
                     {r.assignment_names.length > 0 && ` · Used by: ${r.assignment_names.join(", ")}`}

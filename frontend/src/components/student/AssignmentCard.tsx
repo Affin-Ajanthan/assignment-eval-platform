@@ -84,7 +84,7 @@ export default function AssignmentCard({
     <li className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-5" data-testid="student-assignment">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="text-lg font-bold">{a.name}</h3>
+          <h3 className="text-lg font-semibold">{a.name}</h3>
           <p className="text-xs text-gray-500">{a.subject_name}</p>
           <p className="text-xs text-gray-500">Accepts: {a.submission_types.map((t) => TYPE_LABEL[t]).join(", ")}</p>
           {a.submission_types.includes("code") && a.code_languages?.length > 0 && (

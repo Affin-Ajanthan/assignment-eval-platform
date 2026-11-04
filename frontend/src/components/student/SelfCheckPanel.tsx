@@ -128,7 +128,7 @@ export default function SelfCheckPanel({ assignment, submission }: { assignment:
         aria-expanded={open}
         className="flex w-full items-center justify-between gap-2 text-left"
       >
-        <span className="font-bold">Check my submission</span>
+        <span className="font-semibold">Check my submission</span>
         <span className="text-xs font-semibold text-blue-700">{open ? "Close ▴" : "Open ▾"}</span>
       </button>
       {!open && (

@@ -83,7 +83,7 @@ export default function CodeChallengePage() {
   } else {
     body = (
       <>
-        <h1 className="mt-4 text-2xl font-bold">{assignment.name}</h1>
+        <h1 className="mt-4 text-2xl font-semibold">{assignment.name}</h1>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
           <span>{assignment.subject_name}</span>
           {assignment.code_languages?.length > 0 && <span>Language: {languageNames(assignment.code_languages)}</span>}

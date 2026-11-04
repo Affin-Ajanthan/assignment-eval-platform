@@ -147,7 +147,7 @@ export function MarkBox({ work, releaseAt }: { work: CodeWork; releaseAt: string
   }
   return (
     <p className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-900" data-testid="submit-mark">
-      <span className="text-base font-bold">{headline}</span>
+      <span className="text-base font-semibold">{headline}</span>
       <span className="ml-2 text-xs">({detail})</span>
     </p>
   );
@@ -629,7 +629,7 @@ export default function CodeEditorForm({
       >
         {gated ? (
           <div className="mb-3 rounded-md bg-gray-50 p-3" data-testid="start-task">
-            <p className="text-sm font-bold">{heading}</p>
+            <p className="text-sm font-semibold">{heading}</p>
             <p className="mt-2 text-sm text-gray-700">
               This task has a time limit of <strong>{timeLimitText(limit)}</strong>. The clock starts when you press Start and
               does not stop, even if you close this page. When it runs out, the code in your box is handed in as it is and
@@ -648,7 +648,7 @@ export default function CodeEditorForm({
         ) : (
         <>
         <div className="mb-3 rounded-md bg-gray-50 p-3" data-testid="question-statement">
-          <p className="text-sm font-bold">{heading}</p>
+          <p className="text-sm font-semibold">{heading}</p>
           {hasQuestion && (
             <>
               <p className="mt-2 text-xs font-semibold text-gray-600">Question</p>

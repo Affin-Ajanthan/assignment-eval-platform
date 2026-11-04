@@ -103,7 +103,7 @@ export default function StudentPage() {
       <AccountBar user={user} width="max-w-4xl" />
       <main className="mx-auto max-w-4xl px-4 py-8">
 
-      <h1 className="text-2xl font-bold">Student portal</h1>
+      <h1 className="text-2xl font-semibold">Student portal</h1>
       <p className="mt-1 text-sm text-gray-600">
         Submit your work before the deadline. You can edit or delete a submission until the deadline or until it is
         graded; each assignment below says what it accepts.
@@ -135,7 +135,7 @@ export default function StudentPage() {
       )}
 
       <section className="mt-6">
-        <h2 className="text-lg font-bold">Available assignments</h2>
+        <h2 className="text-xl font-semibold">Available assignments</h2>
         {loadError && (
           <div role="alert" className="mt-2 flex flex-wrap items-center gap-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
             <span>Could not load your assignments: {loadError}</span>
@@ -159,7 +159,7 @@ export default function StudentPage() {
 
       {comingSoon.length > 0 && (
         <section className="mt-8" data-testid="coming-soon">
-          <h2 className="text-lg font-bold">Coming soon</h2>
+          <h2 className="text-xl font-semibold">Coming soon</h2>
           <p className="mt-1 text-sm text-gray-600">
             Not open yet. The details appear here when each one opens.
           </p>
@@ -182,7 +182,7 @@ export default function StudentPage() {
 
       {past.length > 0 && (
         <section className="mt-8">
-          <h2 className="text-lg font-bold">Past assignments</h2>
+          <h2 className="text-xl font-semibold">Past assignments</h2>
           <ul className="mt-3 space-y-4">{past.map(card)}</ul>
         </section>
       )}

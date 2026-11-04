@@ -53,7 +53,7 @@ export default function SelfCheckHistoryPanel({ assignments }: { assignments: As
 
   return (
     <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
-      <h2 className="text-lg font-bold">Student Self-Check History</h2>
+      <h2 className="text-xl font-semibold">Student Self-Check History</h2>
       <p className="mt-1 text-sm text-gray-600">
         How often each student checked their own submission before the deadline. For monitoring and troubleshooting
         only: repeated checks usually mean a student is improving their work, not misconduct.

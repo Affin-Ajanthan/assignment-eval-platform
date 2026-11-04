@@ -127,7 +127,7 @@ export default function AdminPage() {
       <AccountBar user={user} width="max-w-5xl" />
       <main className="mx-auto max-w-5xl px-4 py-8">
 
-      <h1 className="text-2xl font-bold">Admin dashboard</h1>
+      <h1 className="text-2xl font-semibold">Admin dashboard</h1>
       <p className="mt-1 text-sm text-gray-600">
         Create subjects, then create instructor and student accounts and assign them to subjects. Everyone logs
         in with the credentials you set here -- there&apos;s no self-signup.
@@ -135,7 +135,7 @@ export default function AdminPage() {
 
       {/* Subjects */}
       <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
-        <h2 className="text-lg font-bold">Subjects</h2>
+        <h2 className="text-xl font-semibold">Subjects</h2>
         <form onSubmit={handleAddSubject} className="mt-3">
           <label className="block text-sm font-semibold" htmlFor="subject_name">
             Subject name
@@ -165,7 +165,7 @@ export default function AdminPage() {
           <Message state={subjectMsg} />
         </form>
 
-        <h3 className="mt-5 text-sm font-bold uppercase tracking-wide text-gray-500">Existing subjects</h3>
+        <h3 className="mt-5 text-xs font-semibold uppercase tracking-wide text-gray-500">Existing subjects</h3>
         <table className="mt-2 w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-left">
@@ -186,7 +186,7 @@ export default function AdminPage() {
 
       {/* Instructors */}
       <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
-        <h2 className="text-lg font-bold">Instructors</h2>
+        <h2 className="text-xl font-semibold">Instructors</h2>
         <form onSubmit={handleCreateInstructor} className="mt-3">
           <label className="block text-sm font-semibold" htmlFor="instructor_name">
             Full name
@@ -237,13 +237,13 @@ export default function AdminPage() {
           <Message state={instructorMsg} />
         </form>
 
-        <h3 className="mt-5 text-sm font-bold uppercase tracking-wide text-gray-500">Existing instructors</h3>
+        <h3 className="mt-5 text-xs font-semibold uppercase tracking-wide text-gray-500">Existing instructors</h3>
         <ManageUsersTable role="instructor" users={instructors} subjects={subjects} onChanged={loadInstructors} />
       </section>
 
       {/* Students */}
       <section className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
-        <h2 className="text-lg font-bold">Students</h2>
+        <h2 className="text-xl font-semibold">Students</h2>
         <form onSubmit={handleCreateStudent} className="mt-3">
           <label className="block text-sm font-semibold" htmlFor="student_name">
             Full name
@@ -294,7 +294,7 @@ export default function AdminPage() {
           <Message state={studentMsg} />
         </form>
 
-        <h3 className="mt-5 text-sm font-bold uppercase tracking-wide text-gray-500">Existing students</h3>
+        <h3 className="mt-5 text-xs font-semibold uppercase tracking-wide text-gray-500">Existing students</h3>
         <ManageUsersTable role="student" users={students} subjects={subjects} onChanged={loadStudents} />
       </section>
       </main>

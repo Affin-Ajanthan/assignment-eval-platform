@@ -42,7 +42,7 @@ export default function LoginPage() {
         <div className="flex items-center gap-3">
           <span
             aria-hidden="true"
-            className="flex h-11 w-11 items-center justify-center rounded-md border border-white/40 bg-white/10 text-sm font-bold tracking-wide"
+            className="flex h-11 w-11 items-center justify-center rounded-md border border-white/40 bg-white/10 text-sm font-semibold tracking-wide"
           >
             AE
           </span>
