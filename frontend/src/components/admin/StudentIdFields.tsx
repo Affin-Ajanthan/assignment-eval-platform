@@ -165,7 +165,7 @@ export default function StudentIdFields({
 }) {
   const shownBatch = batch.trim();
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid gap-3">
       <div>
         <label className="block text-sm font-semibold" htmlFor={`${idPrefix}-batch`}>
           Batch <span className="font-normal text-gray-500">(pick one or type)</span>
@@ -174,7 +174,7 @@ export default function StudentIdFields({
       </div>
       <div>
         <label className="block text-sm font-semibold" htmlFor={`${idPrefix}-own-number`}>
-          Register number <span className="font-normal text-gray-500">(only the last part)</span>
+          Register number <span className="font-normal text-gray-500">(only the last part; no two students can share it, even in different batches)</span>
         </label>
         <div className="mt-1 flex items-center gap-1" data-testid="register-number">
           <span className={part}>{REGISTER_PREFIX}</span>

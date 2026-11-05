@@ -36,7 +36,7 @@ frontend/               Next.js 16 / React 19 / TypeScript / Tailwind app
   src/app/login/          single login page, redirects by role
   src/app/admin/          create subjects, instructors, students; assign subjects
   src/app/student/        upload code/report/video for an enrolled subject
-  src/app/instructor/     rubrics, similarity check, auto-evaluate, manual grading
+  src/app/instructor/     subject boxes; a subject's assignments and rubrics; an assignment's grading, similarity, batch evaluate
   src/lib/api.ts          shared API client (bearer token, session handling)
   (see frontend/README.md for frontend-specific run instructions)
 tests/                  871 tests; 23 marked `slow` use real models and skip gracefully offline
@@ -127,18 +127,21 @@ Every account -- admin, instructor, student -- is created by an admin.
 There is no self-registration; people log in with credentials the
 admin gave them.
 
-- **Admin**: logs in and lands on `/admin`. Creates subjects, creates
-  instructor accounts (assigning them to one or more subjects), and
-  creates student accounts (enrolling them in one or more subjects).
-  Can also reassign an existing instructor's or student's subjects
-  later.
-- **Instructor**: logs in and lands on `/instructor`. Only ever sees and
-  manages rubrics, submissions, similarity checks and grading for the
-  subjects an admin assigned them to -- the dashboard has a subject
-  selector at the top that scopes everything below it.
-- **Student**: logs in and lands on `/student`. Only ever sees and submits to
-  the subjects an admin enrolled them in, and only ever sees their own
-  submissions and grades.
+- **Admin**: logs in and lands on `/admin`. Creates subjects and the
+  instructors who teach them (each can be picked from either side), and
+  creates student accounts (with a batch and a register number). Can edit
+  subjects, instructors and students later. Students are not assigned to
+  subjects by the admin.
+- **Instructor**: logs in and lands on `/instructor`, which shows the
+  subjects an admin assigned them to as boxes. A subject has two tabs,
+  Assignments and Rubrics; the Assignments tab also opens the subject to
+  students with a password. Open on an assignment shows that assignment's
+  Submissions & grading, Similarity and Batch evaluate tabs. An instructor
+  only ever sees and manages their own subjects.
+- **Student**: logs in and lands on `/student`, which shows every subject. Only a
+  subject they joined opens (with its assignments); to join one they enter its password once the instructor has
+  allowed registration. They only ever see and submit to the
+  subjects they joined, and only ever see their own submissions and grades.
 
 On first run, since no accounts exist yet, the server bootstraps a
 default admin so there's a way to log in:

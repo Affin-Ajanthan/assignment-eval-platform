@@ -102,23 +102,28 @@ export default function ReportSimilarityPanel({
         Upload the assignment&apos;s question paper or report template as a &ldquo;Report template (PDF)&rdquo; on
         the assignment, and its text is cut out of every report before comparing.
       </p>
-      <label className="mt-3 block text-sm font-semibold" htmlFor="report-similarity-assignment">
-        Assignment
-      </label>
-      <select
-        id="report-similarity-assignment"
-        value={assignmentName}
-        disabled={running}
-        onChange={(e) => setAssignmentName(e.target.value)}
-        className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-      >
-        {assignmentNames.length === 0 && <option value="">No assignments with submissions yet</option>}
-        {assignmentNames.map((a) => (
-          <option key={a} value={a}>
-            {a}
-          </option>
-        ))}
-      </select>
+      {/* Given a single assignment (the assignment page) there is nothing to choose. */}
+      {assignmentNames.length > 1 && (
+        <>
+          <label className="mt-3 block text-sm font-semibold" htmlFor="report-similarity-assignment">
+            Assignment
+          </label>
+          <select
+            id="report-similarity-assignment"
+            value={assignmentName}
+            disabled={running}
+            onChange={(e) => setAssignmentName(e.target.value)}
+            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          >
+            {assignmentNames.map((a) => (
+              <option key={a} value={a}>
+                {a}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
+      {assignmentNames.length === 0 && <p className="empty-state mt-3">No submissions yet.</p>}
       <button
         type="button"
         onClick={run}

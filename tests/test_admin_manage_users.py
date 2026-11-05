@@ -143,6 +143,57 @@ def test_admin_edits_a_subjects_batch():
     assert client.put(f"/admin/subjects/{a['id']}", headers=H(admin), json={"batch": ""}).json()["batch"] == ""
 
 
+def _teachers(admin, subject_id):
+    listed = {s["id"]: s for s in client.get("/admin/subjects", headers=H(admin)).json()}
+    return listed[subject_id]["instructor_ids"]
+
+
+def test_instructors_are_chosen_while_creating_and_editing_a_subject():
+    admin = admin_token(client)
+    one, one_tok = create_instructor(client, admin, [])
+    two, two_tok = create_instructor(client, admin, [])
+    student, _ = create_student(client, admin, [])
+
+    r = client.post("/admin/subjects", headers=H(admin), json={
+        "name": "Algorithms", "code": f"IN-{uuid.uuid4().hex[:8]}", "instructor_ids": [one["id"], one["id"]]})
+    assert r.status_code == 200, r.text
+    subject = r.json()
+    assert subject["instructor_ids"] == [one["id"]]  # a repeated id counts once
+    assert _teachers(admin, subject["id"]) == [one["id"]]
+    mine = client.get("/auth/me", headers=H(one_tok)).json()["subjects"]
+    assert [s["id"] for s in mine] == [subject["id"]]  # the instructor sees it straight away
+    assert client.get("/auth/me", headers=H(two_tok)).json()["subjects"] == []
+
+    url = f"/admin/subjects/{subject['id']}"
+    r = client.put(url, headers=H(admin), json={"instructor_ids": [two["id"]]})  # replaces the list
+    assert r.status_code == 200 and r.json()["instructor_ids"] == [two["id"]]
+    assert client.get("/auth/me", headers=H(one_tok)).json()["subjects"] == []
+    assert [s["id"] for s in client.get("/auth/me", headers=H(two_tok)).json()["subjects"]] == [subject["id"]]
+
+    kept = client.put(url, headers=H(admin), json={"name": "Renamed"}).json()  # left out: kept
+    assert kept["instructor_ids"] == [two["id"]]
+    both = client.put(url, headers=H(admin), json={"instructor_ids": [two["id"], one["id"]]}).json()
+    assert both["instructor_ids"] == sorted([one["id"], two["id"]])
+    assert client.put(url, headers=H(admin), json={"instructor_ids": []}).json()["instructor_ids"] == []
+
+    for bad in ([999999], [student["id"]]):  # unknown, or not an instructor
+        assert client.put(url, headers=H(admin), json={"instructor_ids": bad}).status_code == 400
+        refused = client.post("/admin/subjects", headers=H(admin), json={
+            "name": "X", "code": f"BAD-{uuid.uuid4().hex[:8]}", "instructor_ids": bad})
+        assert refused.status_code == 400
+    assert _teachers(admin, subject["id"]) == []  # a refused request changed nothing
+
+
+def test_an_instructors_subjects_show_in_the_subjects_instructors():
+    """The same assignment from the other side: subjects chosen while creating or editing an instructor."""
+    admin = admin_token(client)
+    a, b = create_subject(client, admin), create_subject(client, admin)
+    teacher, _ = create_instructor(client, admin, [a["id"]])
+    assert teacher["id"] in _teachers(admin, a["id"]) and teacher["id"] not in _teachers(admin, b["id"])
+    client.put(f"/admin/instructors/{teacher['id']}", headers=H(admin), json={"subject_ids": [b["id"]]})
+    assert teacher["id"] not in _teachers(admin, a["id"]) and teacher["id"] in _teachers(admin, b["id"])
+
+
 def _new_student(admin, **extra):
     body = {"email": f"s{uuid.uuid4().hex[:10]}@example.com", "full_name": "Ada Student", "password": "pass1234",
             "subject_ids": [], **extra}
@@ -201,11 +252,17 @@ def test_a_register_number_belongs_to_one_student_only():
     assert client.put(f"/admin/students/{first['id']}", headers=H(admin),
                       json={"register_number": reg}).status_code == 200  # a student may keep their own
 
-    # The same own number in another batch is another register number. Changing the batch means changing both.
-    done = client.put(url, headers=H(admin), json={"batch": " 02 ", "register_number": f"TST/02/{last}"}).json()
-    assert (done["batch"], done["register_number"]) == ("02", f"TST/02/{last}")
+    # The own number is unique across every batch, like an email: TST/02/<last> clashes with TST/01/<last>.
+    other_batch = client.put(url, headers=H(admin), json={"batch": "02", "register_number": f"TST/02/{last}"})
+    assert other_batch.status_code == 400 and "already belongs to another student" in other_batch.json()["detail"]
+    assert _new_student(admin, batch="02", register_number=f"TST/02/{last}").status_code == 400
+
+    # A different own number is fine in any batch. Changing the batch means changing both.
+    mine = uuid.uuid4().hex[:8].upper()
+    done = client.put(url, headers=H(admin), json={"batch": " 02 ", "register_number": f"TST/02/{mine}"}).json()
+    assert (done["batch"], done["register_number"]) == ("02", f"TST/02/{mine}")
     kept = client.put(url, headers=H(admin), json={"full_name": "Renamed"}).json()  # fields left out are kept
-    assert (kept["batch"], kept["register_number"]) == ("02", f"TST/02/{last}")
+    assert (kept["batch"], kept["register_number"]) == ("02", f"TST/02/{mine}")
     only_batch = client.put(url, headers=H(admin), json={"batch": "03"})  # the number would still say 02
     assert only_batch.status_code == 400 and "must look like" in only_batch.json()["detail"]
     cleared = client.put(url, headers=H(admin), json={"batch": "", "register_number": ""}).json()

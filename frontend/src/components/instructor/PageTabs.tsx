@@ -1,59 +1,50 @@
 "use client";
 
-import { KeyboardEvent, useRef } from "react";
+import { KeyboardEvent, ReactNode, useRef } from "react";
 
-export type DashboardTab = "grading" | "integrity" | "batch" | "setup";
-
-const TABS: { id: DashboardTab; label: string }[] = [
-  { id: "grading", label: "Submissions & grading" },
-  { id: "integrity", label: "Similarity" },
-  { id: "batch", label: "Batch evaluate" },
-  { id: "setup", label: "Assignments & rubrics" },
-];
-
-export function isDashboardTab(value: string | null): value is DashboardTab {
-  return TABS.some((t) => t.id === value);
-}
+export type TabSpec<T extends string> = { id: T; label: string; badge?: ReactNode };
 
 /** The props of one tab's panel. Hidden panels stay mounted, so a running check or an unsaved grade survives a tab switch. */
-export function tabPanelProps(id: DashboardTab, current: DashboardTab) {
+export function tabPanelProps(id: string, current: string) {
   return { id: `tabpanel-${id}`, role: "tabpanel", "aria-labelledby": `tab-${id}`, hidden: id !== current };
 }
 
-/** The tab bar of the instructor dashboard. Arrow keys, Home and End move between the tabs. */
-export default function DashboardTabs({
+/** A tab bar for the instructor pages (the subject page and the assignment page). Arrow keys, Home and End move between the tabs. */
+export default function PageTabs<T extends string>({
+  tabs,
   tab,
   onChange,
-  toGrade,
+  label,
 }: {
-  tab: DashboardTab;
-  onChange: (tab: DashboardTab) => void;
-  toGrade: number;
+  tabs: TabSpec<T>[];
+  tab: T;
+  onChange: (tab: T) => void;
+  label: string;
 }) {
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
-    const i = TABS.findIndex((t) => t.id === tab);
+    const i = tabs.findIndex((t) => t.id === tab);
     const to =
-      e.key === "ArrowRight" ? (i + 1) % TABS.length
-      : e.key === "ArrowLeft" ? (i - 1 + TABS.length) % TABS.length
+      e.key === "ArrowRight" ? (i + 1) % tabs.length
+      : e.key === "ArrowLeft" ? (i - 1 + tabs.length) % tabs.length
       : e.key === "Home" ? 0
-      : e.key === "End" ? TABS.length - 1
+      : e.key === "End" ? tabs.length - 1
       : null;
     if (to === null) return;
     e.preventDefault();
-    onChange(TABS[to].id);
-    refs.current[TABS[to].id]?.focus();
+    onChange(tabs[to].id);
+    refs.current[tabs[to].id]?.focus();
   }
 
   return (
     <div
       role="tablist"
-      aria-label="Dashboard sections"
+      aria-label={label}
       onKeyDown={onKeyDown}
       className="mt-4 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-gray-200"
     >
-      {TABS.map((t) => {
+      {tabs.map((t) => {
         const active = t.id === tab;
         return (
           <button
@@ -75,11 +66,7 @@ export default function DashboardTabs({
             }`}
           >
             {t.label}
-            {t.id === "grading" && toGrade > 0 && (
-              <span className="ml-2 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-semibold text-yellow-800">
-                {toGrade} to grade
-              </span>
-            )}
+            {t.badge}
           </button>
         );
       })}

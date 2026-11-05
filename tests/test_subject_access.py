@@ -1,6 +1,7 @@
-"""How a student gets into a subject: the instructor opens it with a password (PUT /instructor/subjects/{id}/access),
-the student sees the open subjects (GET /student/open-subjects) and joins one with the password
-(POST /student/subjects/{id}/join)."""
+"""How a student gets into a subject: every subject is listed to every student (GET /student/subjects), but only a
+student who joined can see its assignments. The student joins with the subject's password
+(POST /student/subjects/{id}/join) once the instructor has set the password and allowed registration
+(PUT /instructor/subjects/{id}/access)."""
 
 import sys
 from pathlib import Path
@@ -38,52 +39,66 @@ def _my_subject_ids(student):
     return [s["id"] for s in client.get("/auth/me", headers=H(student)).json()["subjects"]]
 
 
-def _open_ids(student):
-    return [s["id"] for s in client.get("/student/open-subjects", headers=H(student)).json()]
+def _listed(student):
+    """Every subject the student is shown: id -> the entry."""
+    rows = client.get("/student/subjects", headers=H(student)).json()
+    return {s["id"]: s for s in rows}
 
 
-def test_a_subject_is_closed_until_the_instructor_opens_it():
+def test_a_new_subject_is_listed_to_students_but_cannot_be_joined_until_allowed():
     _, subject, instructor, student = _setup()
     r = client.get(f"/instructor/subjects/{subject['id']}/access", headers=H(instructor))
     assert r.status_code == 200 and r.json() == {"open": False, "password": ""}
-    assert subject["id"] not in _open_ids(student)
-    assert _join(student, subject, "anything").status_code == 404
+
+    shown = _listed(student)[subject["id"]]  # shown at once, but not joined and registration is not open
+    assert (shown["joined"], shown["registration_open"]) == (False, False)
+    refused = _join(student, subject, "anything")
+    assert refused.status_code == 403 and "not open yet" in refused.json()["detail"]
     assert _my_subject_ids(student) == []
 
 
-def test_an_open_subject_is_joined_with_its_password():
+def test_a_listed_subject_is_joined_with_its_password_once_allowed():
     _, subject, instructor, student = _setup()
     r = _open(instructor, subject, "  Secret 1 ")
     assert r.status_code == 200 and r.json() == {"open": True, "password": "Secret 1"}  # trimmed, readable back
 
-    listed = {s["id"]: s for s in client.get("/student/open-subjects", headers=H(student)).json()}
-    assert subject["id"] in listed
-    assert {"id", "name", "code", "batch", "instructors"} <= set(listed[subject["id"]])
-    assert "password" not in listed[subject["id"]]  # a student never sees it
-    assert listed[subject["id"]]["instructors"] == ["Test Instructor"]
+    rows = _listed(student)
+    assert rows[subject["id"]]["registration_open"] is True and rows[subject["id"]]["joined"] is False
+    assert {"id", "name", "code", "batch", "teachers", "joined", "registration_open"} <= set(rows[subject["id"]])
+    assert "password" not in rows[subject["id"]]  # a student never sees it
+    # The teachers' names are shown to everyone, their e-mail only once the student has joined.
+    assert rows[subject["id"]]["teachers"] == [{"name": "Test Instructor", "email": ""}]
 
     assert _join(student, subject, "wrong").status_code == 403
     assert _my_subject_ids(student) == []
     assert _join(student, subject, "Secret 1").status_code == 200
     assert _my_subject_ids(student) == [subject["id"]]
-    assert subject["id"] not in _open_ids(student)  # joined: no longer offered
+    after = _listed(student)[subject["id"]]  # still listed, now as one of theirs
+    assert after["joined"] is True
+    assert [t["name"] for t in after["teachers"]] == ["Test Instructor"] and "@" in after["teachers"][0]["email"]
     assert _join(student, subject, "wrong").status_code == 200  # already in: nothing to check, nothing doubled
     assert _my_subject_ids(student) == [subject["id"]]
 
 
 def test_a_joined_student_can_use_the_subject():
-    """Joining is a normal enrolment: the student now sees the subject's assignments."""
+    """Joining is a normal enrolment: only then can the student open the subject and see its assignments."""
     from tests.auth_helpers import create_assignment
 
     _, subject, instructor, student = _setup()
     assignment = create_assignment(client, instructor, subject["id"])
     assert client.get("/assignments", headers=H(student)).json() == []
+    # Listed, but its assignments stay closed to a student who has not joined.
+    assert client.get(f"/assignments?subject_id={subject['id']}", headers=H(student)).status_code == 403
+    assert client.get(f"/assignments/{assignment['id']}", headers=H(student)).status_code in (403, 404)
     _open(instructor, subject)
     assert _join(student, subject, "join-me").status_code == 200
     assert [a["id"] for a in client.get("/assignments", headers=H(student)).json()] == [assignment["id"]]
+    assert [a["id"] for a in client.get(f"/assignments?subject_id={subject['id']}", headers=H(student)).json()] == [
+        assignment["id"]
+    ]
 
 
-def test_opening_needs_a_password_and_closing_keeps_it():
+def test_allowing_needs_a_password_and_switching_off_keeps_it():
     _, subject, instructor, _student = _setup()
     url = f"/instructor/subjects/{subject['id']}/access"
     assert client.put(url, headers=H(instructor), json={"open": True}).status_code == 400  # no password yet
@@ -97,15 +112,25 @@ def test_opening_needs_a_password_and_closing_keeps_it():
     assert client.put(url, headers=H(instructor), json={"open": True, "password": ""}).status_code == 400  # removed
 
 
-def test_closing_stops_new_students_but_keeps_the_ones_in():
+def test_a_password_alone_does_not_open_registration():
+    """A password with registration switched off: still listed, still not joinable."""
+    _, subject, instructor, student = _setup()
+    client.put(f"/instructor/subjects/{subject['id']}/access", headers=H(instructor),
+               json={"open": False, "password": "ready"})
+    assert _listed(student)[subject["id"]]["registration_open"] is False
+    assert _join(student, subject, "ready").status_code == 403
+
+
+def test_switching_registration_off_stops_new_students_but_keeps_the_ones_in():
     admin, subject, instructor, student = _setup()
     _open(instructor, subject)
     assert _join(student, subject, "join-me").status_code == 200
     client.put(f"/instructor/subjects/{subject['id']}/access", headers=H(instructor), json={"open": False})
 
     _, late = create_student(client, admin, [])
-    assert subject["id"] not in _open_ids(late)
-    assert _join(late, subject, "join-me").status_code == 404
+    assert _listed(late)[subject["id"]]["registration_open"] is False  # still listed
+    assert _join(late, subject, "join-me").status_code == 403
+    assert _my_subject_ids(late) == []
     assert _my_subject_ids(student) == [subject["id"]]  # still in
 
 
@@ -137,5 +162,5 @@ def test_only_students_join():
     _open(instructor, subject)
     url = f"/student/subjects/{subject['id']}/join"
     assert client.post(url, headers=H(instructor), json={"password": "join-me"}).status_code == 403
-    assert client.get("/student/open-subjects", headers=H(instructor)).status_code == 403
+    assert client.get("/student/subjects", headers=H(instructor)).status_code == 403
     assert client.post("/student/subjects/999999/join", headers=H(student), json={"password": "x"}).status_code == 404

@@ -31,7 +31,7 @@ def test_students_see_upcoming_assignments_of_their_subjects_with_only_name_and_
     assert r.status_code == 200, r.text
     upcoming = r.json()
     assert [a["name"] for a in upcoming] == ["Opens tomorrow", "Opens next week"]  # soonest first, own subject only
-    assert set(upcoming[1]) == {"name", "subject_name", "assignment_type", "available_from", "deadline"}
+    assert set(upcoming[1]) == {"name", "subject_id", "subject_name", "assignment_type", "available_from", "deadline"}
     assert upcoming[1]["subject_name"] == subject["name"]
     assert datetime.fromisoformat(upcoming[1]["available_from"].replace("Z", "+00:00")) == datetime.fromisoformat(
         later["available_from"].replace("Z", "+00:00"))

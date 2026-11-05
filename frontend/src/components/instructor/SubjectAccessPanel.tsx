@@ -5,9 +5,10 @@ import { apiFetch, SubjectAccess } from "@/lib/api";
 import Message, { MessageState } from "@/components/Message";
 
 /**
- * "Student access" of one subject: the instructor sets a password and opens the subject to students. Every
- * student then sees it under "Join a subject" and gets in by typing the password (GET/PUT
- * /instructor/subjects/{id}/access). Closing it stops new students joining; the ones already in stay.
+ * "Student access" of one subject: every student sees the subject under "Join a subject" as soon as it exists. The
+ * instructor sets a password and allows registration, and from then on a student gets in by typing the password
+ * (GET/PUT /instructor/subjects/{id}/access). Switching registration off stops new students joining; the ones
+ * already in stay.
  */
 export default function SubjectAccessPanel({ subjectId }: { subjectId: number }) {
   const [saved, setSaved] = useState<SubjectAccess | null>(null);
@@ -45,8 +46,8 @@ export default function SubjectAccessPanel({ subjectId }: { subjectId: number })
       setPassword(a.password);
       setMsg({
         text: a.open
-          ? "Saved. Students can now see this subject and join it with the password."
-          : "Saved. The subject is closed: no new students can join.",
+          ? "Saved. Students can now register for this subject with the password."
+          : "Saved. Registration is off: no new students can join.",
         kind: "success",
       });
     } catch (err) {
@@ -67,13 +68,14 @@ export default function SubjectAccessPanel({ subjectId }: { subjectId: number })
             }`}
             data-testid="subject-access-status"
           >
-            {saved.open ? "Open to students" : "Closed"}
+            {saved.open ? "Registration open" : "Registration closed"}
           </span>
         )}
       </div>
       <p className="mt-1 text-sm text-gray-600">
-        Students are not added to a subject by the admin. Set a password and open the subject: students then see it
-        under &ldquo;Join a subject&rdquo; and get in by typing the password. Share the password with them yourself.
+        Students are not added to a subject by the admin. Every student already sees this subject under &ldquo;Join a
+        subject&rdquo;. Set a password and allow registration: students can then join by typing the password. Share
+        the password with them yourself.
       </p>
       <form onSubmit={save} className="mt-3">
         <label className="block text-sm font-semibold" htmlFor="subject-join-password">
@@ -97,7 +99,7 @@ export default function SubjectAccessPanel({ subjectId }: { subjectId: number })
             className="h-4 w-4"
             data-testid="subject-open-toggle"
           />
-          Open this subject to students
+          Allow students to register for this subject
         </label>
         <button
           disabled={saving || saved === null}

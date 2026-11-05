@@ -3,10 +3,13 @@ the top-level `README.md` for the whole system). Four routes, one per
 role/screen:
 
 - `/login` -- single login page, redirects to the right dashboard by role
-- `/admin` -- three tabs (Subjects, Instructors, Students): create and edit them, assign subjects
+- `/admin` -- three tabs (Subjects, Instructors, Students): create and edit them; subjects and instructors are linked from either side
 - `/instructor` -- the instructor's subjects as boxes
-- `/instructor/subjects/<id>` -- one subject: assignments, rubrics, similarity check, auto-evaluate, manual grading
-- `/student` -- upload code/report/video for an enrolled subject
+- `/instructor/subjects/<id>` -- one subject, two tabs: Assignments (create, edit, delete, Open; student access) and Rubrics
+- `/instructor/subjects/<id>/assignments/<assignment id>` -- one assignment: Submissions & grading, Similarity, Batch evaluate
+- `/instructor/assignments/new` and `/instructor/assignments/<id>` -- create and edit an assignment; both go back to the subject page
+- `/student` -- every subject as a box; each opens its own page
+- `/student/subjects/<id>` -- one subject. Not joined: the teachers' names and a password box (the page reloads after a right password). Joined: the teachers with their e-mail, and the assignments (upload code/report/video, or do a code challenge)
 
 Stack: Next.js 16 (App Router, Turbopack), React 19, TypeScript, Tailwind
 CSS v4. All API access goes through `src/lib/api.ts` (`apiFetch`), which

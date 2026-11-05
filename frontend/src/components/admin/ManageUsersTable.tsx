@@ -1,39 +1,9 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { apiFetch, Subject, subjectLabel, UserInfo } from "@/lib/api";
+import { apiFetch, UserInfo } from "@/lib/api";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import Message, { MessageState } from "@/components/Message";
-
-export function SubjectCheckboxes({
-  id,
-  subjects,
-  checked,
-  onToggle,
-}: {
-  id: string;
-  subjects: Subject[];
-  checked: Set<number>;
-  onToggle: (id: number) => void;
-}) {
-  if (subjects.length === 0) {
-    return <p className="text-sm text-gray-500">Add a subject above first.</p>;
-  }
-  return (
-    <div id={id} className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-gray-300 px-3 py-2">
-      {subjects.map((s) => (
-        <label key={s.id} className="flex items-center gap-2 text-sm font-normal">
-          <input type="checkbox" checked={checked.has(s.id)} onChange={() => onToggle(s.id)} className="h-4 w-4" />
-          {subjectLabel(s)}
-        </label>
-      ))}
-    </div>
-  );
-}
-
-function subjectNames(subjects: Subject[]): string {
-  return subjects.length ? subjects.map((s) => s.name).join(", ") : "(none)";
-}
 
 type UserGroup = { key: string; label: string; users: UserInfo[] };
 
@@ -130,10 +100,10 @@ export default function ManageUsersTable({
   }
 
   const cell = "border-b border-gray-200 px-3 py-2";
-  // Every row has four cells: an instructor's are name, email, subjects and actions; a student's are name,
-  // register number, email and actions.
-  const columns = 4;
   const isStudent = role === "student";
+  // An instructor's row has three cells: name, email and actions. A student's has four: name, register number,
+  // email and actions.
+  const columns = isStudent ? 4 : 3;
   const query = search.trim().toLowerCase();
   // The batches there are, for the Batch box. A chosen batch that no student has any more counts as "all".
   const batchOptions = isStudent ? groupByBatch(users) : [];
@@ -205,7 +175,6 @@ export default function ManageUsersTable({
               <th className={cell}>Name</th>
               {isStudent && <th className={cell}>Register no.</th>}
               <th className={cell}>Email</th>
-              {!isStudent && <th className={cell}>Subjects</th>}
               <th className={cell}>Actions</th>
             </tr>
           </thead>
@@ -235,7 +204,6 @@ export default function ManageUsersTable({
                 <td className={cell}>{u.full_name}</td>
                 {isStudent && <td className={cell}>{u.register_number || "—"}</td>}
                 <td className={cell}>{u.email}</td>
-                {!isStudent && <td className={cell}>{subjectNames(u.subjects)}</td>}
                 <td className={`${cell} whitespace-nowrap`}>
                   <button
                     type="button"

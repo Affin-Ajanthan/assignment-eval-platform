@@ -211,30 +211,33 @@ export default function BatchEvaluateSection({
     <section className="mt-6 card">
       <h2 className="text-xl font-semibold">Evaluate a whole assignment</h2>
       <p className="mt-1 text-sm text-gray-600">
-        Runs the automated evaluation for every submission of one assignment (one after another, or several at a time
+        Runs the automated evaluation for every submission to this assignment (one after another, or several at a time
         when the server is set up for it). Run the similarity
         check first so its flags are included. Automated results are a second opinion; your manual grade always counts.
       </p>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <div>
-          <label className="block text-sm font-semibold" htmlFor="batch-assignment">
-            Assignment
-          </label>
-          <select
-            id="batch-assignment"
-            value={assignment}
-            disabled={running}
-            onChange={(e) => setAssignment(e.target.value)}
-            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-          >
-            {assignmentNames.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Given a single assignment (the assignment page) there is nothing to choose. */}
+        {assignmentNames.length > 1 && (
+          <div>
+            <label className="block text-sm font-semibold" htmlFor="batch-assignment">
+              Assignment
+            </label>
+            <select
+              id="batch-assignment"
+              value={assignment}
+              disabled={running}
+              onChange={(e) => setAssignment(e.target.value)}
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            >
+              {assignmentNames.map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div>
           <label className="block text-sm font-semibold" htmlFor="batch-rubric">
             Rubric

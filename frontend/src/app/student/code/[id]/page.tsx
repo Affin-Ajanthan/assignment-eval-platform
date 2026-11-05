@@ -149,7 +149,10 @@ export default function CodeChallengePage() {
     <>
       <AccountBar user={user} width="max-w-4xl" />
       <main className="mx-auto max-w-4xl px-4 py-8">
-      <Link href="/student" className="inline-block text-sm font-semibold text-blue-700 hover:underline">
+      <Link
+        href={assignment ? `/student/subjects/${assignment.subject_id}` : "/student"}
+        className="inline-block text-sm font-semibold text-blue-700 hover:underline"
+      >
         ← Back to my assignments
       </Link>
       <div className="mt-3">{body}</div>

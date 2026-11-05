@@ -94,6 +94,12 @@
 
 /* Element defaults, in the base layer so a utility class on an element still wins. */
 @layer base {
+  /* The header stays at the top while the page scrolls, so anything scrolled into view (an edit form, a #link)
+     stops below it instead of under it. */
+  html {
+    scroll-padding-top: 5rem;
+  }
+
   body {
     background: var(--color-page);
     color: var(--color-gray-800);
