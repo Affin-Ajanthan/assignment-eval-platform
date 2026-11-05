@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -37,6 +36,7 @@ import { formatDateTime, formatMark } from "@/lib/datetime";
 import { lateText, markWithPenalty } from "@/lib/late";
 import Message, { MessageState } from "@/components/Message";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
+import PageHeader from "@/components/PageHeader";
 import PageLoading from "@/components/PageLoading";
 
 /** Inline error for one criterion's mark, or null when it is fine. An empty box
@@ -995,19 +995,16 @@ export default function InstructorAssignmentPage() {
   const assignment = assignments[0] ?? null;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
-      <AccountBar user={user} context={currentSubject ? subjectLabel(currentSubject) : undefined} />
+    <>
+      <AccountBar user={user} width="max-w-6xl" />
+      <main className="mx-auto max-w-6xl px-4 py-8">
 
-      <Link href={subjectPage} className="text-sm font-semibold text-blue-700 hover:underline" data-testid="back-to-subject">
-        ← {currentSubject ? subjectLabel(currentSubject) : "Subject"}
-      </Link>
-      <h1 className="mt-2 text-2xl font-bold" data-testid="assignment-title">
-        {assignment?.name ?? "Assignment"}
-      </h1>
-      <p className="mt-1 text-sm text-gray-600">
-        Grade the submissions to this assignment, check them for copying, or run the automated evaluator on all of them
-        -- you always have the final say.
-      </p>
+      <PageHeader
+        divider={false}
+        back={{ href: subjectPage, label: currentSubject ? subjectLabel(currentSubject) : "Subject" }}
+        title={assignment?.name ?? "Assignment"}
+        description="Grade the submissions to this assignment, check them for copying, or run the automated evaluator on all of them -- you always have the final say."
+      />
 
       {subjectId !== null && assignment && (
         <>
@@ -1532,6 +1529,7 @@ export default function InstructorAssignmentPage() {
           </div>
         </>
       )}
-    </div>
+      </main>
+    </>
   );
 }

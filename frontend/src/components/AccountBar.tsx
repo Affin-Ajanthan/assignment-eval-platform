@@ -11,7 +11,8 @@ const ROLE_LABEL: Record<UserInfo["role"], string> = {
 };
 
 /** The header of every signed-in page: a full-width navy bar with the platform's name (back to the user's
- * dashboard), who is signed in, and Log out. `width` lines its content up with the page below it. */
+ * dashboard), who is signed in, and Log out. It stays fixed at the top of the window while the page scrolls.
+ * `width` lines its content up with the page below it. */
 export default function AccountBar({
   user,
   width = "max-w-6xl",
@@ -27,7 +28,7 @@ export default function AccountBar({
   }
 
   return (
-    <header className="border-b-2 border-accent bg-brand-700 text-white">
+    <header className="sticky top-0 z-30 border-b-2 border-accent bg-brand-700 text-white shadow-sm">
       <div className={`mx-auto flex ${width} flex-wrap items-center justify-between gap-3 px-4 py-3`}>
         <div className="flex min-w-0 items-center gap-3">
           <Link

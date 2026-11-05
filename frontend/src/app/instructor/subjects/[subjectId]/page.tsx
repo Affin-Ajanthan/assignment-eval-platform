@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, Assignment, Rubric, subjectLabel } from "@/lib/api";
@@ -10,6 +9,7 @@ import AssignmentsSection from "@/components/instructor/AssignmentsSection";
 import PageTabs, { tabPanelProps } from "@/components/instructor/PageTabs";
 import RubricsSection from "@/components/instructor/RubricsSection";
 import SubjectAccessPanel from "@/components/instructor/SubjectAccessPanel";
+import PageHeader from "@/components/PageHeader";
 import PageLoading from "@/components/PageLoading";
 
 type SubjectTab = "assignments" | "rubrics";
@@ -64,19 +64,16 @@ export default function InstructorSubjectPage() {
   const currentSubject = user.subjects.find((s) => s.id === subjectId);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
-      <AccountBar user={user} context={currentSubject ? subjectLabel(currentSubject) : undefined} />
+    <>
+      <AccountBar user={user} width="max-w-6xl" />
+      <main className="mx-auto max-w-6xl px-4 py-8">
 
-      <Link href="/instructor" className="text-sm font-semibold text-blue-700 hover:underline">
-        ← All subjects
-      </Link>
-      <h1 className="mt-2 text-2xl font-bold" data-testid="subject-title">
-        {currentSubject ? subjectLabel(currentSubject) : "Subject"}
-      </h1>
-      <p className="mt-1 text-sm text-gray-600">
-        Create and edit the assignments and rubrics of this subject. Open an assignment to grade its submissions, check
-        them for copying or run the automated evaluator.
-      </p>
+      <PageHeader
+        divider={false}
+        back={{ href: "/instructor", label: "All subjects" }}
+        title={currentSubject ? subjectLabel(currentSubject) : "Subject"}
+        description="Create and edit the assignments and rubrics of this subject. Open an assignment to grade its submissions, check them for copying or run the automated evaluator."
+      />
 
       {subjectId !== null && (
         <>
@@ -100,6 +97,7 @@ export default function InstructorSubjectPage() {
           </div>
         </>
       )}
-    </div>
+      </main>
+    </>
   );
 }
