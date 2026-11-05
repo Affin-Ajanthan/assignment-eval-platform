@@ -174,6 +174,7 @@ class SubjectCreate(BaseModel):
     name: str
     code: str
     batch: str = Field(default="", max_length=100)
+    instructor_ids: list[int] = []  # the instructors who teach it
 
 
 class SubjectUpdate(BaseModel):
@@ -181,6 +182,7 @@ class SubjectUpdate(BaseModel):
     name: Optional[str] = Field(default=None, max_length=200)
     code: Optional[str] = Field(default=None, max_length=50)
     batch: Optional[str] = Field(default=None, max_length=100)
+    instructor_ids: Optional[list[int]] = None  # replaces the instructors who teach it
 
 
 class SubjectOut(BaseModel):
@@ -188,6 +190,8 @@ class SubjectOut(BaseModel):
     name: str
     code: str
     batch: str = ""
+    # Admin subject endpoints only: the instructors who teach it (empty everywhere else).
+    instructor_ids: list[int] = []
     created_at: UTCDateTime
 
     model_config = ConfigDict(from_attributes=True)
@@ -890,27 +894,58 @@ def _check_subject_code_free(db: Session, code: str, batch: str, own_id: Optiona
         raise HTTPException(400, f"Subject code '{code}' already exists in {where}")
 
 
+def _require_instructors_exist(db: Session, instructor_ids: list[int]) -> None:
+    found = {u.id for u in db.query(User).filter(User.id.in_(instructor_ids), User.role == "instructor")}
+    missing = set(instructor_ids) - found
+    if missing:
+        raise HTTPException(400, f"Unknown instructor id(s): {sorted(missing)}")
+
+
+def _set_subject_instructors(db: Session, subject: Subject, instructor_ids: list[int]) -> None:
+    """Make these (and only these) instructors teach the subject. The caller commits."""
+    db.query(InstructorAssignment).filter(InstructorAssignment.subject_id == subject.id).delete()
+    for iid in dict.fromkeys(instructor_ids):
+        db.add(InstructorAssignment(instructor_id=iid, subject_id=subject.id))
+
+
+def _admin_subject_out(subject: Subject, instructor_ids: list[int]) -> SubjectOut:
+    out = SubjectOut.model_validate(subject)
+    out.instructor_ids = sorted(instructor_ids)
+    return out
+
+
+def _subject_instructors(db: Session, subject_id: int) -> list[int]:
+    return [row.instructor_id for row in db.query(InstructorAssignment).filter_by(subject_id=subject_id)]
+
+
 @app.post("/admin/subjects", response_model=SubjectOut)
 def create_subject(payload: SubjectCreate, _admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     batch = _student_batch(payload.batch) or ""
     _check_subject_code_free(db, payload.code, batch)
+    _require_instructors_exist(db, payload.instructor_ids)
     subject = Subject(name=payload.name, code=payload.code, batch=batch)
     db.add(subject)
+    db.flush()  # the subject's id, for the instructors
+    _set_subject_instructors(db, subject, payload.instructor_ids)
     db.commit()
     db.refresh(subject)
-    return subject
+    return _admin_subject_out(subject, _subject_instructors(db, subject.id))
 
 
 @app.get("/admin/subjects", response_model=list[SubjectOut])
 def list_subjects(_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    return db.query(Subject).order_by(Subject.name).all()
+    teachers: dict[int, list[int]] = {}
+    for row in db.query(InstructorAssignment).all():
+        teachers.setdefault(row.subject_id, []).append(row.instructor_id)
+    return [_admin_subject_out(s, teachers.get(s.id, [])) for s in db.query(Subject).order_by(Subject.name).all()]
 
 
 @app.put("/admin/subjects/{subject_id}", response_model=SubjectOut)
 def update_subject(
     subject_id: int, payload: SubjectUpdate, _admin: User = Depends(require_admin), db: Session = Depends(get_db)
 ):
-    """Rename a subject or change its code or batch. Everything else refers to it by id, so nothing else moves."""
+    """Rename a subject or change its code, batch or instructors. Everything else refers to it by id, so nothing else
+    moves."""
     subject = db.get(Subject, subject_id)
     if not subject:
         raise HTTPException(404, "Subject not found")
@@ -928,9 +963,12 @@ def update_subject(
         subject.batch = _student_batch(payload.batch) or ""
     if payload.code is not None or payload.batch is not None:
         _check_subject_code_free(db, subject.code, subject.batch, subject.id)
+    if payload.instructor_ids is not None:
+        _require_instructors_exist(db, payload.instructor_ids)
+        _set_subject_instructors(db, subject, payload.instructor_ids)
     db.commit()
     db.refresh(subject)
-    return subject
+    return _admin_subject_out(subject, _subject_instructors(db, subject.id))
 
 
 # ---- Admin: instructors -------------------------------------------------------

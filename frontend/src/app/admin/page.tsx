@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { apiFetch, Subject, UserInfo } from "@/lib/api";
+import { apiFetch, Subject, subjectLabel, UserInfo } from "@/lib/api";
 import { useRequireRole } from "@/lib/useRequireRole";
 import AccountBar from "@/components/AccountBar";
 import Message, { MessageState } from "@/components/Message";
@@ -9,7 +9,8 @@ import AdminTabs, { adminPanelProps, AdminTab, isAdminTab } from "@/components/a
 import ManageSubjectsTable from "@/components/admin/ManageSubjectsTable";
 import StudentIdFields, { BatchCombobox } from "@/components/admin/StudentIdFields";
 import { batchList, ownNumberOf, registerNumberFor } from "@/lib/registerNumber";
-import ManageUsersTable, { SubjectCheckboxes } from "@/components/admin/ManageUsersTable";
+import ManageUsersTable from "@/components/admin/ManageUsersTable";
+import MultiSelect from "@/components/admin/MultiSelect";
 import PageLoading from "@/components/PageLoading";
 import PageHeader, { StatTile } from "@/components/PageHeader";
 
@@ -36,6 +37,7 @@ export default function AdminPage() {
   const [subjectName, setSubjectName] = useState("");
   const [subjectCode, setSubjectCode] = useState("");
   const [subjectBatch, setSubjectBatch] = useState("");
+  const [subjectInstructors, setSubjectInstructors] = useState<Set<number>>(new Set()); // who teaches it
   const [subjectMsg, setSubjectMsg] = useState<MessageState>(null);
   // The subject whose details the form holds (Edit in the list fills the form), or null while it adds a new one.
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
@@ -90,6 +92,7 @@ export default function AdminPage() {
     setSubjectName("");
     setSubjectCode("");
     setSubjectBatch("");
+    setSubjectInstructors(new Set());
   }
 
   /** Edit in the subjects list: the form takes the subject's details and comes into view. */
@@ -98,6 +101,7 @@ export default function AdminPage() {
     setSubjectName(s.name);
     setSubjectCode(s.code);
     setSubjectBatch(s.batch ?? "");
+    setSubjectInstructors(new Set(s.instructor_ids ?? []));
     setSubjectMsg(null);
     showForm(subjectFormRef.current);
   }
@@ -107,7 +111,12 @@ export default function AdminPage() {
     setSubjectMsg(null);
     const editing = editingSubject;
     try {
-      const details = { name: subjectName, code: subjectCode, batch: subjectBatch };
+      const details = {
+        name: subjectName,
+        code: subjectCode,
+        batch: subjectBatch,
+        instructor_ids: Array.from(subjectInstructors),
+      };
       if (editing) {
         await apiFetch(`/admin/subjects/${editing.id}`, { method: "PUT", json: details });
         setSubjectMsg({ text: "Saved.", kind: "success" });
@@ -116,7 +125,8 @@ export default function AdminPage() {
         setSubjectMsg({ text: "Subject added.", kind: "success" });
       }
       clearSubjectForm();
-      await loadSubjects();
+      // The instructors' own subject lists change with it.
+      await Promise.all([loadSubjects(), loadInstructors()]);
     } catch (err) {
       setSubjectMsg({
         text: `Failed to ${editing ? "save" : "add"} subject: ${err instanceof Error ? err.message : err}`,
@@ -173,7 +183,8 @@ export default function AdminPage() {
         setInstructorMsg({ text: "Instructor created.", kind: "success" });
       }
       clearInstructorForm();
-      await loadInstructors();
+      // The subjects the instructor was given or lost also change who teaches those subjects.
+      await Promise.all([loadInstructors(), loadSubjects()]);
     } catch (err) {
       setInstructorMsg({
         text: `Failed to ${editing ? "save" : "create"} instructor: ${err instanceof Error ? err.message : err}`,
@@ -244,13 +255,6 @@ export default function AdminPage() {
         kind: "error",
       });
     }
-  }
-
-  function toggleSet(set: Set<number>, id: number, setter: (s: Set<number>) => void) {
-    const next = new Set(set);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setter(next);
   }
 
   if (!ready || !user) return <PageLoading />;
@@ -326,6 +330,20 @@ export default function AdminPage() {
               onChange={setSubjectBatch}
               options={batches}
               testId="subject-batch"
+            />
+          </div>
+          <label className="block text-sm font-semibold" htmlFor="subject_instructors">
+            Instructors <span className="font-normal text-gray-500">(search and pick several)</span>
+          </label>
+          <div className="mb-3">
+            <MultiSelect
+              id="subject_instructors"
+              options={instructors.map((u) => ({ id: u.id, label: u.full_name, detail: u.email }))}
+              selected={subjectInstructors}
+              onChange={setSubjectInstructors}
+              placeholder="Search instructors..."
+              emptyText="No instructors yet. Add one in the Instructors tab."
+              testId="subject-instructors-input"
             />
           </div>
           <div className="flex gap-2">
@@ -415,13 +433,18 @@ export default function AdminPage() {
             placeholder={editingInstructor ? "" : "Shown once -- share it with them directly"}
             className="mt-1 mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
           />
-          <label className="block text-sm font-semibold">Subjects</label>
-          <div className="mt-1 mb-3">
-            <SubjectCheckboxes
+          <label className="block text-sm font-semibold" htmlFor="instructor-subjects">
+            Subjects <span className="font-normal text-gray-500">(search and pick several)</span>
+          </label>
+          <div className="mb-3">
+            <MultiSelect
               id="instructor-subjects"
-              subjects={subjects}
-              checked={instructorSubjects}
-              onToggle={(id) => toggleSet(instructorSubjects, id, setInstructorSubjects)}
+              options={subjects.map((s) => ({ id: s.id, label: subjectLabel(s) }))}
+              selected={instructorSubjects}
+              onChange={setInstructorSubjects}
+              placeholder="Search subjects..."
+              emptyText="No subjects yet. Add one in the Subjects tab."
+              testId="instructor-subjects-input"
             />
           </div>
           <div className="flex gap-2">

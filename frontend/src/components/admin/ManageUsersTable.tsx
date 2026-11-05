@@ -1,35 +1,9 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { apiFetch, Subject, subjectLabel, UserInfo } from "@/lib/api";
+import { apiFetch, UserInfo } from "@/lib/api";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import Message, { MessageState } from "@/components/Message";
-
-export function SubjectCheckboxes({
-  id,
-  subjects,
-  checked,
-  onToggle,
-}: {
-  id: string;
-  subjects: Subject[];
-  checked: Set<number>;
-  onToggle: (id: number) => void;
-}) {
-  if (subjects.length === 0) {
-    return <p className="text-sm text-gray-500">Add a subject above first.</p>;
-  }
-  return (
-    <div id={id} className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-gray-300 px-3 py-2">
-      {subjects.map((s) => (
-        <label key={s.id} className="flex items-center gap-2 text-sm font-normal">
-          <input type="checkbox" checked={checked.has(s.id)} onChange={() => onToggle(s.id)} className="h-4 w-4" />
-          {subjectLabel(s)}
-        </label>
-      ))}
-    </div>
-  );
-}
 
 type UserGroup = { key: string; label: string; users: UserInfo[] };
 

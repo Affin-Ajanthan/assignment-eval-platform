@@ -13,6 +13,8 @@ export interface Subject {
   name: string;
   code: string;
   batch?: string;
+  /** Admin lists only: the instructors who teach it. */
+  instructor_ids?: number[];
   created_at: string;
 }
 
