@@ -4,6 +4,7 @@ import { Fragment, useState } from "react";
 import { apiFetch, UserInfo } from "@/lib/api";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import Message, { MessageState } from "@/components/Message";
+import ListFilters, { batchKeyOf, batchOptionsFrom } from "@/components/admin/ListFilters";
 import Pagination, { clampPage, DEFAULT_PAGE_SIZE } from "@/components/admin/Pagination";
 
 type UserGroup = { key: string; label: string; users: UserInfo[] };
@@ -16,7 +17,7 @@ const byNameThenNumber = (a: UserInfo, b: UserInfo) =>
   natural(a.full_name, b.full_name) || natural(a.register_number ?? "", b.register_number ?? "") || a.id - b.id;
 
 /** The group a student is listed under, and the value of that batch in the Batch box. */
-const batchKey = (u: UserInfo) => ((u.batch ?? "").trim() ? `batch:${(u.batch ?? "").trim()}` : "no-batch");
+const batchKey = (u: UserInfo) => batchKeyOf(u.batch);
 
 /** Students grouped by batch, the batches in order and the students without one last. */
 function groupByBatch(users: UserInfo[]): UserGroup[] {
@@ -40,7 +41,8 @@ function groupByBatch(users: UserInfo[]): UserGroup[] {
  * `onEdit` hands the user to the page, which fills its own form with it. `highlightId` is the user that form is
  * editing: its row is marked.
  * Students are listed as name, register number and email, grouped by batch, and can be searched by name or
- * register number.
+ * register number. Instructors are searched by name or email. Both can be filtered by batch (an instructor's batches
+ * are those of their subjects).
  */
 export default function ManageUsersTable({
   role,
@@ -58,8 +60,8 @@ export default function ManageUsersTable({
   const base = role === "instructor" ? "/admin/instructors" : "/admin/students";
   const label = role === "instructor" ? "instructor" : "student";
 
-  const [search, setSearch] = useState(""); // students only
-  const [batchFilter, setBatchFilter] = useState("all"); // students only: "all" or a group key (see batchKey)
+  const [search, setSearch] = useState("");
+  const [batchFilter, setBatchFilter] = useState("all"); // "all" or a batch key (see batchKeyOf)
   const [pageNo, setPageNo] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE); // rows per page: 10, 20 or 50
   const [msg, setMsg] = useState<MessageState>(null);
@@ -108,20 +110,20 @@ export default function ManageUsersTable({
   // email and actions.
   const columns = isStudent ? 4 : 3;
   const query = search.trim().toLowerCase();
-  // The batches there are, for the Batch box. A chosen batch that no student has any more counts as "all".
-  const batchOptions = isStudent ? groupByBatch(users) : [];
-  const activeBatch = batchOptions.some((g) => g.key === batchFilter) ? batchFilter : "all";
-  const shown = isStudent
-    ? users
-        .filter(
-          (u) =>
-            (activeBatch === "all" || batchKey(u) === activeBatch) &&
-            (!query ||
-              u.full_name.toLowerCase().includes(query) ||
-              (u.register_number ?? "").toLowerCase().includes(query)),
-        )
-        .sort(byNameThenNumber)
-    : users;
+  // The batches a row belongs to: a student's own, or those of an instructor's subjects ("No batch" when none).
+  const keysOf = (u: UserInfo) =>
+    isStudent ? [batchKey(u)] : u.subjects.length ? u.subjects.map((s) => batchKeyOf(s.batch)) : ["no-batch"];
+  // The batches there are, for the Batch box. A chosen batch that nobody has any more counts as "all".
+  const batchOptions = batchOptionsFrom(users.map(keysOf));
+  const activeBatch = batchOptions.some((o) => o.key === batchFilter) ? batchFilter : "all";
+  const matching = users.filter(
+    (u) =>
+      (activeBatch === "all" || keysOf(u).includes(activeBatch)) &&
+      (!query ||
+        u.full_name.toLowerCase().includes(query) ||
+        (isStudent ? (u.register_number ?? "") : u.email).toLowerCase().includes(query)),
+  );
+  const shown = isStudent ? matching.sort(byNameThenNumber) : matching;
   // Only `pageSize` rows per page. Students are put in batch order first, so a batch is not scattered over pages.
   const ordered = isStudent ? groupByBatch(shown).flatMap((g) => g.users) : shown;
   const page = clampPage(pageNo, ordered.length, pageSize);
@@ -131,55 +133,24 @@ export default function ManageUsersTable({
   return (
     <>
       <Message state={msg} />
-      {isStudent && users.length > 0 && (
-        <div className="mt-2">
-          <div className="flex flex-wrap gap-3">
-            <div className="min-w-0 flex-1 sm:max-w-sm">
-              <label className="block text-sm font-semibold" htmlFor="student-search">
-                Search students
-              </label>
-              <input
-                id="student-search"
-                type="search"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPageNo(1);
-                }}
-                placeholder="Name or register number"
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                data-testid="student-search"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold" htmlFor="student-batch-filter">
-                Batch
-              </label>
-              <select
-                id="student-batch-filter"
-                value={activeBatch}
-                onChange={(e) => {
-                  setBatchFilter(e.target.value);
-                  setPageNo(1);
-                }}
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                data-testid="student-batch-filter"
-              >
-                <option value="all">All batches ({users.length})</option>
-                {batchOptions.map((g) => (
-                  <option key={g.key} value={g.key}>
-                    {g.label} ({g.users.length})
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          {(query || activeBatch !== "all") && (
-            <p className="mt-1 text-xs text-gray-500" data-testid="student-search-count">
-              {shown.length} of {users.length} students
-            </p>
-          )}
-        </div>
+      {users.length > 0 && (
+        <ListFilters
+          name={label}
+          placeholder={isStudent ? "Name or register number" : "Name or email"}
+          search={search}
+          onSearch={(v) => {
+            setSearch(v);
+            setPageNo(1);
+          }}
+          batchOptions={batchOptions}
+          batch={activeBatch}
+          onBatch={(k) => {
+            setBatchFilter(k);
+            setPageNo(1);
+          }}
+          total={users.length}
+          shown={shown.length}
+        />
       )}
       <div className="mt-2 overflow-x-auto">
         <table className="w-full text-sm">
