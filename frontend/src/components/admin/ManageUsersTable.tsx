@@ -4,6 +4,7 @@ import { Fragment, useState } from "react";
 import { apiFetch, UserInfo } from "@/lib/api";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import Message, { MessageState } from "@/components/Message";
+import Pagination, { clampPage, DEFAULT_PAGE_SIZE } from "@/components/admin/Pagination";
 
 type UserGroup = { key: string; label: string; users: UserInfo[] };
 
@@ -59,6 +60,8 @@ export default function ManageUsersTable({
 
   const [search, setSearch] = useState(""); // students only
   const [batchFilter, setBatchFilter] = useState("all"); // students only: "all" or a group key (see batchKey)
+  const [pageNo, setPageNo] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE); // rows per page: 10, 20 or 50
   const [msg, setMsg] = useState<MessageState>(null);
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -119,7 +122,11 @@ export default function ManageUsersTable({
         )
         .sort(byNameThenNumber)
     : users;
-  const groups: UserGroup[] = isStudent ? groupByBatch(shown) : [{ key: "all", label: "", users: shown }];
+  // Only `pageSize` rows per page. Students are put in batch order first, so a batch is not scattered over pages.
+  const ordered = isStudent ? groupByBatch(shown).flatMap((g) => g.users) : shown;
+  const page = clampPage(pageNo, ordered.length, pageSize);
+  const pageRows = ordered.slice((page - 1) * pageSize, page * pageSize);
+  const groups: UserGroup[] = isStudent ? groupByBatch(pageRows) : [{ key: "all", label: "", users: pageRows }];
 
   return (
     <>
@@ -135,7 +142,10 @@ export default function ManageUsersTable({
                 id="student-search"
                 type="search"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPageNo(1);
+                }}
                 placeholder="Name or register number"
                 className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                 data-testid="student-search"
@@ -148,7 +158,10 @@ export default function ManageUsersTable({
               <select
                 id="student-batch-filter"
                 value={activeBatch}
-                onChange={(e) => setBatchFilter(e.target.value)}
+                onChange={(e) => {
+                  setBatchFilter(e.target.value);
+                  setPageNo(1);
+                }}
                 className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                 data-testid="student-batch-filter"
               >
@@ -227,6 +240,16 @@ export default function ManageUsersTable({
           </tbody>
         </table>
       </div>
+      <Pagination
+        page={page}
+        total={ordered.length}
+        pageSize={pageSize}
+        onPage={setPageNo}
+        onPageSize={(n) => {
+          setPageSize(n);
+          setPageNo(1);
+        }}
+      />
       <ConfirmDialog request={confirm} busy={deleting} onCancel={() => !deleting && setConfirm(null)} />
     </>
   );
