@@ -33,7 +33,7 @@ export default function EditAssignmentPage() {
 
   if (!ready || !user) return <PageLoading />;
 
-  const back = assignment ? `/instructor?subject=${assignment.subject_id}&tab=setup` : "/instructor";
+  const back = assignment ? `/instructor/subjects/${assignment.subject_id}?tab=setup` : "/instructor";
   return (
     <AssignmentPageLayout
       user={user}

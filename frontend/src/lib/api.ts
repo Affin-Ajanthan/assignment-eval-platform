@@ -12,7 +12,28 @@ export interface Subject {
   id: number;
   name: string;
   code: string;
+  batch?: string;
   created_at: string;
+}
+
+/** "Algorithms (CS101)", or "Algorithms (CS101) · Batch 01" for a subject that has a batch. */
+export function subjectLabel(s: Pick<Subject, "name" | "code" | "batch">): string {
+  return `${s.name} (${s.code})${s.batch ? ` · Batch ${s.batch}` : ""}`;
+}
+
+/** A subject's student access, as the instructor sets it (GET/PUT /instructor/subjects/{id}/access). */
+export interface SubjectAccess {
+  open: boolean;
+  password: string;
+}
+
+/** A subject an instructor has opened that the student has not joined yet (GET /student/open-subjects). */
+export interface OpenSubject {
+  id: number;
+  name: string;
+  code: string;
+  batch: string;
+  instructors: string[];
 }
 
 export interface UserInfo {
@@ -23,6 +44,9 @@ export interface UserInfo {
   subjects: Subject[];
   /** Admin student list only: number of submissions. */
   submission_count?: number;
+  /** A student's batch and register number ("" when not given, and for other roles). */
+  batch?: string;
+  register_number?: string;
 }
 
 export interface LoginResult {

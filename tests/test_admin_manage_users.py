@@ -1,8 +1,9 @@
 """Admin edit and delete of instructor and student accounts:
-PUT/DELETE /admin/instructors/{id} and /admin/students/{id}."""
+PUT/DELETE /admin/instructors/{id} and /admin/students/{id}, and the edit of a subject: PUT /admin/subjects/{id}."""
 
 import io
 import sys
+import uuid
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -14,7 +15,8 @@ from app.main import BASE_DIR
 from app.main import app as fastapi_app
 from app.models import AutoEvaluation, Enrollment, Grade, InstructorAssignment, Submission, User
 from tests.auth_helpers import (
-    admin_token, auth_headers, create_instructor, create_student, create_subject, setup_subject_with_users, submit,
+    admin_token, auth_headers, create_instructor, create_student, create_subject, login, setup_subject_with_users,
+    submit,
 )
 
 client = TestClient(fastapi_app)
@@ -72,6 +74,155 @@ def test_edit_validation():
     assert client.put(url, headers=H(admin), json={"password": "abc"}).status_code == 400
     assert client.put(url, headers=H(admin), json={"subject_ids": [999999]}).status_code == 400
     assert client.put(url, headers=H(admin), json={"email": a["email"]}).status_code == 200  # own email is fine
+
+
+def test_admin_edits_a_subjects_name_and_code():
+    admin = admin_token(client)
+    a = create_subject(client, admin)
+    _, inst_tok = create_instructor(client, admin, [a["id"]])
+    url = f"/admin/subjects/{a['id']}"
+
+    r = client.put(url, headers=H(admin), json={"name": "  Renamed   Subject ", "code": " NEW-1 "})
+    assert r.status_code == 200, r.text
+    assert (r.json()["id"], r.json()["name"], r.json()["code"]) == (a["id"], "Renamed Subject", "NEW-1")
+    assert client.put(url, headers=H(admin), json={"name": "Only the name"}).json()["code"] == "NEW-1"  # kept
+    # The people in the subject see the change, since they refer to it by id.
+    mine = client.get("/auth/me", headers=H(inst_tok)).json()["subjects"]
+    assert [(s["id"], s["name"], s["code"]) for s in mine] == [(a["id"], "Only the name", "NEW-1")]
+
+    assert client.put(url, headers=H(admin), json={"name": "   "}).status_code == 400
+    assert client.put(url, headers=H(admin), json={"code": " "}).status_code == 400
+    assert client.put(url, headers=H(admin), json={"code": "NEW-1"}).status_code == 200  # its own code is fine
+    assert client.put("/admin/subjects/999999", headers=H(admin), json={"name": "X"}).status_code == 404
+    assert client.put(url, headers=H(inst_tok), json={"name": "Not allowed"}).status_code == 403
+
+
+def _new_subject(admin, code, batch=None):
+    body = {"name": "Algorithms", "code": code, **({} if batch is None else {"batch": batch})}
+    return client.post("/admin/subjects", headers=H(admin), json=body)
+
+
+def test_a_subject_has_a_batch_and_the_same_code_can_be_in_every_batch():
+    """Every batch has the same subjects with the same codes: the code is unique only within a batch."""
+    admin = admin_token(client)
+    code = f"DUP-{uuid.uuid4().hex[:8]}"
+
+    plain = _new_subject(admin, code)
+    assert plain.status_code == 200 and plain.json()["batch"] == ""  # a batch is optional
+    first = _new_subject(admin, code, " 01 ")
+    assert first.status_code == 200, first.text
+    assert first.json()["batch"] == "01"  # spaces trimmed
+    second = _new_subject(admin, code, "02")
+    assert second.status_code == 200, second.text
+    assert len({plain.json()["id"], first.json()["id"], second.json()["id"]}) == 3
+
+    # ...but not twice in one batch (or twice with no batch)
+    assert _new_subject(admin, code, "01").status_code == 400
+    assert _new_subject(admin, code).status_code == 400
+    assert _new_subject(admin, code, "a/b").status_code == 400  # a batch is part of a register number
+
+    listed = {s["id"]: s["batch"] for s in client.get("/admin/subjects", headers=H(admin)).json() if s["code"] == code}
+    assert listed == {plain.json()["id"]: "", first.json()["id"]: "01", second.json()["id"]: "02"}
+
+
+def test_admin_edits_a_subjects_batch():
+    admin = admin_token(client)
+    code = f"ED-{uuid.uuid4().hex[:8]}"
+    a = _new_subject(admin, code, "01").json()
+    b = _new_subject(admin, code, "02").json()
+    _, inst_tok = create_instructor(client, admin, [a["id"]])
+
+    r = client.put(f"/admin/subjects/{a['id']}", headers=H(admin), json={"batch": "03"})
+    assert r.status_code == 200 and (r.json()["batch"], r.json()["code"]) == ("03", code)
+    assert client.put(f"/admin/subjects/{a['id']}", headers=H(admin), json={"name": "Renamed"}).json()["batch"] == "03"
+    mine = client.get("/auth/me", headers=H(inst_tok)).json()["subjects"]
+    assert [(s["id"], s["batch"]) for s in mine] == [(a["id"], "03")]  # people in the subject see it
+
+    assert client.put(f"/admin/subjects/{a['id']}", headers=H(admin), json={"batch": "02"}).status_code == 400  # b has it
+    assert client.put(f"/admin/subjects/{b['id']}", headers=H(admin), json={"batch": "02"}).status_code == 200  # own
+    assert client.put(f"/admin/subjects/{a['id']}", headers=H(admin), json={"batch": ""}).json()["batch"] == ""
+
+
+def _new_student(admin, **extra):
+    body = {"email": f"s{uuid.uuid4().hex[:10]}@example.com", "full_name": "Ada Student", "password": "pass1234",
+            "subject_ids": [], **extra}
+    return client.post("/admin/students", headers=H(admin), json=body)
+
+
+def test_a_student_has_a_batch_and_a_register_number():
+    admin = admin_token(client)
+    reg = f"TST/01/{uuid.uuid4().hex[:8].upper()}"
+
+    r = _new_student(admin, batch="  01 ", register_number=f" {reg} ")
+    assert r.status_code == 200, r.text
+    student = r.json()
+    assert (student["batch"], student["register_number"]) == ("01", reg)  # trimmed
+    listed = next(s for s in client.get("/admin/students", headers=H(admin)).json() if s["id"] == student["id"])
+    assert (listed["batch"], listed["register_number"]) == ("01", reg)
+    me = client.get("/auth/me", headers=H(login(client, student["email"], "pass1234")))
+    assert (me.json()["batch"], me.json()["register_number"]) == ("01", reg)
+
+    # Both are optional: a student without them has empty strings, and two such students don't clash.
+    plain, other = _new_student(admin).json(), _new_student(admin).json()
+    assert (plain["batch"], plain["register_number"]) == ("", "") and other["register_number"] == ""
+    assert _new_student(admin, batch="02").json()["register_number"] == ""  # a batch alone is fine
+
+
+def test_a_register_number_is_tst_then_the_batch_then_the_students_own_number():
+    admin = admin_token(client)
+    last = uuid.uuid4().hex[:8].upper()
+
+    def refused(**extra):
+        r = _new_student(admin, **extra)
+        assert r.status_code == 400, r.text
+        return r.json()["detail"]
+
+    assert "batch first" in refused(register_number=f"TST/01/{last}")                         # no batch to hold
+    assert "must look like TST/01/001" in refused(batch="01", register_number=f"TST/02/{last}")  # another batch
+    assert "must look like" in refused(batch="01", register_number=f"XYZ/01/{last}")           # not TST
+    assert "must look like" in refused(batch="01", register_number="TST/01/")                  # no own number
+    assert "must look like" in refused(batch="01", register_number=f"TST/01/{last}/9")         # a fourth part
+    assert "must look like" in refused(batch="01", register_number="TST/01/12 3")              # a space
+    assert "can't contain '/'" in refused(batch="01/02")                                       # it is a separator
+    assert _new_student(admin, batch="01", register_number=f"TST/01/{last}").status_code == 200
+
+
+def test_a_register_number_belongs_to_one_student_only():
+    admin = admin_token(client)
+    last = uuid.uuid4().hex[:8].upper()
+    reg = f"TST/01/{last}"
+    first = _new_student(admin, batch="01", register_number=reg).json()
+    second = _new_student(admin, batch="01").json()
+
+    taken = _new_student(admin, batch="01", register_number=f"TST/01/{last.lower()}")  # the case doesn't matter
+    assert taken.status_code == 400 and "already belongs to another student" in taken.json()["detail"]
+    url = f"/admin/students/{second['id']}"
+    assert client.put(url, headers=H(admin), json={"register_number": reg}).status_code == 400
+    assert client.put(f"/admin/students/{first['id']}", headers=H(admin),
+                      json={"register_number": reg}).status_code == 200  # a student may keep their own
+
+    # The same own number in another batch is another register number. Changing the batch means changing both.
+    done = client.put(url, headers=H(admin), json={"batch": " 02 ", "register_number": f"TST/02/{last}"}).json()
+    assert (done["batch"], done["register_number"]) == ("02", f"TST/02/{last}")
+    kept = client.put(url, headers=H(admin), json={"full_name": "Renamed"}).json()  # fields left out are kept
+    assert (kept["batch"], kept["register_number"]) == ("02", f"TST/02/{last}")
+    only_batch = client.put(url, headers=H(admin), json={"batch": "03"})  # the number would still say 02
+    assert only_batch.status_code == 400 and "must look like" in only_batch.json()["detail"]
+    cleared = client.put(url, headers=H(admin), json={"batch": "", "register_number": ""}).json()
+    assert (cleared["batch"], cleared["register_number"]) == ("", "")
+
+    freed = client.put(f"/admin/students/{first['id']}", headers=H(admin), json={"register_number": ""}).json()
+    assert freed["register_number"] == ""
+    assert client.put(url, headers=H(admin),
+                      json={"batch": "01", "register_number": reg}).status_code == 200  # a freed number is reusable
+
+
+def test_an_instructor_has_no_batch_or_register_number():
+    admin = admin_token(client)
+    inst, _ = create_instructor(client, admin, [])
+    r = client.put(f"/admin/instructors/{inst['id']}", headers=H(admin),
+                   json={"batch": "2022", "register_number": "R1"})
+    assert r.status_code == 200 and (r.json()["batch"], r.json()["register_number"]) == ("", "")
 
 
 def test_role_must_match_the_path_and_only_admins_may_edit_or_delete():

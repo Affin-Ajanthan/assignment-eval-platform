@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { apiFetch, StudentAssignment, UpcomingAssignment } from "@/lib/api";
+import { apiFetch, getToken, setSession, StudentAssignment, UpcomingAssignment, UserInfo } from "@/lib/api";
 import { useRequireRole } from "@/lib/useRequireRole";
 import { formatDateTime } from "@/lib/datetime";
 import AccountBar from "@/components/AccountBar";
 import { MessageState } from "@/components/Message";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import AssignmentCard from "@/components/student/AssignmentCard";
+import JoinSubject from "@/components/student/JoinSubject";
 import SubmissionHistory from "@/components/student/SubmissionHistory";
 import { OpenForm } from "@/components/student/labels";
 import PageLoading from "@/components/PageLoading";
@@ -43,13 +44,28 @@ export default function StudentPage() {
     }
   }, []);
 
-  useEffect(() => {
-    if (!ready || !user) return;
-    load();
+  const loadUpcoming = useCallback(() => {
     apiFetch<UpcomingAssignment[]>("/upcoming-assignments")
       .then(setUpcoming)
       .catch(() => setUpcoming([]));
-  }, [ready, user, load]);
+  }, []);
+
+  useEffect(() => {
+    if (!ready || !user) return;
+    load();
+    loadUpcoming();
+  }, [ready, user, load, loadUpcoming]);
+
+  // How many subjects the student is in. The login keeps a copy of the account, so a subject joined later is
+  // counted here and the copy is refreshed.
+  const [subjectCount, setSubjectCount] = useState<number | null>(null);
+  async function joinedSubject() {
+    const me = await apiFetch<UserInfo>("/auth/me");
+    const token = getToken();
+    if (token) setSession(token, me);
+    setSubjectCount(me.subjects.length);
+    await Promise.all([load(), loadUpcoming()]);
+  }
 
   async function changed(assignmentId: number, text: string) {
     setNotice({ assignmentId, state: { text, kind: "success" } });
@@ -133,12 +149,13 @@ export default function StudentPage() {
         )}
       </PageHeader>
 
-      {user.subjects.length === 0 && (
+      {(subjectCount ?? user.subjects.length) === 0 && (
         <p className="empty-state">
-          You are not enrolled in any subject yet. Ask your administrator to add you; your assignments will appear
-          here.
+          You are not in any subject yet. Join one below with the password your instructor gave you.
         </p>
       )}
+
+      <JoinSubject onJoined={joinedSubject} />
 
       {/* What needs doing, at a glance. */}
       {assignments !== null && open.length > 0 && (

@@ -21,7 +21,7 @@ export default function AssignmentPageLayout({
     <>
       <AccountBar user={user} width="max-w-4xl" />
       <main className="mx-auto max-w-4xl px-4 py-8">
-      <PageHeader title={title} description={subtitle} back={{ href: backHref, label: "Back to the instructor dashboard" }} />
+      <PageHeader title={title} description={subtitle} back={{ href: backHref, label: "Back to the subject" }} />
       <section className="card">{children}</section>
       </main>
     </>

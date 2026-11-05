@@ -56,6 +56,10 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     password_salt = Column(String, nullable=False)
     created_at = Column(DateTime, default=_utcnow)
+    # A student's batch (e.g. "2022-2026") and register number, both optional and unused for other roles.
+    # No two students share a register number; the API checks that (existing rows have none).
+    batch = Column(String, nullable=True)
+    register_number = Column(String, nullable=True)
 
     instructor_assignments = relationship(
         "InstructorAssignment",
@@ -76,7 +80,15 @@ class Subject(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
-    code = Column(String, nullable=False, unique=True, index=True)
+    # Not unique on its own: every batch has the same subjects with the same codes, so a subject is told apart by
+    # its code and batch together ("" when it has no batch).
+    code = Column(String, nullable=False, index=True)
+    batch = Column(String, nullable=False, default="", server_default="")
+    # Student access: the admin gives a subject to instructors only. When an instructor opens it, every student
+    # can see it and join it (an Enrollment) by entering join_password. Kept as typed, because the instructor
+    # reads it back to share it.
+    open_to_students = Column(Boolean, nullable=False, default=False, server_default="0")
+    join_password = Column(String, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
 
 
