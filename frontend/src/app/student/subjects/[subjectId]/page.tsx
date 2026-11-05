@@ -10,20 +10,47 @@ import AccountBar from "@/components/AccountBar";
 import { MessageState } from "@/components/Message";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import AssignmentCard from "@/components/student/AssignmentCard";
+import JoinForm from "@/components/student/JoinForm";
 import { OpenForm } from "@/components/student/labels";
 import PageLoading from "@/components/PageLoading";
 import PageHeader, { StatTile } from "@/components/PageHeader";
 
+/** The subject's teachers: names for everyone, and e-mail addresses for a student who joined (the server only sends those to them). */
+function TeacherList({ subject }: { subject: StudentSubject }) {
+  return (
+    <section className="mt-2" data-testid="teachers">
+      <h2 className="text-xl font-semibold">{subject.teachers.length === 1 ? "Teacher" : "Teachers"}</h2>
+      {subject.teachers.length === 0 ? (
+        <p className="empty-state mt-2">No teacher is assigned to this subject yet.</p>
+      ) : (
+        <ul className="mt-3 divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white text-sm shadow-sm">
+          {subject.teachers.map((t) => (
+            <li key={`${t.name}-${t.email}`} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3">
+              <span className="font-semibold">{t.name}</span>
+              {t.email && (
+                <a href={`mailto:${t.email}`} className="text-blue-700 hover:underline">
+                  {t.email}
+                </a>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 /**
- * One subject of the student: /student/subjects/<id>, opened from the subject boxes on /student. Only a subject the
- * student joined opens; any other sends them back to the list, and the server refuses its assignments anyway.
+ * One subject of the student: /student/subjects/<id>, opened from the subject boxes on /student. A student who has
+ * not joined it gets the password box (and the teachers' names); once they join, the page is reloaded and shows the
+ * teachers and the assignments. The server refuses the assignments of a subject they have not joined anyway.
  */
 export default function StudentSubjectPage() {
   const { user, ready } = useRequireRole("student");
   const router = useRouter();
   const subjectId = Number(useParams<{ subjectId: string }>().subjectId);
 
-  // The subject, once it is known to be one the student joined.
+  // The subject as the student sees it. Its assignments are asked for only if they joined it.
   const [subject, setSubject] = useState<StudentSubject | null>(null);
   // null until the first load: "no assignments" is shown only once the list has arrived.
   const [assignments, setAssignments] = useState<StudentAssignment[] | null>(null);
@@ -62,13 +89,15 @@ export default function StudentSubjectPage() {
         const all = await apiFetch<StudentSubject[]>("/student/subjects");
         const found = all.find((s) => s.id === subjectId);
         if (cancelled) return;
-        if (!found || !found.joined) {
+        if (!found) {
           router.replace("/student");
           return;
         }
         setSubject(found);
-        load();
-        loadUpcoming();
+        if (found.joined) {
+          load();
+          loadUpcoming();
+        }
       } catch (err) {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : String(err));
       }
@@ -138,7 +167,7 @@ export default function StudentSubjectPage() {
             <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
               <span>{subject.code}</span>
               {subject.batch && <span>Batch {subject.batch}</span>}
-              {subject.instructors.length > 0 && <span>{subject.instructors.join(", ")}</span>}
+              <span>{subject.joined ? "You joined this subject" : "You have not joined this subject"}</span>
             </span>
           ) : undefined
         }
@@ -150,8 +179,18 @@ export default function StudentSubjectPage() {
         </p>
       )}
 
-      {subject && (
+      {/* Not joined: the teachers' names and the password box. The assignments are not shown. */}
+      {subject && !subject.joined && (
         <>
+          <TeacherList subject={subject} />
+          <JoinForm subject={subject} />
+        </>
+      )}
+
+      {subject?.joined && (
+        <>
+          <TeacherList subject={subject} />
+
           {/* What needs doing, at a glance. */}
           {assignments !== null && open.length > 0 && (
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="student-overview">

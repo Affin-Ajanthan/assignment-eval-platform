@@ -37,7 +37,8 @@ export interface StudentSubject {
   name: string;
   code: string;
   batch: string;
-  instructors: string[];
+  /** The subject's instructors; the e-mail is filled only once the student has joined. */
+  teachers: { name: string; email: string }[];
   joined: boolean;
   registration_open: boolean;
 }

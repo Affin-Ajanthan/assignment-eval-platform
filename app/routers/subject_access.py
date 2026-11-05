@@ -43,12 +43,17 @@ class SubjectAccessOut(BaseModel):
     password: str = ""  # for the instructor to read back and share
 
 
+class TeacherOut(BaseModel):
+    name: str
+    email: str = ""  # only given to a student who joined the subject
+
+
 class StudentSubjectOut(BaseModel):
     id: int
     name: str
     code: str
     batch: str = ""
-    instructors: list[str] = []
+    teachers: list[TeacherOut] = []  # the instructors of the subject
     joined: bool = False  # the student is in it: only then can they open it and see its assignments
     registration_open: bool = False  # the instructor has set a password and allowed students to register
 
@@ -101,15 +106,18 @@ def student_subjects(student: User = Depends(require_student), db: Session = Dep
     out = []
     for s in subjects:
         teachers = (
-            db.query(User.full_name)
+            db.query(User.full_name, User.email)
             .join(InstructorAssignment, InstructorAssignment.instructor_id == User.id)
             .filter(InstructorAssignment.subject_id == s.id)
             .order_by(User.full_name)
             .all()
         )
-        out.append(StudentSubjectOut(id=s.id, name=s.name, code=s.code, batch=s.batch or "",
-                                     instructors=[name for (name,) in teachers], joined=s.id in joined,
-                                     registration_open=_registration_open(s)))
+        is_joined = s.id in joined
+        out.append(StudentSubjectOut(
+            id=s.id, name=s.name, code=s.code, batch=s.batch or "",
+            # An instructor's e-mail is for the students in the subject; the others see the name only.
+            teachers=[TeacherOut(name=name, email=email if is_joined else "") for name, email in teachers],
+            joined=is_joined, registration_open=_registration_open(s)))
     return out
 
 

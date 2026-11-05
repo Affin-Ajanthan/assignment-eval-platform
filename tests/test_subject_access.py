@@ -64,15 +64,18 @@ def test_a_listed_subject_is_joined_with_its_password_once_allowed():
 
     rows = _listed(student)
     assert rows[subject["id"]]["registration_open"] is True and rows[subject["id"]]["joined"] is False
-    assert {"id", "name", "code", "batch", "instructors", "joined", "registration_open"} <= set(rows[subject["id"]])
+    assert {"id", "name", "code", "batch", "teachers", "joined", "registration_open"} <= set(rows[subject["id"]])
     assert "password" not in rows[subject["id"]]  # a student never sees it
-    assert rows[subject["id"]]["instructors"] == ["Test Instructor"]
+    # The teachers' names are shown to everyone, their e-mail only once the student has joined.
+    assert rows[subject["id"]]["teachers"] == [{"name": "Test Instructor", "email": ""}]
 
     assert _join(student, subject, "wrong").status_code == 403
     assert _my_subject_ids(student) == []
     assert _join(student, subject, "Secret 1").status_code == 200
     assert _my_subject_ids(student) == [subject["id"]]
-    assert _listed(student)[subject["id"]]["joined"] is True  # still listed, now as one of theirs
+    after = _listed(student)[subject["id"]]  # still listed, now as one of theirs
+    assert after["joined"] is True
+    assert [t["name"] for t in after["teachers"]] == ["Test Instructor"] and "@" in after["teachers"][0]["email"]
     assert _join(student, subject, "wrong").status_code == 200  # already in: nothing to check, nothing doubled
     assert _my_subject_ids(student) == [subject["id"]]
 
