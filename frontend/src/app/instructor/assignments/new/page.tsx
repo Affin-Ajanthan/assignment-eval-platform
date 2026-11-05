@@ -37,7 +37,7 @@ export default function NewAssignmentPage() {
 
   if (!ready || !user) return <PageLoading />;
 
-  const back = target ? `/instructor/subjects/${target.subjectId}?tab=setup` : "/instructor";
+  const back = target ? `/instructor/subjects/${target.subjectId}?tab=assignments` : "/instructor";
   const kindTitle = KIND_OPTIONS.find((o) => o.value === target?.kind)?.title;
   const subject = user.subjects.find((s) => s.id === target?.subjectId);
   return (

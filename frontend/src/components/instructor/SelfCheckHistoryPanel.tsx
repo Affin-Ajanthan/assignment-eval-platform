@@ -62,22 +62,27 @@ export default function SelfCheckHistoryPanel({ assignments }: { assignments: As
         <p className="empty-state mt-2">No assignments yet.</p>
       ) : (
         <>
-          <label className="mt-3 block text-sm font-semibold" htmlFor="self-check-assignment">
-            Assignment
-          </label>
+          {/* Given a single assignment (the assignment page) there is nothing to choose. */}
+          {assignments.length > 1 && (
+            <label className="mt-3 block text-sm font-semibold" htmlFor="self-check-assignment">
+              Assignment
+            </label>
+          )}
           <div className="mt-1 flex gap-2">
-            <select
-              id="self-check-assignment"
-              value={assignmentId ?? ""}
-              onChange={(e) => setAssignmentId(parseInt(e.target.value, 10))}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-            >
-              {assignments.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
+            {assignments.length > 1 && (
+              <select
+                id="self-check-assignment"
+                value={assignmentId ?? ""}
+                onChange={(e) => setAssignmentId(parseInt(e.target.value, 10))}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              >
+                {assignments.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            )}
             <button
               type="button"
               onClick={load}

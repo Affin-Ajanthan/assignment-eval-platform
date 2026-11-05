@@ -75,7 +75,8 @@ export default function AssignmentsSection({
       <h2 className="text-xl font-semibold">Assignments</h2>
       <p className="mt-1 text-sm text-gray-600">
         Choose the kind of assignment to create: its details (name, instructions, dates and, for a code challenge, the
-        tasks and test cases) are entered on the next page. Create rubrics below.
+        tasks and test cases) are entered on the next page. Open an assignment to grade its submissions, check for
+        copying or run the automated evaluator. Rubrics are in the Rubrics tab.
       </p>
 
       <div className="mt-3" data-testid="assignment-type-chooser">
@@ -157,6 +158,13 @@ export default function AssignmentsSection({
                   </div>
                 </div>
                 <div className="flex shrink-0 gap-2">
+                  <Link
+                    href={`/instructor/subjects/${subjectId}/assignments/${a.id}`}
+                    className="btn-primary rounded-md px-3 py-1.5 text-xs font-semibold"
+                    data-testid="open-assignment"
+                  >
+                    Open
+                  </Link>
                   <Link
                     href={`/instructor/assignments/${a.id}`}
                     className="btn-secondary rounded-md px-3 py-1.5 text-xs font-semibold"
