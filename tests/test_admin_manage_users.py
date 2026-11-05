@@ -201,11 +201,17 @@ def test_a_register_number_belongs_to_one_student_only():
     assert client.put(f"/admin/students/{first['id']}", headers=H(admin),
                       json={"register_number": reg}).status_code == 200  # a student may keep their own
 
-    # The same own number in another batch is another register number. Changing the batch means changing both.
-    done = client.put(url, headers=H(admin), json={"batch": " 02 ", "register_number": f"TST/02/{last}"}).json()
-    assert (done["batch"], done["register_number"]) == ("02", f"TST/02/{last}")
+    # The own number is unique across every batch, like an email: TST/02/<last> clashes with TST/01/<last>.
+    other_batch = client.put(url, headers=H(admin), json={"batch": "02", "register_number": f"TST/02/{last}"})
+    assert other_batch.status_code == 400 and "already belongs to another student" in other_batch.json()["detail"]
+    assert _new_student(admin, batch="02", register_number=f"TST/02/{last}").status_code == 400
+
+    # A different own number is fine in any batch. Changing the batch means changing both.
+    mine = uuid.uuid4().hex[:8].upper()
+    done = client.put(url, headers=H(admin), json={"batch": " 02 ", "register_number": f"TST/02/{mine}"}).json()
+    assert (done["batch"], done["register_number"]) == ("02", f"TST/02/{mine}")
     kept = client.put(url, headers=H(admin), json={"full_name": "Renamed"}).json()  # fields left out are kept
-    assert (kept["batch"], kept["register_number"]) == ("02", f"TST/02/{last}")
+    assert (kept["batch"], kept["register_number"]) == ("02", f"TST/02/{mine}")
     only_batch = client.put(url, headers=H(admin), json={"batch": "03"})  # the number would still say 02
     assert only_batch.status_code == 400 and "must look like" in only_batch.json()["detail"]
     cleared = client.put(url, headers=H(admin), json={"batch": "", "register_number": ""}).json()

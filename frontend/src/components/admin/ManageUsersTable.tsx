@@ -31,10 +31,6 @@ export function SubjectCheckboxes({
   );
 }
 
-function subjectNames(subjects: Subject[]): string {
-  return subjects.length ? subjects.map((s) => s.name).join(", ") : "(none)";
-}
-
 type UserGroup = { key: string; label: string; users: UserInfo[] };
 
 /** Text in natural order: numbers count by value, so "Student 2" comes before "Student 10". */
@@ -130,10 +126,10 @@ export default function ManageUsersTable({
   }
 
   const cell = "border-b border-gray-200 px-3 py-2";
-  // Every row has four cells: an instructor's are name, email, subjects and actions; a student's are name,
-  // register number, email and actions.
-  const columns = 4;
   const isStudent = role === "student";
+  // An instructor's row has three cells: name, email and actions. A student's has four: name, register number,
+  // email and actions.
+  const columns = isStudent ? 4 : 3;
   const query = search.trim().toLowerCase();
   // The batches there are, for the Batch box. A chosen batch that no student has any more counts as "all".
   const batchOptions = isStudent ? groupByBatch(users) : [];
@@ -205,7 +201,6 @@ export default function ManageUsersTable({
               <th className={cell}>Name</th>
               {isStudent && <th className={cell}>Register no.</th>}
               <th className={cell}>Email</th>
-              {!isStudent && <th className={cell}>Subjects</th>}
               <th className={cell}>Actions</th>
             </tr>
           </thead>
@@ -235,7 +230,6 @@ export default function ManageUsersTable({
                 <td className={cell}>{u.full_name}</td>
                 {isStudent && <td className={cell}>{u.register_number || "—"}</td>}
                 <td className={cell}>{u.email}</td>
-                {!isStudent && <td className={cell}>{subjectNames(u.subjects)}</td>}
                 <td className={`${cell} whitespace-nowrap`}>
                   <button
                     type="button"

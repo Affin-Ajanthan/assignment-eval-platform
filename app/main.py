@@ -978,7 +978,8 @@ def _student_register_number(db: Session, value: Optional[str], batch: Optional[
                              own_id: Optional[int] = None) -> Optional[str]:
     """A register number as stored, None when blank. It is <REGISTER_PREFIX>/<the student's batch>/<own number>,
     e.g. TST/01/001, so it needs the batch. Or the HTTP error saying what is wrong with it, or that another
-    student has it already. ``own_id`` is the student being edited, who may keep their own."""
+    student has the same own number (in any batch). ``own_id`` is the student being edited, who may keep their
+    own."""
     number = (value or "").strip()
     if not number:
         return None
@@ -990,11 +991,15 @@ def _student_register_number(db: Session, value: Optional[str], batch: Optional[
     if not number.startswith(prefix) or not last or "/" in last or any(c.isspace() for c in last):
         raise HTTPException(400, f"The register number must look like {prefix}001: {REGISTER_PREFIX}, the batch, "
                                  "then the student's own number")
-    others = db.query(User).filter(User.role == "student", func.lower(User.register_number) == number.lower())
+    # The student's own number (the last part) is unique across every batch, like an email: TST/01/0001 and
+    # TST/02/0001 can't both exist. Case doesn't matter.
+    others = db.query(User).filter(User.role == "student", User.register_number.isnot(None))
     if own_id is not None:
         others = others.filter(User.id != own_id)
-    if others.first():
-        raise HTTPException(400, f"Register number '{number}' already belongs to another student")
+    taken = next((o for o in others if o.register_number.rsplit("/", 1)[-1].lower() == last.lower()), None)
+    if taken:
+        raise HTTPException(400, f"Student number '{last}' already belongs to another student "
+                                 f"({taken.register_number})")
     return number
 
 
