@@ -709,7 +709,7 @@ export async function apiFetch<T = unknown>(path: string, options: ApiFetchOptio
     // useRouter() isn't available here -- a hard navigation is the
     // correct way to force a full session reset from this context.
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    if (typeof window !== "undefined") window.location.href = "/login";
+    if (typeof window !== "undefined") window.location.href = "/login?reason=expired";
     throw new Error("Session expired -- please log in again");
   }
 
@@ -789,7 +789,7 @@ export function apiUpload<T = unknown>(
         clearSession();
         // Same as apiFetch: a plain utility can't use useRouter().
         // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-        if (typeof window !== "undefined") window.location.href = "/login";
+        if (typeof window !== "undefined") window.location.href = "/login?reason=expired";
         return reject(new Error("Session expired -- please log in again"));
       }
       let parsed: unknown = null;
@@ -839,7 +839,7 @@ export async function apiFetchBlob(path: string, json?: unknown): Promise<Blob> 
     clearSession();
     // Same as apiFetch: a plain utility can't use useRouter().
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    if (typeof window !== "undefined") window.location.href = "/login";
+    if (typeof window !== "undefined") window.location.href = "/login?reason=expired";
     throw new Error("Session expired -- please log in again");
   }
   if (!res.ok) {

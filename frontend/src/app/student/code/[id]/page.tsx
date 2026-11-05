@@ -14,6 +14,7 @@ import RichText from "@/components/RichText";
 import CodeEditorForm, { editorLanguages } from "@/components/student/CodeEditorForm";
 import TaskPasswordForm from "@/components/student/TaskPasswordForm";
 import PageLoading from "@/components/PageLoading";
+import PageHeader from "@/components/PageHeader";
 
 /**
  * A code challenge's own page, opened with Do assignment on its card on the student portal. It first shows only
@@ -83,13 +84,17 @@ export default function CodeChallengePage() {
   } else {
     body = (
       <>
-        <h1 className="mt-4 text-2xl font-bold">{assignment.name}</h1>
-        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
-          <span>{assignment.subject_name}</span>
-          {assignment.code_languages?.length > 0 && <span>Language: {languageNames(assignment.code_languages)}</span>}
-          <span>Deadline: {formatDateTime(assignment.deadline)}</span>
-          <Badge tone={open ? "bg-green-50 text-green-800" : "bg-gray-100 text-gray-700"}>{open ? "Open" : "Closed"}</Badge>
-        </div>
+        <PageHeader
+          title={assignment.name}
+          description={
+            <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <span>{assignment.subject_name}</span>
+              {assignment.code_languages?.length > 0 && <span>Language: {languageNames(assignment.code_languages)}</span>}
+              <span>Deadline: {formatDateTime(assignment.deadline)}</span>
+              <Badge tone={open ? "bg-green-50 text-green-800" : "bg-gray-100 text-gray-700"}>{open ? "Open" : "Closed"}</Badge>
+            </span>
+          }
+        />
         {assignment.description && (
           <div className="mt-3">
             <p className="text-sm font-semibold">Instructions</p>
@@ -119,7 +124,7 @@ export default function CodeChallengePage() {
               <button
                 type="button"
                 onClick={() => (passwordNeeded ? setAsking(true) : setStarted(true))}
-                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                className="btn-primary rounded-md px-4 py-2 text-sm font-semibold"
                 data-testid="do-task-button"
               >
                 {open ? (taskCount > 1 ? "Do tasks" : "Do task") : taskCount > 1 ? "See tasks" : "See task"}
@@ -141,12 +146,14 @@ export default function CodeChallengePage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8">
-      <AccountBar user={user} />
-      <Link href="/student" className="text-sm font-semibold text-blue-700 hover:underline">
+    <>
+      <AccountBar user={user} width="max-w-4xl" />
+      <main className="mx-auto max-w-4xl px-4 py-8">
+      <Link href="/student" className="inline-block text-sm font-semibold text-blue-700 hover:underline">
         ← Back to my assignments
       </Link>
-      {body}
-    </div>
+      <div className="mt-3">{body}</div>
+      </main>
+    </>
   );
 }

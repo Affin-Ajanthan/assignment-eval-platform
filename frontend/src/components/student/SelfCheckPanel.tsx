@@ -68,7 +68,7 @@ function SelfCheckBody({
                     type="button"
                     onClick={() => start(c.kind)}
                     disabled={busy || left === 0}
-                    className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                    className="btn-primary rounded-md px-3 py-1.5 text-xs font-semibold disabled:opacity-60"
                   >
                     {busy ? "Checking..." : c.button}
                   </button>
@@ -128,7 +128,7 @@ export default function SelfCheckPanel({ assignment, submission }: { assignment:
         aria-expanded={open}
         className="flex w-full items-center justify-between gap-2 text-left"
       >
-        <span className="font-bold">Check my submission</span>
+        <span className="font-semibold">Check my submission</span>
         <span className="text-xs font-semibold text-blue-700">{open ? "Close ▴" : "Open ▾"}</span>
       </button>
       {!open && (

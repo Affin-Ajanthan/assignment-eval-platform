@@ -11,6 +11,7 @@ import StudentIdFields, { BatchCombobox } from "@/components/admin/StudentIdFiel
 import { batchList, ownNumberOf, registerNumberFor } from "@/lib/registerNumber";
 import ManageUsersTable, { SubjectCheckboxes } from "@/components/admin/ManageUsersTable";
 import PageLoading from "@/components/PageLoading";
+import PageHeader, { StatTile } from "@/components/PageHeader";
 
 export default function AdminPage() {
   const { user, ready } = useRequireRole("admin");
@@ -255,16 +256,19 @@ export default function AdminPage() {
   if (!ready || !user) return <PageLoading />;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <AccountBar user={user} />
+    <>
+      <AccountBar user={user} width="max-w-6xl" />
+      <main className="mx-auto max-w-6xl px-4 py-8">
 
-      <h1 className="text-2xl font-bold">Admin dashboard</h1>
-      <p className="mt-1 text-sm text-gray-600">
-        Create subjects, then create instructor accounts and assign them to subjects. Students are not assigned to
-        subjects here: an instructor opens a subject with a password and students join it themselves. You can edit
-        subjects, instructors and students at any time. Everyone logs in with the credentials you set here --
-        there&apos;s no self-signup.
-      </p>
+      <PageHeader
+        title="Admin dashboard"
+         description="Create subjects, then create instructor accounts and assign them to subjects. Students are not assigned here: an instructor opens a subject with a password and students join it themselves. You can edit subjects, instructors and students at any time. Everyone logs in with the credentials you set here -- there's no self-signup."
+     />
+      <div className="grid grid-cols-3 gap-3" data-testid="admin-overview">
+        <StatTile label="Subjects" value={subjects.length} href="#subjects" />
+        <StatTile label="Instructors" value={instructors.length} href="#instructors" />
+        <StatTile label="Students" value={students.length} href="#students" />
+      </div>
 
       <AdminTabs
         tab={tab}
@@ -273,18 +277,23 @@ export default function AdminPage() {
       />
 
       {/* Subjects */}
-      <div {...adminPanelProps("subjects", tab)}>
-      <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-bold">Subjects</h2>
+           <div {...adminPanelProps("subjects", tab)}>
+      <section className="mt-6 card scroll-mt-4" id="subjects">
+        <h2 className="text-xl font-semibold">Subjects</h2>
+        {/* The form beside the list on wide screens, so nothing is a long scroll away. */}
+        <div className="mt-4 grid items-start gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
         <form
           ref={subjectFormRef}
           onSubmit={handleSaveSubject}
-          className={`mt-3 scroll-mt-4 ${editingSubject ? "rounded-md border border-blue-200 bg-blue-50 p-4" : ""}`}
+          className={`scroll-mt-4 rounded-md border p-4 ${
+            editingSubject ? "border-blue-200 bg-blue-50" : "border-gray-200 bg-gray-50"
+          }`}
           data-testid="subject-form"
         >
-          <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-500">
+          <h3 className="mb-3 text-base font-semibold">
             {editingSubject ? `Edit subject: ${editingSubject.name}` : "Add a subject"}
           </h3>
+
           <label className="block text-sm font-semibold" htmlFor="subject_name">
             Subject name
           </label>
@@ -320,7 +329,7 @@ export default function AdminPage() {
             />
           </div>
           <div className="flex gap-2">
-            <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+            <button className="btn-primary rounded-md px-4 py-2 text-sm font-semibold">
               {editingSubject ? "Save changes" : "Add subject"}
             </button>
             {editingSubject && (
@@ -336,28 +345,37 @@ export default function AdminPage() {
           <Message state={subjectMsg} />
         </form>
 
-        <h3 className="mt-5 text-sm font-bold uppercase tracking-wide text-gray-500">Existing subjects</h3>
+         <div className="min-w-0">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Existing subjects</h3>
         <ManageSubjectsTable
           subjects={subjects}
           onEdit={startEditSubject}
           highlightId={editingSubject?.id ?? null}
         />
+        </div>
+        </div>
+
       </section>
       </div>
 
       {/* Instructors */}
       <div {...adminPanelProps("instructors", tab)}>
-      <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-bold">Instructors</h2>
+      <section className="mt-6 card scroll-mt-4" id="instructors">
+        <h2 className="text-xl font-semibold">Instructors</h2>
+        {/* The form beside the list on wide screens, so nothing is a long scroll away. */}
+        <div className="mt-4 grid items-start gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
         <form
           ref={instructorFormRef}
           onSubmit={handleSaveInstructor}
-          className={`mt-3 scroll-mt-4 ${editingInstructor ? "rounded-md border border-blue-200 bg-blue-50 p-4" : ""}`}
+          className={`scroll-mt-4 rounded-md border p-4 ${
+            editingInstructor ? "border-blue-200 bg-blue-50" : "border-gray-200 bg-gray-50"
+          }`}
           data-testid="instructor-form"
         >
-          <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-500">
+          <h3 className="mb-3 text-base font-semibold">
             {editingInstructor ? `Edit instructor: ${editingInstructor.full_name}` : "Add an instructor"}
           </h3>
+
           <label className="block text-sm font-semibold" htmlFor="instructor_name">
             Full name
           </label>
@@ -407,7 +425,8 @@ export default function AdminPage() {
             />
           </div>
           <div className="flex gap-2">
-            <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+             <button className="btn-primary rounded-md px-4 py-2 text-sm font-semibold">
+
               {editingInstructor ? "Save changes" : "Create instructor"}
             </button>
             {editingInstructor && (
@@ -423,7 +442,8 @@ export default function AdminPage() {
           <Message state={instructorMsg} />
         </form>
 
-        <h3 className="mt-5 text-sm font-bold uppercase tracking-wide text-gray-500">Existing instructors</h3>
+        <div className="min-w-0">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Existing instructors</h3>
         <ManageUsersTable
           role="instructor"
           users={instructors}
@@ -431,22 +451,30 @@ export default function AdminPage() {
           onEdit={startEditInstructor}
           highlightId={editingInstructor?.id ?? null}
         />
+        </div>
+        </div>
+
       </section>
       </div>
 
       {/* Students */}
       <div {...adminPanelProps("students", tab)}>
-      <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-bold">Students</h2>
+            <section className="mt-6 card scroll-mt-4" id="students">
+        <h2 className="text-xl font-semibold">Students</h2>
+        {/* The form beside the list on wide screens, so nothing is a long scroll away. */}
+        <div className="mt-4 grid items-start gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
         <form
           ref={studentFormRef}
           onSubmit={handleSaveStudent}
-          className={`mt-3 scroll-mt-4 ${editingStudent ? "rounded-md border border-blue-200 bg-blue-50 p-4" : ""}`}
+          className={`scroll-mt-4 rounded-md border p-4 ${
+            editingStudent ? "border-blue-200 bg-blue-50" : "border-gray-200 bg-gray-50"
+          }`}
           data-testid="student-form"
         >
-          <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-500">
+          <h3 className="mb-3 text-base font-semibold">
             {editingStudent ? `Edit student: ${editingStudent.full_name}` : "Add a student"}
           </h3>
+
           <label className="block text-sm font-semibold" htmlFor="student_name">
             Full name
           </label>
@@ -498,7 +526,8 @@ export default function AdminPage() {
             No subjects here: the student joins a subject themselves, with the password its instructor sets.
           </p>
           <div className="flex gap-2">
-            <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+          <button className="btn-primary rounded-md px-4 py-2 text-sm font-semibold">
+
               {editingStudent ? "Save changes" : "Create student"}
             </button>
             {editingStudent && (
@@ -514,7 +543,8 @@ export default function AdminPage() {
           <Message state={studentMsg} />
         </form>
 
-        <h3 className="mt-5 text-sm font-bold uppercase tracking-wide text-gray-500">Existing students</h3>
+               <div className="min-w-0">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Existing students</h3>
         <ManageUsersTable
           role="student"
           users={students}
@@ -522,8 +552,13 @@ export default function AdminPage() {
           onEdit={startEditStudent}
           highlightId={editingStudent?.id ?? null}
         />
+        </div>
+        </div>
+
       </section>
       </div>
-    </div>
+         </main>
+    </>
+
   );
 }

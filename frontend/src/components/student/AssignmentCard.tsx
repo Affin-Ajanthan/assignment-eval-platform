@@ -52,9 +52,13 @@ export default function AssignmentCard({
     ? "Not submitted"
     : manyTasks
       ? `${sub.questions_submitted} of ${taskCount} tasks submitted`
-      : sub.status === "graded"
-        ? "Graded"
-        : "Submitted";
+      : // Closed, and the instructor holds the marks back until a date. The server reports every submission as
+        // "submitted" until then (whether it is graded stays hidden), so this says what the student can know.
+        a.marks_release_at && a.status === "closed"
+        ? "Awaiting marks"
+        : sub.status === "graded"
+          ? "Graded"
+          : "Submitted";
   const files = sub
     ? [sub.has_code && "code", sub.has_report && "report", sub.has_video && "video"].filter(Boolean).join(", ")
     : "";
@@ -73,76 +77,184 @@ export default function AssignmentCard({
     useEditor && (a.status === "open" || sub) ? (
       <Link
         href={`/student/code/${a.id}`}
-        className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+        className="btn-primary rounded-md px-4 py-2 text-sm font-semibold"
         data-testid="open-code-page"
       >
         {!sub ? "Do assignment" : moreToHandIn ? "Continue assignment" : "See your code and result"}
       </Link>
     ) : null;
 
+  // The student's own state, shown apart from the assignment's: from the same fields as before, nothing recomputed.
+  const late = sub?.late_seconds != null;
+  const statusTone = !sub
+    ? a.status === "open"
+      ? "border border-amber-500 bg-amber-50 text-amber-900"
+      : "border border-gray-300 bg-gray-100 text-gray-700"
+    : sub.status === "graded" && !a.marks_release_at
+      ? "border border-green-700 bg-green-50 text-green-800"
+      : "border border-blue-200 bg-blue-50 text-blue-800";
+  const markShown = sub
+    ? a.marks_release_at
+      ? null
+      : markWithPenalty(sub.raw_mark, sub.final_mark, sub.max_mark, sub.late_penalty_percent, sub.late_penalty_marks)
+    : null;
+  const graded = !!sub && sub.final_mark !== null && !a.marks_release_at;
+
   return (
-    <li className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm" data-testid="student-assignment">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h3 className="text-lg font-bold">{a.name}</h3>
-          <p className="text-xs text-gray-500">{a.subject_name}</p>
-          <p className="text-xs text-gray-500">Accepts: {a.submission_types.map((t) => TYPE_LABEL[t]).join(", ")}</p>
-          {a.submission_types.includes("code") && a.code_languages?.length > 0 && (
-            <p className="text-xs text-gray-500">Language: {languageNames(a.code_languages)}</p>
-          )}
+    <li className="card assignment-card" data-testid="student-assignment">
+      {/* Identity: title, subject, and the two kinds of status side by side but never mixed up. */}
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="min-w-0">
+          <h3 className="text-lg font-semibold">{a.name}</h3>
+          <p className="text-sm text-gray-600">
+            {a.subject_name}
+            {isChallenge && <span className="text-gray-500"> · Code challenge</span>}
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-1">
-          {due && (
-            <Badge tone={due.urgent ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-800"}>
-              <span data-testid="due-badge" title={`Deadline: ${formatDateTime(a.deadline)}`}>
-                {due.text}
-              </span>
-            </Badge>
-          )}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="sr-only">Assignment:</span>
           <Badge tone={a.status === "open" ? "bg-green-50 text-green-800" : "bg-gray-100 text-gray-700"}>
             {a.status === "open" ? "Open" : "Closed"}
           </Badge>
+          <span className="sr-only">Your submission:</span>
+          <Badge tone={statusTone}>
+            <span data-testid="submission-status-badge">{submissionStatus}</span>
+          </Badge>
+          {late && (
+            <Badge tone="border border-red-700 bg-red-50 text-red-800">
+              <span data-testid="late-badge">Late</span>
+            </Badge>
+          )}
         </div>
       </div>
 
-      {/* A code challenge is done on its own page: its description and its questions are shown there, after the
-          student presses Do assignment, and not on the card. */}
-      {a.description && !useEditor && (
-        <div className="mt-3">
-          <p className="text-sm font-semibold">Description</p>
-          <RichText text={a.description} className="text-sm text-gray-700" />
-        </div>
-      )}
+      <div className="mt-4 grid gap-5 md:grid-cols-[minmax(0,1fr)_18rem]">
+        {/* Information: what the assignment asks and what it accepts. */}
+        <div className="min-w-0">
+          {/* A code challenge is done on its own page: its description and its questions are shown there, after the
+              student presses Do assignment, and not on the card. */}
+          {a.description && !useEditor && (
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700">Description</h4>
+              <RichText text={a.description} className="mt-1 text-sm text-gray-800" />
+            </div>
+          )}
 
-      {useEditor && a.status === "open" && (
-        <div className="mt-3" data-testid="questions-hidden-note">
-          {manyTasks && <p className="text-sm font-semibold">{taskCount} tasks</p>}
-          {a.has_task_password && !a.tasks_unlocked && (
-            <p className="text-xs text-gray-500" data-testid="password-note">
-              You need the password from your instructor to start the tasks.
-            </p>
+          {useEditor && a.status === "open" && (
+            <div data-testid="questions-hidden-note">
+              {manyTasks && <p className="text-sm font-semibold">{taskCount} tasks</p>}
+              {a.has_task_password && !a.tasks_unlocked && (
+                <p className="text-xs text-gray-600" data-testid="password-note">
+                  You need the password from your instructor to start the tasks.
+                </p>
+              )}
+              {timedTasks(a.questions).length > 0 && (
+                <p className="text-xs font-semibold text-blue-800" data-testid="time-limit-note">
+                  ⏱ Timed:{" "}
+                  {timedTasks(a.questions)
+                    .map((q) => `${manyTasks ? `${taskName(q)}: ` : ""}${timeLimitText(q.time_limit_seconds ?? 0)}`)
+                    .join(" · ")}
+                  . The clock starts when you open the task.
+                </p>
+              )}
+              {manyTasks && a.tasks_in_order && (
+                <p className="text-xs text-gray-600" data-testid="order-note">
+                  The tasks are done in order: you can start a task only after handing in the one before it.
+                </p>
+              )}
+              <p className="text-xs text-gray-600">
+                {manyTasks
+                  ? "The questions are shown when you press Do assignment and then Do task, and you hand the tasks in one at a time. Each task is marked as soon as you submit it and cannot be changed afterwards; the mark adds up the test cases you pass in every task."
+                  : "The question is shown when you press Do assignment and then Do task. Your code is marked as soon as you submit it, and cannot be changed afterwards."}
+              </p>
+            </div>
           )}
-          {timedTasks(a.questions).length > 0 && (
-            <p className="text-xs font-semibold text-blue-800" data-testid="time-limit-note">
-              ⏱ Timed:{" "}
-              {timedTasks(a.questions)
-                .map((q) => `${manyTasks ? `${taskName(q)}: ` : ""}${timeLimitText(q.time_limit_seconds ?? 0)}`)
-                .join(" · ")}
-              . The clock starts when you open the task.
-            </p>
-          )}
-          {manyTasks && a.tasks_in_order && (
-            <p className="text-xs text-gray-500" data-testid="order-note">
-              The tasks are done in order: you can start a task only after handing in the one before it.
-            </p>
-          )}
-          <p className="text-xs text-gray-500">
-            {manyTasks
-              ? "The questions are shown when you press Do assignment and then Do task, and you hand the tasks in one at a time. Each task is marked as soon as you submit it and cannot be changed afterwards; the mark adds up the test cases you pass in every task."
-              : "The question is shown when you press Do assignment and then Do task. Your code is marked as soon as you submit it, and cannot be changed afterwards."}
-          </p>
+
+          <div className={a.description || (useEditor && a.status === "open") ? "mt-4" : ""}>
+            <h4 className="text-sm font-semibold text-gray-700">Accepted formats</h4>
+            <ul className="mt-1.5 flex flex-wrap gap-1.5" aria-label="Accepted formats">
+              {a.submission_types.map((t) => (
+                <li key={t} className="rounded border border-gray-300 bg-white px-2 py-0.5 text-xs font-semibold text-gray-700">
+                  {TYPE_LABEL[t]}
+                </li>
+              ))}
+            </ul>
+            {a.submission_types.includes("code") && a.code_languages?.length > 0 && (
+              <p className="mt-1.5 text-xs text-gray-600">Language: {languageNames(a.code_languages)}</p>
+            )}
+          </div>
         </div>
-      )}
+
+        {/* Dates and the submission, together at the side where the eye looks for them. */}
+        <aside className="self-start rounded-lg border border-[var(--color-surface-border)] bg-gray-50 p-4 text-sm" aria-label="Dates and your submission">
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Key dates</h4>
+            <dl className="mt-2 space-y-2">
+              <div>
+                <dt className="text-xs text-gray-600">Submission deadline</dt>
+                <dd className="flex flex-wrap items-center gap-2">
+                  <span className={`font-semibold ${a.status === "open" ? "text-gray-900" : "text-gray-700"}`}>
+                    {formatDateTime(a.deadline)}
+                  </span>
+                  {due && (
+                    <Badge tone={due.urgent ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-800"}>
+                      <span data-testid="due-badge" title={`Deadline: ${formatDateTime(a.deadline)}`}>
+                        {due.text}
+                      </span>
+                    </Badge>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-gray-600">Available from</dt>
+                <dd>{formatDateTime(a.available_from)}</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div className="mt-3 border-t border-gray-200 pt-3">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Your submission</h4>
+            <dl className="mt-2 space-y-2">
+              {/* The status itself is the badge at the top; here are its details. */}
+              {!sub && (
+                <div>
+                  <dt className="sr-only">Status</dt>
+                  <dd className="text-gray-700">Nothing handed in yet.</dd>
+                </div>
+              )}
+              {sub && manyTasks && (
+                <div>
+                  <dt className="text-xs text-gray-600">Tasks</dt>
+                  <dd className="font-semibold">{submissionStatus}</dd>
+                </div>
+              )}
+              {sub && !manyTasks && (
+                <div>
+                  <dt className="text-xs text-gray-600">Handed in</dt>
+                  <dd>{formatDateTime(sub.submitted_at)}</dd>
+                  {files && (
+                    <dd className="mt-1 flex flex-wrap gap-1" aria-label="Files you handed in">
+                      {files.split(", ").map((f) => (
+                        <span key={f} className="rounded bg-white px-1.5 py-0.5 text-xs capitalize text-gray-700 ring-1 ring-gray-200">
+                          {f}
+                        </span>
+                      ))}
+                    </dd>
+                  )}
+                </div>
+              )}
+              {sub && (
+                <div>
+                  <dt className="text-xs text-gray-600">Marks</dt>
+                  <dd data-testid="marks" className={graded ? "text-base font-semibold text-brand-700" : "text-gray-700"}>
+                    {a.marks_release_at ? `Marks will be released on ${formatDateTime(a.marks_release_at)}` : markShown}
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </div>
+        </aside>
+      </div>
 
       {a.status === "open" && a.past_deadline && (
         <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800" data-testid="late-notice">
@@ -166,32 +278,17 @@ export default function AssignmentCard({
         </p>
       )}
 
-      <dl className="mt-3 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[max-content_1fr]">
-        <dt className="font-semibold">Available from</dt>
-        <dd>{formatDateTime(a.available_from)}</dd>
-        <dt className="font-semibold">Submission deadline</dt>
-        <dd>{formatDateTime(a.deadline)}</dd>
-        <dt className="font-semibold">Status</dt>
-        <dd>
-          {submissionStatus}
-          {sub && !manyTasks && ` (${formatDateTime(sub.submitted_at)}${files ? ` — ${files}` : ""})`}
-        </dd>
-        {sub && (
-          <>
-            <dt className="font-semibold">Marks</dt>
-            <dd data-testid="marks">
-              {a.marks_release_at
-                ? `Marks will be released on ${formatDateTime(a.marks_release_at)}`
-                : markWithPenalty(sub.raw_mark, sub.final_mark, sub.max_mark, sub.late_penalty_percent, sub.late_penalty_marks)}
-            </dd>
-          </>
-        )}
-      </dl>
 
       {sub && sub.final_mark !== null && (sub.criterion_marks.length > 0 || sub.feedback) && (
-        <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3" data-testid="my-feedback">
+        <div className="mt-4 rounded-md border border-gray-200 border-l-4 border-l-green-700 bg-gray-50 p-4" data-testid="my-feedback">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h4 className="text-base font-semibold">Your marks and feedback</h4>
+            <span className="text-xl font-semibold text-brand-700">
+              {markWithPenalty(sub.raw_mark, sub.final_mark, sub.max_mark, sub.late_penalty_percent, sub.late_penalty_marks)}
+            </span>
+          </div>
           {sub.criterion_marks.length > 0 && (
-            <table className="w-full text-sm">
+            <table className="mt-2 w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-gray-500">
                   <th className="pb-1 font-semibold">Criterion</th>
@@ -211,7 +308,7 @@ export default function AssignmentCard({
           {sub.feedback && (
             <div className={sub.criterion_marks.length > 0 ? "mt-3" : ""}>
               <p className="text-sm font-semibold">Feedback from your instructor</p>
-              <p className="whitespace-pre-wrap text-sm text-gray-700">{sub.feedback}</p>
+              <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-gray-800">{sub.feedback}</p>
             </div>
           )}
         </div>
@@ -227,13 +324,13 @@ export default function AssignmentCard({
       )}
 
       {(a.status === "open" || codeLink) && !formMode && (
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-5 flex flex-wrap gap-2 border-t border-gray-200 pt-4">
           {codeLink}
           {a.status === "open" && !sub && !useEditor && (
             <button
               type="button"
               onClick={() => setOpenForm({ id: a.id, mode: "submit" })}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+              className="btn-primary rounded-md px-4 py-2 text-sm font-semibold"
             >
               Submit assignment
             </button>
@@ -242,7 +339,7 @@ export default function AssignmentCard({
             <button
               type="button"
               onClick={() => setOpenForm({ id: a.id, mode: "edit" })}
-              className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+              className="btn-secondary rounded-md px-4 py-2 text-sm font-semibold"
             >
               Edit submission
             </button>
@@ -251,14 +348,18 @@ export default function AssignmentCard({
             <button
               type="button"
               onClick={() => askDelete(a)}
-              className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+              className="btn-danger rounded-md px-4 py-2 text-sm font-semibold"
             >
               Delete submission
             </button>
           )}
         </div>
       )}
-      {a.status === "closed" && !sub && <p className="mt-3 text-sm text-gray-600">The deadline has passed.</p>}
+      {a.status === "closed" && !sub && (
+        <p className="mt-4 border-t border-gray-200 pt-3 text-sm text-gray-600">
+          The deadline has passed, and nothing was handed in for this assignment.
+        </p>
+      )}
 
       {a.status === "open" && sub && sub.status !== "graded" && !formMode && (
         <SelfCheckPanel assignment={a} submission={sub} />

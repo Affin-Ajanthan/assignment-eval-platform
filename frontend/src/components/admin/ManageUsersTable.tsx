@@ -129,7 +129,7 @@ export default function ManageUsersTable({
     });
   }
 
-  const cell = "border border-gray-200 px-3 py-1.5";
+  const cell = "border-b border-gray-200 px-3 py-2";
   // Every row has four cells: an instructor's are name, email, subjects and actions; a student's are name,
   // register number, email and actions.
   const columns = 4;

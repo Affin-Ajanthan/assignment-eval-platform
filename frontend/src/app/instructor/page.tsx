@@ -6,6 +6,7 @@ import { apiFetch, Assignment } from "@/lib/api";
 import { useRequireRole } from "@/lib/useRequireRole";
 import AccountBar from "@/components/AccountBar";
 import PageLoading from "@/components/PageLoading";
+import PageHeader from "@/components/PageHeader";
 
 /** What a subject box shows: how many of each kind of assignment, and how many submissions wait for a grade. */
 type SubjectCounts = { assignments: number; challenges: number; toGrade: number };
@@ -38,18 +39,19 @@ export default function InstructorHomePage() {
   if (!ready || !user) return <PageLoading />;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
-      <AccountBar user={user} />
+    <>
+      <AccountBar user={user} width="max-w-6xl" />
+      <main className="mx-auto max-w-6xl px-4 py-8">
 
-      <h1 className="text-2xl font-bold">Your subjects</h1>
-      <p className="mt-1 text-sm text-gray-600">
-        Choose a subject to set up its assignments and rubrics, then run the automated evaluator and grade the
-        submissions -- you always have the final say.
-      </p>
+
+     <PageHeader
+        title="Your subjects"
+        description="Choose a subject to set up its assignments and rubrics, then run the automated evaluator and grade the submissions -- you always have the final say."
+      />
 
       {user.subjects.length === 0 ? (
-        <p className="mt-6 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          You haven&apos;t been assigned to any subjects yet -- ask your admin to assign you to one.
+               <p className="empty-state">
+          You haven&apos;t been assigned to any subjects yet. Ask your administrator to assign you to one.
         </p>
       ) : (
         <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="subject-list">
@@ -86,6 +88,7 @@ export default function InstructorHomePage() {
           })}
         </ul>
       )}
-    </div>
+      </main>
+    </>
   );
 }

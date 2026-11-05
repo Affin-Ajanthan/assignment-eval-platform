@@ -14,8 +14,8 @@ export function methodLabel(method: string): string {
 function Row({ label, signal, missing }: { label: string; signal: AISignal | null; missing: string }) {
   return (
     <tr>
-      <td className="border border-gray-200 px-3 py-1.5 align-top font-semibold">{label}</td>
-      <td className="border border-gray-200 px-3 py-1.5 align-top">
+      <td className="border-b border-gray-200 px-3 py-2 align-top font-semibold">{label}</td>
+      <td className="border-b border-gray-200 px-3 py-2 align-top">
         {signal ? (
           <span className={`rounded px-2 py-0.5 text-xs font-semibold ${BADGE[signal.signal].cls}`}>
             {BADGE[signal.signal].text}
@@ -24,7 +24,7 @@ function Row({ label, signal, missing }: { label: string; signal: AISignal | nul
           <span className="text-gray-400">—</span>
         )}
       </td>
-      <td className="border border-gray-200 px-3 py-1.5 align-top text-xs text-gray-700">
+      <td className="border-b border-gray-200 px-3 py-2 align-top text-xs text-gray-700">
         {signal ? (
           <>
             <div className="text-gray-500">{methodLabel(signal.method)}</div>
@@ -47,7 +47,7 @@ export default function AISignalsPanel({ result }: { result: AutoEvaluation }) {
   const signals = result.ai_signals;
   return (
     <div className="mt-4 rounded-md border border-gray-200 p-4">
-      <h4 className="font-bold">AI-content signals</h4>
+      <h4 className="text-base font-semibold">AI-content signals</h4>
       <p className="mt-1 text-xs text-gray-600">
         Statistical estimates of whether the report or code looks machine-generated. These are review signals, not
         proof: they misfire on formal or non-native English writing and on tidy code, and they never change the
@@ -67,9 +67,9 @@ export default function AISignalsPanel({ result }: { result: AutoEvaluation }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 text-left">
-                <th className="border border-gray-200 px-3 py-1.5">Part</th>
-                <th className="border border-gray-200 px-3 py-1.5">Signal</th>
-                <th className="border border-gray-200 px-3 py-1.5">Details</th>
+                <th className="border-b border-gray-200 px-3 py-2">Part</th>
+                <th className="border-b border-gray-200 px-3 py-2">Signal</th>
+                <th className="border-b border-gray-200 px-3 py-2">Details</th>
               </tr>
             </thead>
             <tbody>

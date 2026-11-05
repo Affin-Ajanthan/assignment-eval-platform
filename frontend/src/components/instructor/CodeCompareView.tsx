@@ -51,7 +51,7 @@ function FileView({ file, onlyMatches }: { file: CodeCompareFile; onlyMatches: b
               </div>
             ) : (
               <div key={n} className={`flex ${marked(n) ? "bg-red-100" : ""}`}>
-                <span className="w-10 shrink-0 select-none pr-2 text-right text-gray-400">{n}</span>
+                <span className="w-10 shrink-0 select-none pr-2 text-right text-gray-600">{n}</span>
                 <code className="whitespace-pre pr-2">{lines[n - 1] || " "}</code>
               </div>
             ),

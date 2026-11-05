@@ -172,7 +172,7 @@ export default function UploadForm({
         <button
           type="submit"
           disabled={submitting}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+          className="btn-primary rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
         >
           {submitting ? "Submitting..." : mode === "submit" ? "Submit assignment" : "Save changes"}
         </button>
@@ -181,7 +181,7 @@ export default function UploadForm({
           onClick={() => (submitting ? upload.current?.abort() : onCancel())}
           // Once every byte is sent the server is saving: stopping then could not undo it.
           disabled={progress !== null && progress >= 1}
-          className="rounded-md bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700 disabled:opacity-60"
+          className="btn-secondary rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
         >
           {submitting ? "Cancel upload" : "Cancel"}
         </button>

@@ -138,7 +138,7 @@ export default function RichTextEditor({
   return (
     <div className="mt-1" data-testid="rich-text-editor">
       <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="Text formatting">
-        <button type="button" onClick={bold} disabled={preview} title="Bold (Ctrl+B)" aria-label="Bold" className={`${tool} font-bold`}>
+        <button type="button" onClick={bold} disabled={preview} title="Bold (Ctrl+B)" aria-label="Bold" className={`${tool} font-semibold`}>
           B
         </button>
         <button type="button" onClick={italic} disabled={preview} title="Italic (Ctrl+I)" aria-label="Italic" className={`${tool} italic`}>
@@ -210,7 +210,7 @@ export default function RichTextEditor({
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder={placeholder}
-          className="mt-1 block w-full resize-none rounded-md border border-gray-300 px-3 py-2 text-sm leading-5"
+          className="mt-1 block w-full resize-none rounded-md border border-gray-300 px-3 py-2 text-sm leading-6"
         />
       )}
       <p className="mt-1 text-xs text-gray-500">

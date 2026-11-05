@@ -12,6 +12,7 @@ import JoinSubject from "@/components/student/JoinSubject";
 import SubmissionHistory from "@/components/student/SubmissionHistory";
 import { OpenForm } from "@/components/student/labels";
 import PageLoading from "@/components/PageLoading";
+import PageHeader, { StatTile } from "@/components/PageHeader";
 
 export default function StudentPage() {
   const { user, ready } = useRequireRole("student");
@@ -19,6 +20,8 @@ export default function StudentPage() {
   // null until the first load: "no assignments" is shown only once the list has arrived.
   const [assignments, setAssignments] = useState<StudentAssignment[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // When the list arrived: "due within 3 days" counts from then.
+  const [loadedAt, setLoadedAt] = useState(0);
   // Which subject's assignments are listed, for a student in more than one.
   const [subjectFilter, setSubjectFilter] = useState<number | "all">("all");
   // Not open yet: name and dates only. A failure here just leaves the list out.
@@ -34,6 +37,7 @@ export default function StudentPage() {
   const load = useCallback(async () => {
     try {
       setAssignments(await apiFetch<StudentAssignment[]>("/assignments"));
+      setLoadedAt(Date.now());
       setLoadError(null);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err));
@@ -115,53 +119,77 @@ export default function StudentPage() {
   );
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <AccountBar user={user} />
+    <>
+      <AccountBar user={user} width="max-w-4xl" />
+      <main className="mx-auto max-w-4xl px-4 py-8">
 
-      <h1 className="text-2xl font-bold">Student portal</h1>
-      <p className="mt-1 text-sm text-gray-600">
-        Submit your work before the deadline. You can edit or delete a submission until the deadline or until it is
-        graded; each assignment below says what it accepts.
-      </p>
+      <PageHeader
+        title="Student portal"
+        description="Submit your work before the deadline. You can edit or delete a submission until the deadline or until it is graded; each assignment below says what it accepts."
+      >
+        {subjects.length > 1 && (
+          <div>
+            <label className="block text-sm font-semibold" htmlFor="subject-filter">
+              Subject
+            </label>
+            <select
+              id="subject-filter"
+              value={subjectFilter}
+              onChange={(e) => setSubjectFilter(e.target.value === "all" ? "all" : Number(e.target.value))}
+              className="mt-1 rounded-md border border-gray-300 px-3 py-2 text-sm"
+            >
+              <option value="all">All subjects</option>
+              {subjects.map(([id, name]) => (
+                <option key={id} value={id}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </PageHeader>
 
       {(subjectCount ?? user.subjects.length) === 0 && (
-        <p className="mt-4 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-800">
+        <p className="empty-state">
           You are not in any subject yet. Join one below with the password your instructor gave you.
         </p>
       )}
 
       <JoinSubject onJoined={joinedSubject} />
 
-      {subjects.length > 1 && (
-        <div className="mt-4">
-          <label className="block text-sm font-semibold" htmlFor="subject-filter">
-            Subject
-          </label>
-          <select
-            id="subject-filter"
-            value={subjectFilter}
-            onChange={(e) => setSubjectFilter(e.target.value === "all" ? "all" : Number(e.target.value))}
-            className="mt-1 rounded-md border border-gray-300 px-3 py-2 text-sm"
-          >
-            <option value="all">All subjects</option>
-            {subjects.map(([id, name]) => (
-              <option key={id} value={id}>
-                {name}
-              </option>
-            ))}
-          </select>
+      {/* What needs doing, at a glance. */}
+      {assignments !== null && open.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="student-overview">
+          <StatTile label="Open assignments" value={open.length} href="#available" />
+          <StatTile
+            label="Not submitted yet"
+            value={open.filter((a) => !a.my_submission).length}
+            tone={open.some((a) => !a.my_submission) ? "attention" : "good"}
+            href="#available"
+          />
+          <StatTile
+            label="Due within 3 days"
+            value={open.filter((a) => deadline(a) - loadedAt < 3 * 864e5).length}
+            tone={open.some((a) => deadline(a) - loadedAt < 3 * 864e5) ? "attention" : "neutral"}
+            href="#available"
+          />
+          <StatTile
+            label="Marked, with feedback"
+            value={listed.filter((a) => a.my_submission?.final_mark != null).length}
+            tone="good"
+          />
         </div>
       )}
 
-      <section className="mt-6">
-        <h2 className="text-lg font-bold">Available assignments</h2>
+      <section className="mt-6 scroll-mt-4" id="available">
+        <h2 className="text-xl font-semibold">Available assignments</h2>
         {loadError && (
           <div role="alert" className="mt-2 flex flex-wrap items-center gap-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
             <span>Could not load your assignments: {loadError}</span>
             <button
               type="button"
               onClick={load}
-              className="rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
+              className="btn-danger rounded-md px-3 py-1 text-xs font-semibold"
             >
               Try again
             </button>
@@ -170,7 +198,7 @@ export default function StudentPage() {
         {assignments === null ? (
           !loadError && <p className="mt-2 text-sm text-gray-500">Loading your assignments...</p>
         ) : open.length === 0 ? (
-          <p className="mt-2 text-sm text-gray-600">There are no assignments open for submission right now.</p>
+          <p className="empty-state mt-2">There are no assignments open for submission right now.</p>
         ) : (
           <ul className="mt-3 space-y-4">{open.map(card)}</ul>
         )}
@@ -178,7 +206,7 @@ export default function StudentPage() {
 
       {comingSoon.length > 0 && (
         <section className="mt-8" data-testid="coming-soon">
-          <h2 className="text-lg font-bold">Coming soon</h2>
+          <h2 className="text-xl font-semibold">Coming soon</h2>
           <p className="mt-1 text-sm text-gray-600">
             Not open yet. The details appear here when each one opens.
           </p>
@@ -201,7 +229,7 @@ export default function StudentPage() {
 
       {past.length > 0 && (
         <section className="mt-8">
-          <h2 className="text-lg font-bold">Past assignments</h2>
+          <h2 className="text-xl font-semibold">Past assignments</h2>
           <ul className="mt-3 space-y-4">{past.map(card)}</ul>
         </section>
       )}
@@ -209,6 +237,7 @@ export default function StudentPage() {
       <SubmissionHistory version={historyVersion} />
 
       <ConfirmDialog request={confirm} busy={confirmBusy} onCancel={() => !confirmBusy && setConfirm(null)} />
-    </div>
+      </main>
+    </>
   );
 }

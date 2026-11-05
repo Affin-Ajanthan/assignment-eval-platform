@@ -89,7 +89,7 @@ export function questionRowsPayload(rows: QuestionRow[]): QuestionsPayload {
 }
 
 const field = "mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm";
-const button = "rounded-md bg-gray-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-700 disabled:opacity-60";
+const button = "btn-secondary rounded-md px-3 py-1.5 text-xs font-semibold disabled:opacity-60";
 
 /**
  * The tasks of a code challenge. At least one is required, and each needs a title, its own question (what the
@@ -131,7 +131,7 @@ export default function QuestionsEditor({
         {rows.map((row, i) => (
           <div key={i} className="rounded-md border border-gray-300 bg-gray-50 p-3" data-testid="question-block">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-bold">
+              <span className="text-sm font-semibold">
                 Task {i + 1}
                 {row.title.trim() && <span className="ml-2 font-normal text-gray-600">{row.title.trim()}</span>}
               </span>
