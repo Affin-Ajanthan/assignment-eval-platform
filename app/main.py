@@ -1767,6 +1767,7 @@ class UpcomingAssignmentOut(BaseModel):
     closes. Its description, tasks and settings stay hidden until it opens (the instructor may still be
     changing them)."""
     name: str
+    subject_id: int  # which of the student's subjects it belongs to (two subjects can share a name)
     subject_name: str
     assignment_type: str
     available_from: UTCDateTime
@@ -1781,7 +1782,7 @@ def list_upcoming_assignments(student: User = Depends(require_student), db: Sess
     upcoming = (db.query(Assignment)
                 .filter(Assignment.subject_id.in_(student_subject_ids(db, student)), Assignment.available_from > now)
                 .order_by(Assignment.available_from).all())
-    return [UpcomingAssignmentOut(name=a.name, subject_name=a.subject.name if a.subject else "",
+    return [UpcomingAssignmentOut(name=a.name, subject_id=a.subject_id, subject_name=a.subject.name if a.subject else "",
                                   assignment_type=a.kind, available_from=_as_utc(a.available_from),
                                   deadline=_as_utc(a.deadline))
             for a in upcoming]
@@ -3179,7 +3180,8 @@ from .routers.student_runs import router as _student_run_router  # noqa: E402
 
 app.include_router(_student_run_router)
 
-# An instructor opens a subject to students with a password; students join it: app/routers/subject_access.py.
+# Every subject is listed to students; an instructor allows registration with a password and students join with it:
+# app/routers/subject_access.py.
 from .routers.subject_access import router as _subject_access_router  # noqa: E402
 
 app.include_router(_subject_access_router)

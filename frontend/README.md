@@ -8,7 +8,8 @@ role/screen:
 - `/instructor/subjects/<id>` -- one subject, two tabs: Assignments (create, edit, delete, Open; student access) and Rubrics
 - `/instructor/subjects/<id>/assignments/<assignment id>` -- one assignment: Submissions & grading, Similarity, Batch evaluate
 - `/instructor/assignments/new` and `/instructor/assignments/<id>` -- create and edit an assignment; both go back to the subject page
-- `/student` -- join a subject with its password, then upload code/report/video
+- `/student` -- every subject as a box; a joined one opens, any other is locked until the student joins it with its password
+- `/student/subjects/<id>` -- one joined subject: its assignments (upload code/report/video, or do a code challenge)
 
 Stack: Next.js 16 (App Router, Turbopack), React 19, TypeScript, Tailwind
 CSS v4. All API access goes through `src/lib/api.ts` (`apiFetch`), which

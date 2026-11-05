@@ -1,10 +1,12 @@
 """How a student gets into a subject.
 
-The admin gives a subject to instructors only. An instructor then opens it to students and sets a password for it
-(GET/PUT /instructor/subjects/{id}/access). Every student sees the open subjects (GET /student/open-subjects) and
-joins one by entering its password (POST /student/subjects/{id}/join), which enrols them: from then on it is one of
-their subjects, as if the admin had enrolled them. Closing a subject stops new students joining; the students
-already in it stay.
+The admin gives a subject to instructors only. Every subject is shown to every student as soon as it exists
+(GET /student/subjects, each marked joined or not), but only a student who has joined can open it and see its
+assignments. To join one the student enters its password (POST /student/subjects/{id}/join), which enrols them: from
+then on it is one of their subjects, as if the admin had enrolled them. That works only once the instructor has set a
+password and allowed students to register (GET/PUT /instructor/subjects/{id}/access); until then the subject is
+listed but can't be joined. Switching registration off stops new students joining; the students already in the
+subject stay.
 """
 
 from __future__ import annotations
@@ -41,12 +43,14 @@ class SubjectAccessOut(BaseModel):
     password: str = ""  # for the instructor to read back and share
 
 
-class OpenSubjectOut(BaseModel):
+class StudentSubjectOut(BaseModel):
     id: int
     name: str
     code: str
     batch: str = ""
     instructors: list[str] = []
+    joined: bool = False  # the student is in it: only then can they open it and see its assignments
+    registration_open: bool = False  # the instructor has set a password and allowed students to register
 
 
 class JoinIn(BaseModel):
@@ -64,6 +68,10 @@ def _access_out(subject: Subject) -> SubjectAccessOut:
     return SubjectAccessOut(open=bool(subject.open_to_students), password=subject.join_password or "")
 
 
+def _registration_open(subject: Subject) -> bool:
+    return bool(subject.open_to_students) and bool(subject.join_password)
+
+
 @router.get("/instructor/subjects/{subject_id}/access", response_model=SubjectAccessOut)
 def get_subject_access(subject_id: int, instructor: User = Depends(require_instructor), db: Session = Depends(get_db)):
     return _access_out(instructor_subject(db, instructor, subject_id))
@@ -74,26 +82,24 @@ def set_subject_access(
     subject_id: int, payload: SubjectAccessIn,
     instructor: User = Depends(require_instructor), db: Session = Depends(get_db),
 ):
-    """Open the subject to students (with a password) or close it. A password left out stays as it was."""
+    """Allow students to register for the subject (with a password) or stop them. A password left out stays as it was."""
     subject = instructor_subject(db, instructor, subject_id)
     if payload.password is not None:
         subject.join_password = payload.password.strip() or None
     if payload.open and not subject.join_password:
-        raise HTTPException(400, "Set a password before opening the subject to students.")
+        raise HTTPException(400, "Set a password before allowing students to register.")
     subject.open_to_students = payload.open
     db.commit()
     return _access_out(subject)
 
 
-@router.get("/student/open-subjects", response_model=list[OpenSubjectOut])
-def open_subjects(student: User = Depends(require_student), db: Session = Depends(get_db)):
-    """The subjects the instructors have opened that the student has not joined yet."""
+@router.get("/student/subjects", response_model=list[StudentSubjectOut])
+def student_subjects(student: User = Depends(require_student), db: Session = Depends(get_db)):
+    """Every subject there is, each marked as joined or not (and, if not, whether registration is open for it)."""
     joined = student_subject_ids(db, student)
-    subjects = db.query(Subject).filter(Subject.open_to_students.is_(True)).order_by(Subject.name, Subject.id).all()
+    subjects = db.query(Subject).order_by(Subject.name, Subject.id).all()
     out = []
     for s in subjects:
-        if s.id in joined:
-            continue
         teachers = (
             db.query(User.full_name)
             .join(InstructorAssignment, InstructorAssignment.instructor_id == User.id)
@@ -101,8 +107,9 @@ def open_subjects(student: User = Depends(require_student), db: Session = Depend
             .order_by(User.full_name)
             .all()
         )
-        out.append(OpenSubjectOut(id=s.id, name=s.name, code=s.code, batch=s.batch or "",
-                                  instructors=[name for (name,) in teachers]))
+        out.append(StudentSubjectOut(id=s.id, name=s.name, code=s.code, batch=s.batch or "",
+                                     instructors=[name for (name,) in teachers], joined=s.id in joined,
+                                     registration_open=_registration_open(s)))
     return out
 
 
@@ -111,11 +118,14 @@ def join_subject(
     subject_id: int, payload: JoinIn, student: User = Depends(require_student), db: Session = Depends(get_db),
 ):
     """Enter the subject's password. Right: the student is enrolled for good. Wrong: refused, and after a few wrong
-    tries in a row the student must wait. A subject that is not open can't be joined."""
+    tries in a row the student must wait. A subject the instructor has not allowed students to register for (no
+    password set, or registration switched off) can't be joined yet."""
     subject = db.get(Subject, subject_id)
-    if subject is None or not subject.open_to_students or not subject.join_password:
-        raise HTTPException(404, "This subject is not open to students.")
+    if subject is None:
+        raise HTTPException(404, "Subject not found.")
     if subject_id not in student_subject_ids(db, student):
+        if not _registration_open(subject):
+            raise HTTPException(403, "Registration for this subject is not open yet. Ask your instructor.")
         key = (student.id, subject.id)
         try:
             join_limiter.check(key)

@@ -138,9 +138,10 @@ admin gave them.
   students with a password. Open on an assignment shows that assignment's
   Submissions & grading, Similarity and Batch evaluate tabs. An instructor
   only ever sees and manages their own subjects.
-- **Student**: logs in and lands on `/student`. Joins a subject the instructor
-  opened by entering its password, and only ever sees and submits to the
-  subjects they joined, and only ever sees their own submissions and grades.
+- **Student**: logs in and lands on `/student`, which shows every subject. Only a
+  subject they joined opens (with its assignments); to join one they enter its password once the instructor has
+  allowed registration. They only ever see and submit to the
+  subjects they joined, and only ever see their own submissions and grades.
 
 On first run, since no accounts exist yet, the server bootstraps a
 default admin so there's a way to log in:

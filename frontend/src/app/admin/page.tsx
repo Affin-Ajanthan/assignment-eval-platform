@@ -266,7 +266,7 @@ export default function AdminPage() {
 
       <PageHeader
         title="Admin dashboard"
-         description="Create subjects, then create instructor accounts and assign them to subjects. Students are not assigned here: an instructor opens a subject with a password and students join it themselves. You can edit subjects, instructors and students at any time. Everyone logs in with the credentials you set here -- there's no self-signup."
+         description="Create subjects, then create instructor accounts and assign them to subjects. Students are not assigned here: every student sees each subject, and joins it with the password its instructor sets. You can edit subjects, instructors and students at any time. Everyone logs in with the credentials you set here -- there's no self-signup."
      />
       <div className="grid grid-cols-3 gap-3" data-testid="admin-overview">
         <StatTile label="Subjects" value={subjects.length} href="#subjects" />

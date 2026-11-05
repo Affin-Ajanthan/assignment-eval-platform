@@ -29,13 +29,17 @@ export interface SubjectAccess {
   password: string;
 }
 
-/** A subject an instructor has opened that the student has not joined yet (GET /student/open-subjects). */
-export interface OpenSubject {
+/** A subject as a student sees it (GET /student/subjects): every subject is listed, but only a joined one can be
+ * opened. One not joined yet can be joined, with its password, only once `registration_open` (the instructor set a
+ * password and allowed it). */
+export interface StudentSubject {
   id: number;
   name: string;
   code: string;
   batch: string;
   instructors: string[];
+  joined: boolean;
+  registration_open: boolean;
 }
 
 export interface UserInfo {
@@ -733,6 +737,7 @@ export async function apiFetch<T = unknown>(path: string, options: ApiFetchOptio
 /** A not-yet-open assignment in the student's "Coming soon" list (GET /upcoming-assignments): name and dates only. */
 export interface UpcomingAssignment {
   name: string;
+  subject_id: number;
   subject_name: string;
   assignment_type: "submission" | "code_challenge";
   available_from: string;
