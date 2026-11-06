@@ -4,6 +4,7 @@ student who joined can see its assignments. The student joins with the subject's
 (PUT /instructor/subjects/{id}/access)."""
 
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -48,7 +49,7 @@ def _listed(student):
 def test_a_new_subject_is_listed_to_students_but_cannot_be_joined_until_allowed():
     _, subject, instructor, student = _setup()
     r = client.get(f"/instructor/subjects/{subject['id']}/access", headers=H(instructor))
-    assert r.status_code == 200 and r.json() == {"open": False, "password": ""}
+    assert r.status_code == 200 and r.json() == {"open": False, "password": "", "ends_at": None, "expired": False}
 
     shown = _listed(student)[subject["id"]]  # shown at once, but not joined and registration is not open
     assert (shown["joined"], shown["registration_open"]) == (False, False)
@@ -60,7 +61,8 @@ def test_a_new_subject_is_listed_to_students_but_cannot_be_joined_until_allowed(
 def test_a_listed_subject_is_joined_with_its_password_once_allowed():
     _, subject, instructor, student = _setup()
     r = _open(instructor, subject, "  Secret 1 ")
-    assert r.status_code == 200 and r.json() == {"open": True, "password": "Secret 1"}  # trimmed, readable back
+    assert r.status_code == 200
+    assert r.json() == {"open": True, "password": "Secret 1", "ends_at": None, "expired": False}  # trimmed, readable back
 
     rows = _listed(student)
     assert rows[subject["id"]]["registration_open"] is True and rows[subject["id"]]["joined"] is False
@@ -106,9 +108,9 @@ def test_allowing_needs_a_password_and_switching_off_keeps_it():
 
     assert _open(instructor, subject, "pw1").status_code == 200
     r = client.put(url, headers=H(instructor), json={"open": True})  # password left out: kept
-    assert r.json() == {"open": True, "password": "pw1"}
+    assert r.json() == {"open": True, "password": "pw1", "ends_at": None, "expired": False}
     r = client.put(url, headers=H(instructor), json={"open": False})
-    assert r.json() == {"open": False, "password": "pw1"}
+    assert r.json() == {"open": False, "password": "pw1", "ends_at": None, "expired": False}
     assert client.put(url, headers=H(instructor), json={"open": True, "password": ""}).status_code == 400  # removed
 
 
@@ -132,6 +134,118 @@ def test_switching_registration_off_stops_new_students_but_keeps_the_ones_in():
     assert _join(late, subject, "join-me").status_code == 403
     assert _my_subject_ids(late) == []
     assert _my_subject_ids(student) == [subject["id"]]  # still in
+
+
+def _in(hours):
+    """An ISO time `hours` from now (UTC), as the instructor's page sends it."""
+    return (datetime.now(timezone.utc) + timedelta(hours=hours)).isoformat()
+
+
+def _pretend_now_is(monkeypatch, hours_from_now):
+    """Makes the join/access code see a later clock, so an end date can pass without waiting."""
+    later = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=hours_from_now)
+    monkeypatch.setattr("app.routers.subject_access.utcnow_naive", lambda: later)
+
+
+def test_an_end_date_must_be_in_the_future_and_is_shown_while_open():
+    _, subject, instructor, student = _setup()
+    url = f"/instructor/subjects/{subject['id']}/access"
+    past = client.put(url, headers=H(instructor), json={"open": True, "password": "pw", "ends_at": _in(-1)})
+    assert past.status_code == 400 and "future" in past.json()["detail"]
+
+    ok = client.put(url, headers=H(instructor), json={"open": True, "password": "pw", "ends_at": _in(3)})
+    assert ok.status_code == 200 and ok.json()["open"] is True and ok.json()["ends_at"] is not None
+    assert ok.json()["expired"] is False
+    shown = _listed(student)[subject["id"]]  # the student sees when it closes
+    assert shown["registration_open"] is True and shown["registration_ends_at"] is not None
+
+    cleared = client.put(url, headers=H(instructor), json={"open": True, "ends_at": None})  # no end date any more
+    assert cleared.json()["ends_at"] is None
+    assert _listed(student)[subject["id"]]["registration_ends_at"] is None
+
+
+def test_registration_closes_at_the_end_date_and_keeps_the_students_in(monkeypatch):
+    admin, subject, instructor, early = _setup()
+    _, late = create_student(client, admin, [])
+    _open(instructor, subject, "join-me", ends_at=_in(1))
+    assert _join(early, subject, "join-me").status_code == 200
+
+    _pretend_now_is(monkeypatch, 2)  # the end date has passed
+    refused = _join(late, subject, "join-me")
+    assert refused.status_code == 403 and "closed" in refused.json()["detail"]
+    assert _my_subject_ids(late) == []
+    assert _listed(late)[subject["id"]]["registration_open"] is False
+    assert _listed(late)[subject["id"]]["registration_ends_at"] is None  # nothing to join before, so no date shown
+    state = client.get(f"/instructor/subjects/{subject['id']}/access", headers=H(instructor)).json()
+    assert (state["open"], state["expired"]) == (False, True) and state["password"] == "join-me"
+    assert _my_subject_ids(early) == [subject["id"]]  # the one who joined in time stays in
+
+
+def test_registration_opens_again_with_the_same_password(monkeypatch):
+    admin, subject, instructor, early = _setup()
+    _, late = create_student(client, admin, [])
+    url = f"/instructor/subjects/{subject['id']}/access"
+    _open(instructor, subject, "join-me", ends_at=_in(1))
+    _pretend_now_is(monkeypatch, 2)
+
+    # Switching it on again without a later date is refused: the saved one is still in the past.
+    assert client.put(url, headers=H(instructor), json={"open": True}).status_code == 400
+    assert _join(late, subject, "join-me").status_code == 403
+
+    again = client.put(url, headers=H(instructor), json={"open": True, "ends_at": _in(5)})  # a later date
+    assert again.status_code == 200 and again.json()["open"] is True and again.json()["password"] == "join-me"
+    assert _join(late, subject, "join-me").status_code == 200  # the same password works again
+    assert _my_subject_ids(late) == [subject["id"]]
+
+
+def test_registration_opens_again_with_a_new_password_and_the_old_one_stops_working(monkeypatch):
+    admin, subject, instructor, early = _setup()
+    _, late = create_student(client, admin, [])
+    url = f"/instructor/subjects/{subject['id']}/access"
+    _open(instructor, subject, "old-pass", ends_at=_in(1))
+    assert _join(early, subject, "old-pass").status_code == 200
+    _pretend_now_is(monkeypatch, 2)
+
+    again = client.put(url, headers=H(instructor), json={"open": True, "password": "new-pass", "ends_at": _in(5)})
+    assert again.status_code == 200 and again.json()["password"] == "new-pass"
+    assert _join(late, subject, "old-pass").status_code == 403  # the old password is dead
+    assert _my_subject_ids(late) == []
+    assert _join(late, subject, "new-pass").status_code == 200
+    assert _my_subject_ids(early) == [subject["id"]]  # changing the password removed nobody
+
+
+def test_changing_the_password_never_removes_a_student_who_joined():
+    admin, subject, instructor, student = _setup()
+    _open(instructor, subject, "first")
+    assert _join(student, subject, "first").status_code == 200
+    _open(instructor, subject, "second")
+    assert _my_subject_ids(student) == [subject["id"]]
+    assert _listed(student)[subject["id"]]["joined"] is True
+    assert _join(student, subject, "first").status_code == 200  # already in: nothing to check
+    _, other = create_student(client, admin, [])
+    assert _join(other, subject, "first").status_code == 403  # the old password no longer lets anyone in
+    assert _join(other, subject, "second").status_code == 200
+
+
+def test_the_admin_can_add_a_student_to_a_subject_without_the_password():
+    from tests.auth_helpers import create_assignment
+
+    admin, subject, instructor, _student = _setup()
+    assignment = create_assignment(client, instructor, subject["id"])
+    user, student = create_student(client, admin, [])
+    assert _my_subject_ids(student) == []  # registration was never opened: only the admin can add them
+
+    r = client.put(f"/admin/students/{user['id']}", headers=H(admin), json={"subject_ids": [subject["id"]]})
+    assert r.status_code == 200 and [s["id"] for s in r.json()["subjects"]] == [subject["id"]]
+    assert _my_subject_ids(student) == [subject["id"]]
+    assert _listed(student)[subject["id"]]["joined"] is True
+    assert [a["id"] for a in client.get("/assignments", headers=H(student)).json()] == [assignment["id"]]
+
+    # Saving the student again with the same list keeps them in; with an empty list it takes them out.
+    client.put(f"/admin/students/{user['id']}", headers=H(admin), json={"subject_ids": [subject["id"]]})
+    assert _my_subject_ids(student) == [subject["id"]]
+    client.put(f"/admin/students/{user['id']}", headers=H(admin), json={"subject_ids": []})
+    assert _my_subject_ids(student) == []
 
 
 def test_too_many_wrong_passwords_make_a_student_wait():

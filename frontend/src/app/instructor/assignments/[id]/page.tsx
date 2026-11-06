@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch, Assignment, Rubric } from "@/lib/api";
 import { useRequireRole } from "@/lib/useRequireRole";
 import { setFlash } from "@/lib/flash";
 import AssignmentForm from "@/components/instructor/AssignmentForm";
 import AssignmentPageLayout from "@/components/instructor/AssignmentPageLayout";
+import ReportTemplateControl from "@/components/instructor/ReportTemplateControl";
 import PageLoading from "@/components/PageLoading";
 
-/** Edit an assignment: /instructor/assignments/<id>, opened by Edit on the instructor dashboard. */
+/** Edit an assignment: /instructor/assignments/<id>, opened by clicking its box on the subject page. */
 export default function EditAssignmentPage() {
   const { user, ready } = useRequireRole("instructor");
   const { id } = useParams<{ id: string }>();
@@ -18,26 +19,31 @@ export default function EditAssignmentPage() {
   const [rubrics, setRubrics] = useState<Rubric[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const load = useCallback(async () => {
+    try {
+      const a = await apiFetch<Assignment>(`/assignments/${id}`);
+      setRubrics(await apiFetch<Rubric[]>(`/rubrics?subject_id=${a.subject_id}`));
+      setAssignment(a);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [id]);
+
   useEffect(() => {
-    if (!ready || !user) return;
-    (async () => {
-      try {
-        const a = await apiFetch<Assignment>(`/assignments/${id}`);
-        setRubrics(await apiFetch<Rubric[]>(`/rubrics?subject_id=${a.subject_id}`));
-        setAssignment(a);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    })();
-  }, [ready, user, id]);
+    if (ready && user) load();
+  }, [ready, user, load]);
 
   if (!ready || !user) return <PageLoading />;
 
-  const back = assignment ? `/instructor/subjects/${assignment.subject_id}?tab=assignments` : "/instructor";
+  // Back to the list of this kind in the subject.
+  const back = assignment
+    ? `/instructor/subjects/${assignment.subject_id}/assignments?kind=${assignment.assignment_type === "code_challenge" ? "code_challenge" : "submission"}`
+    : "/instructor";
   return (
     <AssignmentPageLayout
       user={user}
       backHref={back}
+      backLabel="Back to the list"
       title={assignment ? `Edit ${assignment.name}` : "Edit assignment"}
       subtitle={assignment?.subject_name}
     >
@@ -59,6 +65,15 @@ export default function EditAssignmentPage() {
           }}
           onCancel={() => router.push(back)}
         />
+      )}
+      {/* The report template is its own upload (it is saved at once, not with the form). */}
+      {assignment && assignment.assignment_type !== "code_challenge" && (
+        <section className="card mt-6" data-testid="report-template">
+          <h2 className="text-lg font-semibold">Report template (PDF)</h2>
+          <div className="mt-2 text-sm">
+            <ReportTemplateControl assignment={assignment} onChanged={load} />
+          </div>
+        </section>
       )}
     </AssignmentPageLayout>
   );

@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, StudentAssignment, StudentSubject, UpcomingAssignment } from "@/lib/api";
 import { useRequireRole } from "@/lib/useRequireRole";
+import { recordRecentSubject } from "@/lib/recentSubjects";
 import { formatDateTime } from "@/lib/datetime";
 import AccountBar from "@/components/AccountBar";
 import { MessageState } from "@/components/Message";
@@ -94,6 +95,7 @@ export default function StudentSubjectPage() {
           return;
         }
         setSubject(found);
+        recordRecentSubject("student", user.id, subjectId); // for "Recently viewed" on the home page
         if (found.joined) {
           load();
           loadUpcoming();

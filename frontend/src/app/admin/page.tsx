@@ -56,6 +56,7 @@ export default function AdminPage() {
   const [studentPassword, setStudentPassword] = useState("");
   const [studentBatch, setStudentBatch] = useState("");
   const [studentOwnNumber, setStudentOwnNumber] = useState(""); // the last part of TST/<batch>/<number>
+  const [studentSubjects, setStudentSubjects] = useState<Set<number>>(new Set()); // optional: subjects the admin adds them to
   const [studentMsg, setStudentMsg] = useState<MessageState>(null);
   // The student whose details the form holds (Edit in the list fills the form), or null while it adds a new one.
   const [editingStudent, setEditingStudent] = useState<UserInfo | null>(null);
@@ -200,6 +201,7 @@ export default function AdminPage() {
     setStudentPassword("");
     setStudentBatch("");
     setStudentOwnNumber("");
+    setStudentSubjects(new Set());
   }
 
   /** Edit in the students list: the form takes the student's details and comes into view. */
@@ -210,6 +212,7 @@ export default function AdminPage() {
     setStudentPassword("");
     setStudentBatch(s.batch ?? "");
     setStudentOwnNumber(ownNumberOf(s.register_number ?? "", s.batch ?? ""));
+    setStudentSubjects(new Set(s.subjects.map((x) => x.id)));
     setStudentMsg(null);
     showForm(studentFormRef.current);
   }
@@ -230,6 +233,7 @@ export default function AdminPage() {
         email: studentEmail,
         batch: studentBatch,
         register_number: registerNumberFor(studentBatch, studentOwnNumber),
+        subject_ids: Array.from(studentSubjects),
       };
       if (editing) {
         // A blank password keeps the current one.
@@ -266,7 +270,7 @@ export default function AdminPage() {
 
       <PageHeader
         title="Admin dashboard"
-         description="Create subjects, then create instructor accounts and assign them to subjects. Students are not assigned here: every student sees each subject, and joins it with the password its instructor sets. You can edit subjects, instructors and students at any time. Everyone logs in with the credentials you set here -- there's no self-signup."
+         description="Create subjects, then create instructor accounts and assign them to subjects. Every student sees each subject and can join it with the password its instructor sets; you can also add a student to subjects yourself on the Student form. You can edit subjects, instructors and students at any time. Everyone logs in with the credentials you set here -- there's no self-signup."
      />
       <div className="grid grid-cols-3 gap-3" data-testid="admin-overview">
         <StatTile label="Subjects" value={subjects.length} href="#subjects" />
@@ -545,8 +549,23 @@ export default function AdminPage() {
             placeholder={editingStudent ? "" : "Shown once -- share it with them directly"}
             className="mt-1 mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
           />
-          <p className="mb-3 text-sm text-gray-600">
-            No subjects here: the student joins a subject themselves, with the password its instructor sets.
+          <label className="block text-sm font-semibold" htmlFor="student-subjects">
+            Subjects <span className="font-normal text-gray-500">(optional, search and pick several)</span>
+          </label>
+          <div className="mb-1">
+            <MultiSelect
+              id="student-subjects"
+              options={subjects.map((s) => ({ id: s.id, label: subjectLabel(s) }))}
+              selected={studentSubjects}
+              onChange={setStudentSubjects}
+              placeholder="Search subjects..."
+              emptyText="No subjects yet. Add one in the Subjects tab."
+              testId="student-subjects-input"
+            />
+          </div>
+          <p className="mb-3 text-xs text-gray-500">
+            Adds the student to these subjects. Otherwise they join a subject themselves with its password. Saving
+            replaces their subjects with this list.
           </p>
           <div className="flex gap-2">
           <button className="btn-primary rounded-md px-4 py-2 text-sm font-semibold">

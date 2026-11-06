@@ -2,17 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { apiFetch, Assignment, AssignmentStatus, SubmissionType } from "@/lib/api";
-import { taskName, timedTasks, timeLimitText } from "@/lib/tasks";
+import { apiFetch, Assignment, AssignmentKind, AssignmentStatus } from "@/lib/api";
 import { formatDateTime } from "@/lib/datetime";
 import { takeFlash } from "@/lib/flash";
 import Message, { MessageState } from "@/components/Message";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
-import ReportTemplateControl from "@/components/instructor/ReportTemplateControl";
 import Badge from "@/components/Badge";
-import RichText from "@/components/RichText";
-import { KIND_OPTIONS } from "@/components/instructor/AssignmentForm";
-import { languageNames } from "@/lib/codeLanguages";
 
 const STATUS_STYLE: Record<AssignmentStatus, { text: string; cls: string }> = {
   upcoming: { text: "Not yet open", cls: "bg-gray-100 text-gray-700" },
@@ -20,25 +15,32 @@ const STATUS_STYLE: Record<AssignmentStatus, { text: string; cls: string }> = {
   closed: { text: "Closed", cls: "bg-yellow-50 text-yellow-800" },
 };
 
-const TYPE_LABEL: Record<SubmissionType, string> = { code: "Code", report: "Report", video: "Video" };
-const typeLabel = (t: SubmissionType) => TYPE_LABEL[t] ?? t;
+/** What the list of each kind is called on its page. */
+export const KIND_LIST_LABEL: Record<AssignmentKind, { title: string; empty: string }> = {
+  submission: { title: "Submission assignments", empty: "No submission assignments yet." },
+  code_challenge: { title: "Code challenges", empty: "No code challenges yet." },
+};
 
 /**
- * The assignments of the subject: the two kinds to start a new one (each opens the page where its details are
- * entered), and the existing ones, with Edit (the same page) and Delete.
+ * The existing assignments of one kind in the subject, one box each. A box opens the edit page with its details filled
+ * in (/instructor/assignments/<id>); Open on it goes to grading, similarity and batch evaluation, and Delete removes
+ * it. New ones are created with "+ New" at the top of the page.
  */
 export default function AssignmentsSection({
   subjectId,
+  kind,
   assignments,
   onChanged,
 }: {
   subjectId: number;
+  kind: AssignmentKind;
   assignments: Assignment[];
   onChanged: () => Promise<void>;
 }) {
   const [msg, setMsg] = useState<MessageState>(null);
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
+  const shown = assignments.filter((a) => (a.assignment_type === "code_challenge" ? "code_challenge" : "submission") === kind);
 
   // The page that saved an assignment sends the instructor back here with a message to show.
   useEffect(() => {
@@ -71,138 +73,60 @@ export default function AssignmentsSection({
   }
 
   return (
-    <section className="mt-6 card">
-      <h2 className="text-xl font-semibold">Assignments</h2>
-      <p className="mt-1 text-sm text-gray-600">
-        Choose the kind of assignment to create: its details (name, instructions, dates and, for a code challenge, the
-        tasks and test cases) are entered on the next page. Open an assignment to grade its submissions, check for
-        copying or run the automated evaluator. Rubrics are in the Rubrics tab.
-      </p>
-
-      <div className="mt-3" data-testid="assignment-type-chooser">
-        <h3 className="text-sm font-semibold">Create assignment</h3>
-        <div className="mt-2 grid gap-3 sm:grid-cols-2">
-          {KIND_OPTIONS.map((o) => (
-            <Link
-              key={o.value}
-              href={`/instructor/assignments/new?subject=${subjectId}&kind=${o.value}`}
-              className="rounded-md border border-gray-300 p-4 text-left hover:border-blue-500 hover:bg-blue-50"
-              data-testid={`create-${o.value}`}
-            >
-              <span className="block font-semibold">{o.title}</span>
-              <span className="mt-1 block text-sm text-gray-600">{o.text}</span>
-            </Link>
-          ))}
-        </div>
-      </div>
+    <section className="card">
       <Message state={msg} />
 
-      <h3 className="mt-6 text-xs font-semibold uppercase tracking-wide text-gray-500">Assignments in this subject</h3>
-      {assignments.length === 0 ? (
-        <p className="empty-state mt-2">No assignments yet. Choose a kind above to create the first one.</p>
+      {shown.length === 0 ? (
+        <p className="empty-state" data-testid="no-assignments">
+          {KIND_LIST_LABEL[kind].empty} Use + New at the top right to create the first one.
+        </p>
       ) : (
-        <ul className="mt-2 space-y-3">
-          {assignments.map((a) => (
-            <li key={a.id} className="rounded-md border border-gray-200 p-4" data-testid="assignment-card">
-              <div className="flex flex-wrap items-start justify-between gap-2 sm:flex-nowrap">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h4 className="text-base font-semibold">{a.name}</h4>
-                    {a.assignment_type === "code_challenge" && (
-                      <Badge tone="bg-purple-50 text-purple-800">Code challenge</Badge>
-                    )}
-                    <Badge tone={STATUS_STYLE[a.status].cls}>{STATUS_STYLE[a.status].text}</Badge>
-                  </div>
-                  {/* The settings in one wrapping row instead of a stack of single lines. */}
-                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5">
-                  <p className="text-xs text-gray-600">Accepts: {a.submission_types.map(typeLabel).join(", ")}</p>
-                  {a.submission_types.includes("code") && a.code_languages?.length > 0 && (
-                    <p className="text-xs text-gray-600">Language: {languageNames(a.code_languages)}</p>
-                  )}
-                  <p className="text-xs text-gray-600">
-                    Student self-checks: similarity {a.student_similarity_check ? "on" : "off"} · AI{" "}
-                    {a.student_ai_check ? "on" : "off"}
-                  </p>
-                  {a.test_cases?.length > 0 && (
-                    <p className="text-xs text-gray-600" data-testid="test-cases-summary">
-                      {a.questions?.length > 1 && `Tasks: ${a.questions.length} · `}
-                      Test cases: {a.test_cases.length} ({a.test_cases.filter((t) => t.visible).length} visible) ·{" "}
-                      {a.test_cases.reduce((sum, t) => sum + t.points, 0)} points
-                    </p>
-                  )}
-                  {a.assignment_type === "code_challenge" && (
-                    <p className="text-xs text-gray-600" data-testid="time-limits-summary">
-                      Time limits:{" "}
-                      {timedTasks(a.questions).length === 0
-                        ? "none"
-                        : timedTasks(a.questions)
-                            .map((q) => `${taskName(q)} ${timeLimitText(q.time_limit_seconds ?? 0)}`)
-                            .join(" · ")}
-                    </p>
-                  )}
-                  {a.submission_types.includes("code") && (
-                    <p className="text-xs text-gray-600">
-                      Code similarity: {a.ignore_common_code ? "ignores code most of the class shares" : "compares all code"}
-                    </p>
-                  )}
-                  <p className="text-xs text-gray-600" data-testid="marks-release">
-                    Marks for students:{" "}
-                    {a.marks_released ? (
-                      "visible"
-                    ) : (
-                      <span className="font-semibold text-yellow-800">
-                        hidden until {formatDateTime(a.marks_release_at!)}
-                      </span>
-                    )}
-                  </p>
-                  </div>
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  <Link
-                    href={`/instructor/subjects/${subjectId}/assignments/${a.id}`}
-                    className="btn-primary rounded-md px-3 py-1.5 text-xs font-semibold"
-                    data-testid="open-assignment"
-                  >
-                    Open
-                  </Link>
-                  <Link
-                    href={`/instructor/assignments/${a.id}`}
-                    className="btn-secondary rounded-md px-3 py-1.5 text-xs font-semibold"
-                  >
-                    Edit
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => askDelete(a)}
-                    className="btn-danger rounded-md px-3 py-1.5 text-xs font-semibold"
-                  >
-                    Delete
-                  </button>
-                </div>
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="assignment-list">
+          {shown.map((a) => (
+            <li
+              key={a.id}
+              className="relative flex flex-col rounded-lg border border-gray-200 bg-white p-4 shadow-sm hover:border-blue-500 hover:bg-blue-50"
+              data-testid="assignment-card"
+            >
+              {/* The name is a link stretched over the whole box; Open and Delete sit above it. */}
+              <Link
+                href={`/instructor/assignments/${a.id}`}
+                className="text-base font-bold after:absolute after:inset-0"
+                data-testid="edit-assignment"
+              >
+                {a.name}
+              </Link>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Badge tone={STATUS_STYLE[a.status].cls}>{STATUS_STYLE[a.status].text}</Badge>
               </div>
-              {a.description && <RichText text={a.description} className="mt-2 text-sm text-gray-700" />}
-              <dl className="mt-3 grid gap-x-6 gap-y-1 border-t border-gray-100 pt-3 text-sm sm:grid-cols-[max-content_1fr] lg:grid-cols-[max-content_1fr_max-content_1fr]">
-                <dt className="font-semibold">Available from</dt>
-                <dd>{formatDateTime(a.available_from)}</dd>
-                <dt className="font-semibold">Deadline</dt>
-                <dd>{formatDateTime(a.deadline)}</dd>
-                <dt className="font-semibold">Rubric</dt>
-                <dd>{a.rubric_name ? `${a.rubric_name} (${a.max_points} pts)` : "None selected"}</dd>
-                <dt className="font-semibold">Starter code</dt>
-                <dd>
-                  {a.starter_code
-                    ? `${a.starter_code_filename} (${a.starter_code.split("\n").length} lines, excluded from similarity)`
-                    : "None"}
-                </dd>
-                <dt className="font-semibold">Report template (PDF)</dt>
-                <dd>
-                  <ReportTemplateControl assignment={a} onChanged={onChanged} />
-                </dd>
-                <dt className="font-semibold">Submissions</dt>
-                <dd>
-                  {a.submission_count} ({a.graded_count} graded)
-                </dd>
+              <dl className="mt-3 space-y-1 text-xs text-gray-600">
+                <div className="flex gap-1">
+                  <dt className="font-semibold">Deadline:</dt>
+                  <dd>{formatDateTime(a.deadline)}</dd>
+                </div>
+                <div className="flex gap-1">
+                  <dt className="font-semibold">Submissions:</dt>
+                  <dd>
+                    {a.submission_count} ({a.graded_count} graded)
+                  </dd>
+                </div>
               </dl>
+              <div className="relative z-10 mt-auto flex gap-2 pt-4">
+                <Link
+                  href={`/instructor/subjects/${subjectId}/assignments/${a.id}`}
+                  className="btn-primary rounded-md px-3 py-1.5 text-xs font-semibold"
+                  data-testid="open-assignment"
+                >
+                  Open
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => askDelete(a)}
+                  className="btn-danger rounded-md px-3 py-1.5 text-xs font-semibold"
+                >
+                  Delete
+                </button>
+              </div>
             </li>
           ))}
         </ul>

@@ -17,3 +17,5 @@ tests/unixcoder_basic/last_report.md
 
 # Local backend settings (each computer keeps its own; copy .env.example)
 .env
+
+new.md

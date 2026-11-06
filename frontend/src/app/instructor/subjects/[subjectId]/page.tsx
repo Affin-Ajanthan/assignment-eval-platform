@@ -4,8 +4,9 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, Assignment, Rubric, subjectLabel } from "@/lib/api";
 import { useRequireRole } from "@/lib/useRequireRole";
+import { recordRecentSubject } from "@/lib/recentSubjects";
 import AccountBar from "@/components/AccountBar";
-import AssignmentsSection from "@/components/instructor/AssignmentsSection";
+import AssignmentKindChooser from "@/components/instructor/AssignmentKindChooser";
 import PageTabs, { tabPanelProps } from "@/components/instructor/PageTabs";
 import RubricsSection from "@/components/instructor/RubricsSection";
 import SubjectAccessPanel from "@/components/instructor/SubjectAccessPanel";
@@ -29,6 +30,10 @@ export default function InstructorSubjectPage() {
   useEffect(() => {
     if (ready && user && subjectId === null) router.replace("/instructor");
   }, [ready, user, subjectId, router]);
+  // For "Recently viewed" on the home page.
+  useEffect(() => {
+    if (user && subjectId !== null) recordRecentSubject("instructor", user.id, subjectId);
+  }, [user, subjectId]);
 
   // Which section is shown; ?tab= in the address, so a reload or a link back from an assignment page opens the same one.
   const [tab, setTab] = useState<SubjectTab>("assignments");
@@ -89,7 +94,7 @@ export default function InstructorSubjectPage() {
 
           <div {...tabPanelProps("assignments", tab)}>
             <SubjectAccessPanel subjectId={subjectId} />
-            <AssignmentsSection subjectId={subjectId} assignments={assignments} onChanged={reload} />
+            <AssignmentKindChooser subjectId={subjectId} assignments={assignments} />
           </div>
 
           <div {...tabPanelProps("rubrics", tab)}>

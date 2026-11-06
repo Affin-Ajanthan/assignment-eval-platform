@@ -4,11 +4,15 @@ role/screen:
 
 - `/login` -- single login page, redirects to the right dashboard by role
 - `/admin` -- three tabs (Subjects, Instructors, Students): create and edit them; subjects and instructors are linked from either side
-- `/instructor` -- the instructor's subjects as boxes
-- `/instructor/subjects/<id>` -- one subject, two tabs: Assignments (create, edit, delete, Open; student access) and Rubrics
+- `/instructor` -- the subjects opened last ("Recently viewed", kept in the browser) as boxes, then the batches of their subjects
+- `/instructor/batches/<batch>` -- the subjects the instructor teaches in one batch
+- `/instructor/subjects/<id>` -- one subject, two tabs: Assignments (student access, and the two kinds, Submission and Code challenge, each opening its list) and Rubrics
+- `/instructor/subjects/<id>/rubrics/new` and `/instructor/subjects/<id>/rubrics/<rubric id>` -- create a rubric (+ New on the Rubrics tab, which lists the rubrics as boxes) and edit one by clicking its box
+- `/instructor/subjects/<id>/assignments?kind=submission|code_challenge` -- the existing ones of that kind as boxes: + New at the top right, click a box to edit it, Open, Delete
 - `/instructor/subjects/<id>/assignments/<assignment id>` -- one assignment: Submissions & grading, Similarity, Batch evaluate
-- `/instructor/assignments/new` and `/instructor/assignments/<id>` -- create and edit an assignment; both go back to the subject page
-- `/student` -- every subject as a box; each opens its own page
+- `/instructor/assignments/new` and `/instructor/assignments/<id>` -- create and edit an assignment; both go back to the list of their kind
+- `/student` -- the subjects opened last ("Recently viewed", kept in the browser) as boxes, then the batches
+- `/student/batches/<batch>` -- every subject in one batch; each opens its own page
 - `/student/subjects/<id>` -- one subject. Not joined: the teachers' names and a password box (the page reloads after a right password). Joined: the teachers with their e-mail, and the assignments (upload code/report/video, or do a code challenge)
 
 Stack: Next.js 16 (App Router, Turbopack), React 19, TypeScript, Tailwind
