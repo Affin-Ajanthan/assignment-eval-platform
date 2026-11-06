@@ -156,3 +156,83 @@ def test_logout_invalidates_token():
     r = client.post("/auth/logout", headers=auth_headers(student_tok))
     assert r.status_code == 200
     assert client.get("/auth/me", headers=auth_headers(student_tok)).status_code == 401
+
+
+# ---- Wrong-password limit at login ------------------------------------------------------------------------------
+
+class _Clock:
+    def __init__(self):
+        self.now = 1000.0
+
+    def __call__(self):
+        return self.now
+
+
+def _limited_login(monkeypatch, tries=3, window=900):
+    import app.main as main
+
+    clock = _Clock()
+    monkeypatch.setattr(main, "login_limiter", main._UnlockLimiter(tries=tries, window=window, clock=clock))
+    return clock
+
+
+def _student(email=None):
+    admin_tok = admin_token(client)
+    subject = create_subject(client, admin_tok)
+    user, _tok = create_student(client, admin_tok, [subject["id"]], email=email)
+    return user["email"]
+
+
+def _try(email, password):
+    return client.post("/auth/login", json={"email": email, "password": password})
+
+
+def test_login_locks_an_account_after_too_many_wrong_passwords(monkeypatch):
+    email = _student()
+    clock = _limited_login(monkeypatch, tries=3, window=900)
+    for _ in range(3):
+        assert _try(email, "wrong").status_code == 401
+    # Locked: not even the right password gets in, and no token is given.
+    r = _try(email, "student123")
+    assert r.status_code == 429
+    assert "token" not in r.json()
+    # Once the oldest wrong try is older than the window, the right password works again.
+    clock.now += 901
+    assert _try(email, "student123").status_code == 200
+
+
+def test_login_success_resets_the_wrong_password_count(monkeypatch):
+    email = _student()
+    _limited_login(monkeypatch, tries=3)
+    assert _try(email, "wrong").status_code == 401
+    assert _try(email, "wrong").status_code == 401
+    assert _try(email, "student123").status_code == 200
+    # The count started again, so two more wrong tries still leave the account open.
+    assert _try(email, "wrong").status_code == 401
+    assert _try(email, "wrong").status_code == 401
+    assert _try(email, "student123").status_code == 200
+
+
+def test_login_limit_ignores_case_and_spaces_in_the_email(monkeypatch):
+    email = _student()
+    _limited_login(monkeypatch, tries=2)
+    assert _try(email.upper(), "wrong").status_code == 401
+    assert _try(f"  {email}  ", "wrong").status_code == 401
+    assert _try(email, "student123").status_code == 429
+
+
+def test_login_limit_is_per_account(monkeypatch):
+    victim, other = _student(), _student()
+    _limited_login(monkeypatch, tries=2)
+    assert _try(victim, "wrong").status_code == 401
+    assert _try(victim, "wrong").status_code == 401
+    assert _try(victim, "student123").status_code == 429
+    assert _try(other, "student123").status_code == 200
+
+
+def test_login_limit_applies_to_unknown_emails_too(monkeypatch):
+    _limited_login(monkeypatch, tries=2)
+    assert _try("nobody-here@example.com", "x").status_code == 401
+    assert _try("nobody-here@example.com", "x").status_code == 401
+    # Same answer as for a real locked account, so the limit does not reveal which e-mails exist.
+    assert _try("nobody-here@example.com", "x").status_code == 429

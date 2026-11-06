@@ -862,9 +862,19 @@ def _can_view_submission(user: User, submission: Submission, db: Session) -> boo
 
 @app.post("/auth/login", response_model=LoginOut)
 def login(payload: LoginIn, db: Session = Depends(get_db)):
+    # Password guessing is limited per account, as for subject and task passwords: after a few wrong passwords
+    # the account takes no more tries, not even the right one, until the oldest wrong try ages out. The key is the
+    # e-mail as typed, case and spaces ignored, so an unknown address is limited the same way (and gives nothing away).
+    key = payload.email.strip().lower()
+    try:
+        login_limiter.check(key)
+    except _RunLimitError as exc:
+        raise HTTPException(exc.status, exc.detail)
     user = db.query(User).filter(User.email == payload.email).first()
     if not user or not verify_password(payload.password, user.password_hash, user.password_salt):
+        login_limiter.miss(key)
         raise HTTPException(401, "Incorrect email or password")
+    login_limiter.clear(key)
     token = create_session(db, user)
     return LoginOut(token=token, user=_user_out(user, db))
 
@@ -3177,8 +3187,12 @@ app.include_router(_self_check_router)
 
 # Students run their typed code against a code challenge's tests: app/routers/student_runs.py.
 from .routers.student_runs import router as _student_run_router  # noqa: E402
+from .routers.student_runs import RunLimitError as _RunLimitError, UnlockLimiter as _UnlockLimiter  # noqa: E402
 
 app.include_router(_student_run_router)
+
+# Wrong passwords at /auth/login: 10 in 15 minutes per account, then no more tries until the oldest ages out.
+login_limiter = _UnlockLimiter(tries=10, window=15 * 60)
 
 # Every subject is listed to students; an instructor allows registration with a password and students join with it:
 # app/routers/subject_access.py.
