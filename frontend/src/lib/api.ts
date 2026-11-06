@@ -25,8 +25,13 @@ export function subjectLabel(s: Pick<Subject, "name" | "code" | "batch">): strin
 
 /** A subject's student access, as the instructor sets it (GET/PUT /instructor/subjects/{id}/access). */
 export interface SubjectAccess {
+  /** Registration is open right now (switched on, a password set, and the end date not passed). */
   open: boolean;
   password: string;
+  /** When registration closes by itself (also after it has passed); null when there is no end date. */
+  ends_at: string | null;
+  /** Switched on, but the end date has passed: closed until a later date is saved. */
+  expired: boolean;
 }
 
 /** A subject as a student sees it (GET /student/subjects): every subject is listed, but only a joined one can be
@@ -41,6 +46,8 @@ export interface StudentSubject {
   teachers: { name: string; email: string }[];
   joined: boolean;
   registration_open: boolean;
+  /** When open registration closes by itself; null when it has no end date (or is not open). */
+  registration_ends_at: string | null;
 }
 
 export interface UserInfo {

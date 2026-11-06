@@ -130,12 +130,15 @@ admin gave them.
 - **Admin**: logs in and lands on `/admin`. Creates subjects and the
   instructors who teach them (each can be picked from either side), and
   creates student accounts (with a batch and a register number). Can edit
-  subjects, instructors and students later. Students are not assigned to
-  subjects by the admin.
+  subjects, instructors and students later. A student can be added to
+  subjects by the admin (Subjects box on the Student form), or joins by
+  password.
 - **Instructor**: logs in and lands on `/instructor`, which shows the
   subjects an admin assigned them to as boxes. A subject has two tabs,
   Assignments and Rubrics; the Assignments tab also opens the subject to
-  students with a password. Open on an assignment shows that assignment's
+  students with a password and an optional end date for registration
+  (after it the instructor opens it again with the same or a new password;
+  students who joined are never removed). Open on an assignment shows that assignment's
   Submissions & grading, Similarity and Batch evaluate tabs. An instructor
   only ever sees and manages their own subjects.
 - **Student**: logs in and lands on `/student`, which shows every subject. Only a

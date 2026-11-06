@@ -89,6 +89,9 @@ class Subject(Base):
     # reads it back to share it.
     open_to_students = Column(Boolean, nullable=False, default=False, server_default="0")
     join_password = Column(String, nullable=True)
+    # When set, registration closes at this time (naive UTC) even though open_to_students is still on. The
+    # instructor opens it again by saving a later date (or none).
+    registration_ends_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
 
 
