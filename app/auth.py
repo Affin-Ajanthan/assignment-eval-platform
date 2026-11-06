@@ -110,9 +110,30 @@ def bootstrap_admin(db: Session) -> None:
     )
 
 
-def get_current_user(
-    authorization: str | None = Header(default=None), db: Session = Depends(get_db)
-) -> User:
+PASSWORD_MIN_LENGTH = 8
+# The exact text of the 403 a request gets while the user still has to change the password an admin gave them.
+# The frontend matches it to send the user to the change-password page.
+PASSWORD_CHANGE_REQUIRED = "Change the password your administrator gave you before continuing."
+
+
+def password_problems(password: str) -> list[str]:
+    """What a password a user chooses for themselves is missing (empty: it is strong enough). Passwords an admin
+    sets keep the old, shorter minimum: the user must replace them with one that passes this at first login."""
+    problems = []
+    if len(password) < PASSWORD_MIN_LENGTH:
+        problems.append(f"at least {PASSWORD_MIN_LENGTH} characters")
+    if not any(c.isupper() for c in password):
+        problems.append("an uppercase letter")
+    if not any(c.islower() for c in password):
+        problems.append("a lowercase letter")
+    if not any(c.isdigit() for c in password):
+        problems.append("a number")
+    if not any(not c.isalnum() and not c.isspace() for c in password):
+        problems.append("a special character (such as ! @ # $ %)")
+    return problems
+
+
+def _session_user(authorization: str | None, db: Session) -> User:
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(401, "Missing or invalid Authorization header")
     token = authorization.split(" ", 1)[1].strip()
@@ -123,6 +144,25 @@ def get_current_user(
     if not user:
         raise HTTPException(401, "User no longer exists")
     return user
+
+
+def get_current_user(
+    authorization: str | None = Header(default=None), db: Session = Depends(get_db)
+) -> User:
+    """The logged-in user. Someone who still has to change the password an admin gave them is refused everywhere
+    except the few routes that use get_user_changing_password (who am I, change my password)."""
+    user = _session_user(authorization, db)
+    if user.must_change_password:
+        raise HTTPException(403, PASSWORD_CHANGE_REQUIRED)
+    return user
+
+
+def get_user_changing_password(
+    authorization: str | None = Header(default=None), db: Session = Depends(get_db)
+) -> User:
+    """The logged-in user, also while they still have to change their password (only for /auth/me and
+    /auth/change-password)."""
+    return _session_user(authorization, db)
 
 
 def require_admin(user: User = Depends(get_current_user)) -> User:

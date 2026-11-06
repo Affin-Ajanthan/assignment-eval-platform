@@ -17,7 +17,7 @@ export default function LoginPage() {
   useEffect(() => {
     const user = getUser();
     if (getToken() && user) {
-      router.replace(destinationForRole(user.role));
+      router.replace(user.must_change_password ? "/change-password" : destinationForRole(user.role));
       return;
     }
     const reason = new URLSearchParams(window.location.search).get("reason");
@@ -35,7 +35,8 @@ export default function LoginPage() {
     try {
       const result = await apiFetch<LoginResult>("/auth/login", { method: "POST", json: { email, password } });
       setSession(result.token, result.user);
-      router.push(destinationForRole(result.user.role));
+      // A password the admin chose must be replaced first.
+      router.push(result.user.must_change_password ? "/change-password" : destinationForRole(result.user.role));
     } catch (err) {
       setMessage({ text: err instanceof Error ? err.message : "Login failed", kind: "error" });
     } finally {

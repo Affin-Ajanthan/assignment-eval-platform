@@ -20,6 +20,10 @@ export function useRequireRole(role: Role): { user: UserInfo | null; ready: bool
       router.replace("/login");
       return;
     }
+    if (u.must_change_password) {
+      router.replace("/change-password");
+      return;
+    }
     setUser(u);
     setReady(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps

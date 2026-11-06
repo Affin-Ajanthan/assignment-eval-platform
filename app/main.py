@@ -54,10 +54,12 @@ from .auth import (
     bootstrap_admin,
     create_session,
     get_current_user,
+    get_user_changing_password,
     hash_password,
     instructor_subject_ids,
     invalidate_session,
     password_matches,
+    password_problems,
     require_admin,
     require_instructor,
     require_student,
@@ -128,6 +130,8 @@ add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON", "ai_
 add_missing_columns("submissions", {"assignment_id": "INTEGER REFERENCES assignments(id)"})
 add_missing_columns("grades", {"feedback": "TEXT"})
 add_missing_columns("users", {"batch": "VARCHAR", "register_number": "VARCHAR"})
+# Existing accounts get False: nobody already using the platform is asked to change their password.
+add_missing_columns("users", {"must_change_password": "BOOLEAN NOT NULL DEFAULT 0"})
 # Every batch has the same subjects with the same codes, so a subject code is no longer unique.
 make_index_non_unique("subjects", "code")
 add_missing_columns("subjects", {"batch": "VARCHAR NOT NULL DEFAULT ''"})
@@ -211,6 +215,8 @@ class UserOut(BaseModel):
     # A student's batch and register number ("" when not given, and for other roles).
     batch: str = ""
     register_number: str = ""
+    # True until the user replaces the password an admin gave them (the frontend then shows the change-password page).
+    must_change_password: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -807,7 +813,8 @@ def _user_out(user: User, db: Session) -> UserOut:
     else:
         subjects = []
     return UserOut(id=user.id, email=user.email, full_name=user.full_name, role=user.role, subjects=subjects,
-                   batch=user.batch or "", register_number=user.register_number or "")
+                   batch=user.batch or "", register_number=user.register_number or "",
+                   must_change_password=bool(user.must_change_password))
 
 
 def _set_instructor_subjects(db: Session, instructor: User, subject_ids: list[int]) -> None:
@@ -891,7 +898,37 @@ def logout(authorization: Optional[str] = Header(default=None), db: Session = De
 
 
 @app.get("/auth/me", response_model=UserOut)
-def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def me(user: User = Depends(get_user_changing_password), db: Session = Depends(get_db)):
+    return _user_out(user, db)
+
+
+class PasswordChangeIn(BaseModel):
+    current_password: str = Field(max_length=1024)
+    new_password: str = Field(max_length=1024)
+
+
+@app.post("/auth/change-password", response_model=UserOut)
+def change_password(
+    payload: PasswordChangeIn,
+    authorization: Optional[str] = Header(default=None),
+    user: User = Depends(get_user_changing_password),
+    db: Session = Depends(get_db),
+):
+    """The user sets a password of their own: the current one first, then a new one that passes password_problems.
+    Clears must_change_password, and logs the account out everywhere else (this session stays)."""
+    if not password_matches(user, payload.current_password):
+        raise HTTPException(400, "Your current password is not right.")
+    problems = password_problems(payload.new_password)
+    if problems:
+        raise HTTPException(400, "The new password needs " + ", ".join(problems) + ".")
+    if payload.new_password == payload.current_password:
+        raise HTTPException(400, "Choose a new password that is different from the current one.")
+    user.password_hash, user.password_salt = hash_password(payload.new_password)
+    user.must_change_password = False
+    current = authorization.split(" ", 1)[1].strip() if authorization and " " in authorization else ""
+    db.query(AuthSession).filter(AuthSession.user_id == user.id, AuthSession.token != current).delete(
+        synchronize_session=False)
+    db.commit()
     return _user_out(user, db)
 
 
@@ -996,6 +1033,7 @@ def create_instructor(payload: InstructorCreate, _admin: User = Depends(require_
     instructor = User(
         email=payload.email, full_name=payload.full_name, role="instructor",
         password_hash=password_hash, password_salt=salt,
+        must_change_password=True,  # the admin chose it: the instructor sets their own at first login
     )
     db.add(instructor)
     db.commit()
@@ -1082,6 +1120,8 @@ def _update_user(db: Session, user: User, payload: UserUpdate) -> UserOut:
             raise HTTPException(400, "Password must be at least 4 characters")
         user.password_hash, user.password_salt = hash_password(payload.password)
         password_changed = True
+        if user.role in ("student", "instructor"):
+            user.must_change_password = True  # a password the admin reset: they choose their own at next login
     if payload.subject_ids is not None:
         _require_subjects_exist(db, payload.subject_ids)
     if password_changed:
@@ -1170,6 +1210,7 @@ def create_student(payload: StudentCreate, _admin: User = Depends(require_admin)
         email=payload.email, full_name=payload.full_name, role="student",
         password_hash=password_hash, password_salt=salt,
         batch=batch, register_number=register_number,
+        must_change_password=True,  # the admin chose it: the student sets their own at first login
     )
     db.add(student)
     db.commit()

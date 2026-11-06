@@ -30,6 +30,18 @@ def login(client, email, password):
     return r.json()["token"]
 
 
+def settle_first_login(email):
+    """Test setup only: an account created by an admin must change its password at first login before anything
+    else works. The helpers below stand for accounts already in normal use, so they mark that done in the test
+    database (the password stays the same). tests/test_password_policy.py tests the change itself, through the API."""
+    from app.db import SessionLocal
+    from app.models import User
+
+    with SessionLocal() as db:
+        db.query(User).filter(User.email == email).update({User.must_change_password: False})
+        db.commit()
+
+
 def auth_headers(token):
     return {"Authorization": f"Bearer {token}"}
 
@@ -55,6 +67,7 @@ def create_instructor(client, admin_tok, subject_ids, email=None, full_name="Tes
     )
     assert r.status_code == 200, r.text
     user = r.json()
+    settle_first_login(email)
     return user, login(client, email, password)
 
 
@@ -67,6 +80,7 @@ def create_student(client, admin_tok, subject_ids, email=None, full_name="Test S
     )
     assert r.status_code == 200, r.text
     user = r.json()
+    settle_first_login(email)
     return user, login(client, email, password)
 
 
