@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, destinationForRole, getToken, getUser, LoginResult, setSession } from "@/lib/api";
 import Message, { MessageState } from "@/components/Message";
+import PasswordInput from "@/components/PasswordInput";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -17,7 +18,7 @@ export default function LoginPage() {
   useEffect(() => {
     const user = getUser();
     if (getToken() && user) {
-      router.replace(destinationForRole(user.role));
+      router.replace(user.must_change_password ? "/change-password" : destinationForRole(user.role));
       return;
     }
     const reason = new URLSearchParams(window.location.search).get("reason");
@@ -35,7 +36,8 @@ export default function LoginPage() {
     try {
       const result = await apiFetch<LoginResult>("/auth/login", { method: "POST", json: { email, password } });
       setSession(result.token, result.user);
-      router.push(destinationForRole(result.user.role));
+      // A password the admin chose must be replaced first.
+      router.push(result.user.must_change_password ? "/change-password" : destinationForRole(result.user.role));
     } catch (err) {
       setMessage({ text: err instanceof Error ? err.message : "Login failed", kind: "error" });
     } finally {
@@ -96,16 +98,17 @@ export default function LoginPage() {
             <label htmlFor="password" className="block text-sm font-semibold">
               Password
             </label>
-            <input
-              id="password"
-              type="password"
-              required
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="********"
-              className="mt-1 mb-5 w-full rounded-md border border-gray-300 px-3 py-2.5 text-sm"
-            />
+            <div className="mb-5">
+              <PasswordInput
+                id="password"
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="********"
+                className="rounded-md border border-gray-300 px-3 py-2.5 text-sm"
+              />
+            </div>
 
             <button type="submit" disabled={submitting} className="btn-primary w-full px-4 py-2.5 text-sm">
               {submitting ? "Logging in..." : "Log in"}

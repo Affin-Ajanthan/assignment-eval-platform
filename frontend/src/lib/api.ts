@@ -54,6 +54,23 @@ export interface UserInfo {
   /** A student's batch and register number ("" when not given, and for other roles). */
   batch?: string;
   register_number?: string;
+  /** True until the user replaces the password an admin gave them (see /change-password). */
+  must_change_password?: boolean;
+}
+
+/** The server's 403 detail while the user still has to change the password an admin gave them
+ * (PASSWORD_CHANGE_REQUIRED in app/auth.py). */
+export const PASSWORD_CHANGE_REQUIRED = "Change the password your administrator gave you before continuing.";
+
+/** The rule for a password a user chooses (password_problems in app/auth.py): what this one still lacks. */
+export function passwordProblems(password: string): string[] {
+  const problems: string[] = [];
+  if (password.length < 8) problems.push("at least 8 characters");
+  if (!/\p{Lu}/u.test(password)) problems.push("an uppercase letter");
+  if (!/\p{Ll}/u.test(password)) problems.push("a lowercase letter");
+  if (!/\p{Nd}/u.test(password)) problems.push("a number");
+  if (!/[^\p{L}\p{N}\s]/u.test(password)) problems.push("a special character (such as ! @ # $ %)");
+  return problems;
 }
 
 export interface LoginResult {
@@ -727,6 +744,11 @@ export async function apiFetch<T = unknown>(path: string, options: ApiFetchOptio
       detail = body.detail || JSON.stringify(body);
     } catch {
       /* ignore parse errors, fall back to statusText */
+    }
+    // The account still has the password an admin gave it: nothing works until the user chooses their own.
+    if (res.status === 403 && detail === PASSWORD_CHANGE_REQUIRED && typeof window !== "undefined") {
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.href = "/change-password";
     }
     throw new Error(detail);
   }
