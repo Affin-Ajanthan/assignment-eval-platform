@@ -58,9 +58,9 @@ export default function SubjectAccessPanel({ subjectId }: { subjectId: number })
   }
 
   return (
-    <section className="mt-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm" data-testid="subject-access">
+    <section className="mt-6 card" data-testid="subject-access">
       <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-lg font-bold">Student access</h2>
+        <h2 className="text-xl font-semibold">Student access</h2>
         {saved && (
           <span
             className={`rounded px-2 py-0.5 text-xs font-semibold ${
@@ -103,7 +103,7 @@ export default function SubjectAccessPanel({ subjectId }: { subjectId: number })
         </label>
         <button
           disabled={saving || saved === null}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+          className="btn-primary rounded-md px-4 py-2 text-sm font-semibold"
         >
           {saving ? "Saving..." : "Save"}
         </button>
