@@ -6,7 +6,7 @@ import { apiFetch, Assignment, Rubric, subjectLabel } from "@/lib/api";
 import { useRequireRole } from "@/lib/useRequireRole";
 import { recordRecentSubject } from "@/lib/recentSubjects";
 import AccountBar from "@/components/AccountBar";
-import AssignmentsSection from "@/components/instructor/AssignmentsSection";
+import AssignmentKindChooser from "@/components/instructor/AssignmentKindChooser";
 import PageTabs, { tabPanelProps } from "@/components/instructor/PageTabs";
 import RubricsSection from "@/components/instructor/RubricsSection";
 import SubjectAccessPanel from "@/components/instructor/SubjectAccessPanel";
@@ -94,7 +94,7 @@ export default function InstructorSubjectPage() {
 
           <div {...tabPanelProps("assignments", tab)}>
             <SubjectAccessPanel subjectId={subjectId} />
-            <AssignmentsSection subjectId={subjectId} assignments={assignments} onChanged={reload} />
+            <AssignmentKindChooser subjectId={subjectId} assignments={assignments} />
           </div>
 
           <div {...tabPanelProps("rubrics", tab)}>

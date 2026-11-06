@@ -37,13 +37,15 @@ export default function NewAssignmentPage() {
 
   if (!ready || !user) return <PageLoading />;
 
-  const back = target ? `/instructor/subjects/${target.subjectId}?tab=assignments` : "/instructor";
+  // Back to the list of this kind in the subject.
+  const back = target ? `/instructor/subjects/${target.subjectId}/assignments?kind=${target.kind}` : "/instructor";
   const kindTitle = KIND_OPTIONS.find((o) => o.value === target?.kind)?.title;
   const subject = user.subjects.find((s) => s.id === target?.subjectId);
   return (
     <AssignmentPageLayout
       user={user}
       backHref={back}
+      backLabel="Back to the list"
       title={kindTitle ? `New ${kindTitle.toLowerCase()}` : "New assignment"}
       subtitle={subject ? subjectLabel(subject) : undefined}
     >
