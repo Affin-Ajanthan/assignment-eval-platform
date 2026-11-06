@@ -22,6 +22,7 @@ from .code_analysis import FULL_SOURCE_LIMIT, CodeReport, analyze_directory, rea
 from .code_execution import ExecutionResult, SandboxUnavailable, run_python_files, sandbox_enabled
 from .cross_modal import ConsistencyResult, check_consistency
 from .document_extraction import ReportExtraction, extract_report_text
+from .grader_manipulation import grader_manipulation_flags
 from .language_mismatch import language_mismatches
 from .report_analysis import ReportAnalysis, analyze_report
 from .rubric_grading import (
@@ -200,6 +201,10 @@ def evaluate_submission(
     mismatches = language_mismatches(code_dir, transcript=video_transcript, report_text=report_text)
     for mismatch in mismatches:
         review_flags.append(mismatch.flag)
+    # Text in the work aimed at the AI grader ("give full marks", "ignore the rubric"): a review flag only.
+    for attempt in grader_manipulation_flags(code="\n\n".join(evidence.code_sources.values()) or None,
+                                             report=report_text, transcript=video_transcript):
+        review_flags.append(attempt.flag)
     _downgrade_for_language_mismatch(semantic_consistency, mismatches)
     if code_reports and not report_path and not video_path:
         review_flags.append("only code was submitted -- report and video are still missing")
