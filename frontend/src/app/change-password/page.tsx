@@ -13,6 +13,7 @@ import {
   UserInfo,
 } from "@/lib/api";
 import Message, { MessageState } from "@/components/Message";
+import PasswordInput from "@/components/PasswordInput";
 
 // The rule, in the order it is shown; each line is met when passwordProblems no longer names it.
 const RULES: { label: string; problem: string }[] = [
@@ -91,28 +92,26 @@ export default function ChangePasswordPage() {
           <label htmlFor="current-password" className="mt-4 block text-sm font-semibold">
             {forced ? "Password from your administrator" : "Current password"}
           </label>
-          <input
+          <PasswordInput
             id="current-password"
-            type="password"
             autoComplete="current-password"
             required
             value={current}
             onChange={(e) => setCurrent(e.target.value)}
-            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2.5 text-sm"
+            className="rounded-md border border-gray-300 px-3 py-2.5 text-sm"
           />
 
           <label htmlFor="new-password" className="mt-4 block text-sm font-semibold">
             New password
           </label>
-          <input
+          <PasswordInput
             id="new-password"
-            type="password"
             autoComplete="new-password"
             required
             aria-describedby="password-rules"
             value={next}
             onChange={(e) => setNext(e.target.value)}
-            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2.5 text-sm"
+            className="rounded-md border border-gray-300 px-3 py-2.5 text-sm"
           />
           <ul id="password-rules" className="mt-2 space-y-1 text-sm" aria-live="polite">
             {RULES.map((r) => {
@@ -132,15 +131,14 @@ export default function ChangePasswordPage() {
           <label htmlFor="confirm-password" className="mt-4 block text-sm font-semibold">
             Type the new password again
           </label>
-          <input
+          <PasswordInput
             id="confirm-password"
-            type="password"
             autoComplete="new-password"
             required
             aria-invalid={mismatch}
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
-            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2.5 text-sm"
+            className="rounded-md border border-gray-300 px-3 py-2.5 text-sm"
           />
           {mismatch && <p className="mt-1 text-sm text-red-700">The two new passwords are not the same.</p>}
 
