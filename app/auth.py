@@ -60,6 +60,19 @@ def verify_password(password: str, password_hash: str, salt: str) -> bool:
     return hmac.compare_digest(candidate, password_hash)
 
 
+# A hash of a random password nobody knows: checked against when the e-mail has no account, so a login for an
+# unknown e-mail does the same slow hashing as one for a real account and the response time can't tell them apart.
+_UNKNOWN_USER_HASH, _UNKNOWN_USER_SALT = hash_password(secrets.token_urlsafe(32))
+
+
+def password_matches(user: User | None, password: str) -> bool:
+    """The password is this user's. With no user (unknown e-mail), the same work is done and the answer is False."""
+    if user is None:
+        verify_password(password, _UNKNOWN_USER_HASH, _UNKNOWN_USER_SALT)
+        return False
+    return verify_password(password, user.password_hash, user.password_salt)
+
+
 def create_session(db: Session, user: User) -> str:
     token = secrets.token_urlsafe(32)
     db.add(AuthSession(token=token, user_id=user.id, expires_at=_naive_utcnow() + SESSION_LIFETIME))

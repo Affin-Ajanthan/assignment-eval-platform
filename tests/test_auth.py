@@ -236,3 +236,37 @@ def test_login_limit_applies_to_unknown_emails_too(monkeypatch):
     assert _try("nobody-here@example.com", "x").status_code == 401
     # Same answer as for a real locked account, so the limit does not reveal which e-mails exist.
     assert _try("nobody-here@example.com", "x").status_code == 429
+
+
+# ---- Login gives nothing away about which e-mails have accounts, and refuses oversized input ---------------------
+
+def test_login_hashes_the_password_even_for_an_unknown_email(monkeypatch):
+    """Same work for an unknown e-mail as for a wrong password, so response time can't reveal existing accounts."""
+    import app.auth as auth
+
+    _limited_login(monkeypatch, tries=100)
+    email = _student()
+    calls = []
+    real = auth.hash_password
+    monkeypatch.setattr(auth, "hash_password", lambda pw, salt=None: calls.append(pw) or real(pw, salt))
+
+    assert _try(email, "wrong-1").status_code == 401
+    assert _try("no-account-here@example.com", "wrong-2").status_code == 401
+    assert calls == ["wrong-1", "wrong-2"]  # one full password hash each
+
+
+def test_login_unknown_email_is_never_let_in_by_the_stand_in_hash(monkeypatch):
+    import app.auth as auth
+
+    assert auth.password_matches(None, "anything") is False
+    assert auth.password_matches(None, "") is False
+
+
+def test_login_refuses_oversized_email_and_password(monkeypatch):
+    _limited_login(monkeypatch, tries=100)
+    email = _student()
+    assert _try(email, "x" * 1025).status_code == 422
+    assert _try("a" * 250 + "@x.co", "x").status_code == 422  # 255 characters
+    # The longest allowed values are still checked normally.
+    assert _try(email, "x" * 1024).status_code == 401
+    assert _try(email, "student123").status_code == 200

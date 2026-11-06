@@ -57,11 +57,11 @@ from .auth import (
     hash_password,
     instructor_subject_ids,
     invalidate_session,
+    password_matches,
     require_admin,
     require_instructor,
     require_student,
     student_subject_ids,
-    verify_password,
 )
 from .db import BASE_DIR, UPLOAD_DIR, Base, SessionLocal, add_missing_columns, engine, get_db, make_index_non_unique
 from .evaluator.document_extraction import (
@@ -166,8 +166,10 @@ add_missing_columns("submissions", {"late_seconds": "INTEGER", "late_penalty_per
 
 
 class LoginIn(BaseModel):
-    email: str
-    password: str
+    # 254 is the longest e-mail address there can be; no password is anywhere near 1024 characters. Longer input is
+    # refused before any work is done (and before the login limiter keeps a copy of the e-mail).
+    email: str = Field(max_length=254)
+    password: str = Field(max_length=1024)
 
 
 class SubjectCreate(BaseModel):
@@ -871,7 +873,9 @@ def login(payload: LoginIn, db: Session = Depends(get_db)):
     except _RunLimitError as exc:
         raise HTTPException(exc.status, exc.detail)
     user = db.query(User).filter(User.email == payload.email).first()
-    if not user or not verify_password(payload.password, user.password_hash, user.password_salt):
+    # password_matches hashes even when there is no such user, so a wrong password takes as long for an unknown
+    # e-mail as for a real one: the response time doesn't reveal which e-mails have accounts.
+    if not password_matches(user, payload.password):
         login_limiter.miss(key)
         raise HTTPException(401, "Incorrect email or password")
     login_limiter.clear(key)
