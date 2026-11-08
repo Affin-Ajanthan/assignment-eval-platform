@@ -60,6 +60,9 @@ class User(Base):
     # No two students share a register number; the API checks that (existing rows have none).
     batch = Column(String, nullable=True)
     register_number = Column(String, nullable=True)
+    # Set when an admin gives a student or instructor a password (a new account or a reset): they must replace it
+    # with a strong one of their own at their next login before anything else works. Existing accounts: False.
+    must_change_password = Column(Boolean, nullable=False, default=False, server_default="0")
 
     instructor_assignments = relationship(
         "InstructorAssignment",
