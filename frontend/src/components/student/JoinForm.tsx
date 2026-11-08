@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { apiFetch, getToken, setSession, StudentSubject, UserInfo } from "@/lib/api";
+import { formatDateTime } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
 
 /**
@@ -17,7 +18,8 @@ export default function JoinForm({ subject }: { subject: StudentSubject }) {
   if (!subject.registration_open) {
     return (
       <p className="empty-state mt-4" data-testid="registration-closed">
-        Registration for this subject is not open yet. Your instructor has to allow it and give you the password.
+        Registration for this subject is closed right now (not opened yet, or its end date has passed). Ask your
+        instructor to open it and give you the password.
       </p>
     );
   }
@@ -50,6 +52,11 @@ export default function JoinForm({ subject }: { subject: StudentSubject }) {
       <p className="mt-1 text-sm text-gray-600">
         Enter the password your instructor gave you to see the subject&apos;s teachers and assignments.
       </p>
+      {subject.registration_ends_at && (
+        <p className="mt-1 text-sm font-semibold text-amber-800" data-testid="registration-ends">
+          Registration closes on {formatDateTime(subject.registration_ends_at)}.
+        </p>
+      )}
       <label className="mt-3 block text-sm font-semibold" htmlFor="join-password">
         Password
       </label>

@@ -1,72 +1,71 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiFetch, StudentSubject } from "@/lib/api";
+import { groupByBatch } from "@/lib/batches";
+import { readRecentSubjects } from "@/lib/recentSubjects";
+import BatchList from "@/components/BatchList";
+import StudentSubjectCard from "@/components/student/StudentSubjectCard";
+
+/** How many "Recently viewed" boxes the home page shows. */
+const RECENT_SHOWN = 6;
 
 /**
- * Every subject there is (GET /student/subjects), as boxes. Each opens its own page (/student/subjects/<id>): for a
- * subject the student joined that is its assignments, for any other it is the page where the instructor's password is
- * entered.
+ * The student's subjects (GET /student/subjects): the few they opened last as boxes, then the batches. A batch opens
+ * the page with all its subjects (/student/batches/<batch>); a subject opens its own page (/student/subjects/<id>):
+ * its assignments if the student joined it, the page where the instructor's password is entered if not.
  */
-export default function StudentSubjects() {
+export default function StudentSubjects({ userId }: { userId: number }) {
   // null until the first load.
   const [subjects, setSubjects] = useState<StudentSubject[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [recentIds, setRecentIds] = useState<number[]>([]);
 
   useEffect(() => {
+    setRecentIds(readRecentSubjects("student", userId));
     apiFetch<StudentSubject[]>("/student/subjects")
       .then(setSubjects)
       .catch((err) => setLoadError(err instanceof Error ? err.message : String(err)));
-  }, []);
+  }, [userId]);
+
+  const recent = (subjects ?? [])
+    .map((s) => ({ s, at: recentIds.indexOf(s.id) }))
+    .filter((x) => x.at >= 0)
+    .sort((a, b) => a.at - b.at)
+    .slice(0, RECENT_SHOWN)
+    .map((x) => x.s);
 
   return (
     <section className="mt-6" data-testid="student-subjects">
-      <h2 className="text-xl font-semibold">Subjects</h2>
-      <p className="mt-1 text-sm text-gray-600">
-        Every subject is listed. Open one you have joined to see its assignments. For any other, open it and enter the
-        password your instructor gave you.
-      </p>
       {loadError && (
-        <p role="alert" className="mt-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
           Could not load the subjects: {loadError}
         </p>
       )}
+
+      {recent.length > 0 && (
+        <div data-testid="recent-subjects">
+          <h2 className="text-xl font-semibold">Recently viewed</h2>
+          <ul className="mt-3 grid gap-4 sm:grid-cols-2" data-testid="student-subject-list">
+            {recent.map((s) => (
+              <li key={s.id}>
+                <StudentSubjectCard subject={s} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <h2 className={`text-xl font-semibold ${recent.length > 0 ? "mt-8" : ""}`}>Batches</h2>
+      <p className="mt-1 text-sm text-gray-600">
+        Choose a batch to see all its subjects. Open one you have joined to see its assignments. For any other, open it
+        and enter the password your instructor gave you.
+      </p>
       {subjects !== null && subjects.length === 0 && !loadError && (
         <p className="empty-state mt-2">There are no subjects yet.</p>
       )}
       {subjects !== null && subjects.length > 0 && (
-        <ul className="mt-4 grid gap-4 sm:grid-cols-2" data-testid="student-subject-list">
-          {subjects.map((s) => (
-            <li key={s.id}>
-              <Link
-                href={`/student/subjects/${s.id}`}
-                className={`block h-full rounded-lg border p-5 shadow-sm hover:border-blue-500 hover:bg-blue-50 ${
-                  s.joined ? "border-gray-200 bg-white" : "border-gray-200 bg-gray-50"
-                }`}
-                data-testid={s.joined ? "subject-card" : "locked-subject"}
-              >
-                <span className="block text-lg font-bold">{s.name}</span>
-                <span className="block text-xs text-gray-500">
-                  {s.code}
-                  {s.batch ? ` · Batch ${s.batch}` : ""}
-                </span>
-                {s.teachers.length > 0 && (
-                  <span className="mt-1 block text-xs text-gray-500">{s.teachers.map((t) => t.name).join(", ")}</span>
-                )}
-                {s.joined ? (
-                  <span className="mt-2 inline-block rounded bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-800">
-                    Joined · open
-                  </span>
-                ) : (
-                  <span className="mt-2 inline-block rounded bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-700">
-                    {s.registration_open ? "Not joined · enter the password" : "Not joined · registration not open yet"}
-                  </span>
-                )}
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <BatchList groups={groupByBatch(subjects)} hrefBase="/student/batches" testId="batch-list" />
       )}
     </section>
   );
