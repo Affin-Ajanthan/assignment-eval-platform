@@ -51,7 +51,7 @@ export default function ListFilters({
   return (
     <div className="mt-2">
       <div className="flex flex-wrap gap-3">
-        <div className="min-w-0 flex-1 sm:max-w-sm">
+        <div className="w-full min-w-0 sm:w-auto sm:flex-1 sm:max-w-sm">
           <label className="block text-sm font-semibold" htmlFor={`${name}-search`}>
             Search {name}s
           </label>
@@ -65,7 +65,7 @@ export default function ListFilters({
             data-testid={`${name}-search`}
           />
         </div>
-        <div>
+        <div className="w-full sm:w-auto">
           <label className="block text-sm font-semibold" htmlFor={`${name}-batch-filter`}>
             Batch
           </label>

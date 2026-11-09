@@ -272,7 +272,7 @@ export default function AdminPage() {
         title="Admin dashboard"
          description="Create subjects, then create instructor accounts and assign them to subjects. Every student sees each subject and can join it with the password its instructor sets; you can also add a student to subjects yourself on the Student form. You can edit subjects, instructors and students at any time. Everyone logs in with the credentials you set here -- there's no self-signup."
      />
-      <div className="grid grid-cols-3 gap-3" data-testid="admin-overview">
+      <div className="grid grid-cols-1 gap-3 min-[28rem]:grid-cols-3" data-testid="admin-overview">
         <StatTile label="Subjects" value={subjects.length} href="#subjects" />
         <StatTile label="Instructors" value={instructors.length} href="#instructors" />
         <StatTile label="Students" value={students.length} href="#students" />
@@ -350,7 +350,7 @@ export default function AdminPage() {
               testId="subject-instructors-input"
             />
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button className="btn-primary rounded-md px-4 py-2 text-sm font-semibold">
               {editingSubject ? "Save changes" : "Add subject"}
             </button>
@@ -451,7 +451,7 @@ export default function AdminPage() {
               testId="instructor-subjects-input"
             />
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
              <button className="btn-primary rounded-md px-4 py-2 text-sm font-semibold">
 
               {editingInstructor ? "Save changes" : "Create instructor"}
@@ -567,7 +567,7 @@ export default function AdminPage() {
             Adds the student to these subjects. Otherwise they join a subject themselves with its password. Saving
             replaces their subjects with this list.
           </p>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
           <button className="btn-primary rounded-md px-4 py-2 text-sm font-semibold">
 
               {editingStudent ? "Save changes" : "Create student"}

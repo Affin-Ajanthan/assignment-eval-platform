@@ -32,10 +32,16 @@ export default function Pagination({
   const pages = pageCount(total, pageSize);
   const from = (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
-  const button = "rounded-md border border-gray-300 px-3 py-1 text-xs font-semibold hover:bg-gray-50 disabled:opacity-50";
+  // At least 40px tall on a phone so it is easy to tap.
+  const button =
+    "min-h-10 rounded-md border border-gray-300 px-3 py-1 text-xs font-semibold hover:bg-gray-50 disabled:opacity-50 sm:min-h-0";
 
   return (
-    <nav aria-label="Pages" className="mt-2 flex flex-wrap items-center justify-between gap-3 text-sm" data-testid="pagination">
+    <nav
+      aria-label="Pages"
+      className="mt-2 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm sm:justify-between"
+      data-testid="pagination"
+    >
       <label className="flex items-center gap-2 text-gray-600">
         Rows per page
         <select
