@@ -7,7 +7,9 @@ import SubmissionFiles from "@/components/SubmissionFiles";
 import { TYPE_LABEL } from "@/components/student/labels";
 import { CODE_LANGUAGES, languageNames, languagesFor } from "@/lib/codeLanguages";
 
-const fileInput = "mt-1 mb-3 block w-full text-sm";
+// The browser's own file button is reset by the base styles, so it is given the look of an input here.
+const fileInput =
+  "mt-1 mb-3 block w-full cursor-pointer rounded-md border border-gray-300 bg-white text-sm text-gray-700 file:mr-3 file:cursor-pointer file:border-0 file:border-r file:border-solid file:border-gray-300 file:bg-gray-100 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-blue-700 hover:border-gray-400 hover:file:bg-gray-200";
 // Every supported code extension (app/code_languages.py refuses anything else).
 const CODE_EXTENSIONS = [".zip", ...new Set(CODE_LANGUAGES.flatMap((l) => l.extensions))];
 const REPORT_ACCEPT = ".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
