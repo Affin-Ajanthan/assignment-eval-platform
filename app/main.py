@@ -29,6 +29,7 @@ http://localhost:8000) and sign in.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import tempfile
@@ -43,9 +44,10 @@ from typing import Literal, Optional
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -106,6 +108,7 @@ from . import code_languages as _langs
 from .code_languages import CodeLanguage
 from .similarity import report_similarity as _report_sim
 from . import exports as _exports
+from . import student_import as _student_import
 from .common import (
     ANALYZED_EXTENSIONS as _ANALYZED_EXTENSIONS,
     CODE_EXTENSIONS as _CODE_EXTENSIONS,
@@ -247,6 +250,29 @@ class StudentCreate(BaseModel):
     register_number: str = Field(default="", max_length=50)
 
 
+class ImportRowOut(BaseModel):
+    """One row of a student import: what would be stored, and what stops it being created (nothing: it can be)."""
+    row: int
+    full_name: str
+    email: str
+    batch: str
+    register_number: str
+    problems: list[str]
+
+
+class ImportPreviewOut(BaseModel):
+    rows: list[ImportRowOut]
+    ready: int
+    with_problems: int
+
+
+class ImportResultOut(BaseModel):
+    created: list[ImportRowOut]
+    skipped: list[ImportRowOut]
+    # The list of first passwords, an .xlsx file in base64. Only in this answer: it is kept nowhere. "" if none created.
+    passwords_file: str
+
+
 class UserUpdate(BaseModel):
     """Admin edit of an instructor or student. Fields left out are kept;
     a blank password keeps the current one."""
@@ -298,6 +324,8 @@ class RubricOut(BaseModel):
     locked: bool = False
     assignment_names: list[str] = []
 
+
+_import_log = logging.getLogger("app.student_import")
 
 SubmissionType = Literal["code", "report", "video"]
 _STARTER_CODE_MAX = 200_000
@@ -1218,6 +1246,93 @@ def create_student(payload: StudentCreate, _admin: User = Depends(require_admin)
     db.refresh(student)
     _set_student_subjects(db, student, payload.subject_ids)
     return _user_out(student, db)
+
+
+def _checked_import_rows(file: UploadFile, db: Session) -> list[_student_import.ImportRow]:
+    """The rows of an uploaded class list, each checked against the accounts there are now; or the HTTP error saying
+    why the file can't be used."""
+    content = file.file.read(_student_import.MAX_FILE_BYTES + 1)
+    try:
+        rows = _student_import.read_rows(file.filename or "", content)
+    except _student_import.ImportFileError as exc:
+        raise HTTPException(400, str(exc))
+    emails = {email.lower() for (email,) in db.query(User.email)}
+    numbers = {number.rsplit("/", 1)[-1].lower() for (number,) in
+               db.query(User.register_number).filter(User.role == "student", User.register_number.isnot(None))}
+    return _student_import.check_rows(rows, emails, numbers, REGISTER_PREFIX)
+
+
+def _import_row_out(r: _student_import.ImportRow) -> ImportRowOut:
+    return ImportRowOut(row=r.row, full_name=r.full_name, email=r.email, batch=r.batch,
+                        register_number=r.register_number, problems=r.problems)
+
+
+@app.get("/admin/students/import-template")
+def student_import_template(_admin: User = Depends(require_admin)):
+    return Response(content=_student_import.template_xlsx(), media_type=_exports.XLSX_MEDIA_TYPE, headers={
+        "Content-Disposition": 'attachment; filename="student-import-template.xlsx"'})
+
+
+@app.post("/admin/students/import/preview", response_model=ImportPreviewOut)
+def preview_student_import(
+    file: UploadFile = File(...), _admin: User = Depends(require_admin), db: Session = Depends(get_db)
+):
+    """What an import of this file would do. Nothing is created or kept."""
+    rows = _checked_import_rows(file, db)
+    with_problems = sum(1 for r in rows if r.problems)
+    return ImportPreviewOut(rows=[_import_row_out(r) for r in rows], ready=len(rows) - with_problems,
+                            with_problems=with_problems)
+
+
+@app.post("/admin/students/import", response_model=ImportResultOut)
+def run_student_import(
+    response: Response,
+    file: UploadFile = File(...),
+    subject_ids: str = Form(""),  # the subjects every created student joins: ids separated by commas
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Create the students of the rows with no problems, each with a random first password they must change at first
+    login; the other rows are left out and reported. All or nothing: if the database refuses one, none are created.
+    Every row is checked again here, not trusted from the preview. The answer is the only place the passwords exist."""
+    try:
+        ids = sorted({int(part) for part in subject_ids.split(",") if part.strip()})
+    except ValueError:
+        raise HTTPException(400, "subject_ids must be numbers separated by commas")
+    _require_subjects_exist(db, ids)
+    rows = _checked_import_rows(file, db)
+    ready = [r for r in rows if not r.problems]
+
+    listed = []
+    for r in ready:  # the slow part (about 80 ms a student), before anything is written
+        password = _student_import.make_password()
+        password_hash, salt = hash_password(password)
+        student = User(
+            email=r.email, full_name=r.full_name, role="student", password_hash=password_hash, password_salt=salt,
+            batch=r.batch or None, register_number=r.register_number or None,
+            must_change_password=True,  # they choose their own at first login
+        )
+        db.add(student)
+        listed.append((student, (r.full_name, r.email, r.batch, r.register_number, password)))
+    try:
+        db.flush()  # gives the students their ids, for the enrolments
+        for student, _line in listed:
+            for subject_id in ids:
+                db.add(Enrollment(student_id=student.id, subject_id=subject_id))
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "An account was added while this import ran, so nothing was created. Check the file "
+                                 "again and retry.")
+    # Who imported what and when. Never the passwords.
+    _import_log.warning("Student import by %s: %d created, %d skipped, %d subject(s), file %r", admin.email,
+                        len(ready), len(rows) - len(ready), len(ids), file.filename)
+    response.headers["Cache-Control"] = "no-store"  # the answer holds passwords
+    return ImportResultOut(
+        created=[_import_row_out(r) for r in ready],
+        skipped=[_import_row_out(r) for r in rows if r.problems],
+        passwords_file=_student_import.passwords_xlsx_base64([line for _student, line in listed]) if listed else "",
+    )
 
 
 @app.get("/admin/students", response_model=list[UserOut])

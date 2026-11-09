@@ -7,6 +7,7 @@ import AccountBar from "@/components/AccountBar";
 import Message, { MessageState } from "@/components/Message";
 import AdminTabs, { adminPanelProps, AdminTab, isAdminTab } from "@/components/admin/AdminTabs";
 import ManageSubjectsTable from "@/components/admin/ManageSubjectsTable";
+import StudentImport from "@/components/admin/StudentImport";
 import StudentIdFields, { BatchCombobox } from "@/components/admin/StudentIdFields";
 import { batchList, ownNumberOf, registerNumberFor } from "@/lib/registerNumber";
 import ManageUsersTable from "@/components/admin/ManageUsersTable";
@@ -488,6 +489,7 @@ export default function AdminPage() {
       <div {...adminPanelProps("students", tab)}>
             <section className="mt-6 card scroll-mt-4" id="students">
         <h2 className="text-xl font-semibold">Students</h2>
+        <StudentImport subjects={subjects} onCreated={loadStudents} />
         {/* The form beside the list on wide screens, so nothing is a long scroll away. */}
         <div className="mt-4 grid items-start gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
         <form
