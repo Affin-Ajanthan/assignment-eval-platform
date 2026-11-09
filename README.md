@@ -203,7 +203,7 @@ logged in.
      `{"rubric_id": ...}` starts the job and answers at once (202, status
      `queued`).
    - `GET /auto-evaluate/jobs/{job_id}` reports its progress: status
-     (`queued` / `running` / `done` / `failed` / `interrupted`), `done` of
+     (`queued` / `running` / `done` / `failed` / `interrupted` / `stopped`), `done` of
      `total`, the evaluated / skipped / failed counts, and each finished
      submission's result in submission order (`null` while still waiting).
      The page polls it every 3 s to show a progress bar and fill in the
@@ -220,6 +220,12 @@ logged in.
      rest with the same settings, skipping submissions already evaluated.
      Note that `uvicorn --reload` restarts the server whenever a code file
      is saved, which interrupts a running job.
+   - `POST /auto-evaluate/jobs/{job_id}/stop` stops a queued or running job
+     at any time: it is marked `stopped` at once (so the assignment is free
+     for a new run), the submission being graded right now finishes, the
+     rest are not started, and everything done so far is kept. A stopped job
+     can be resumed like an interrupted one; the page's "Run again" button
+     starts a fresh run over every submission.
    - Every run is recorded in the `batch_jobs` table.
 
    `POST /subjects/{id}/assignments/{name}/auto-evaluate` runs the same

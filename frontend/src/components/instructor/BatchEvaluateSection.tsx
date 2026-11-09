@@ -88,6 +88,7 @@ export default function BatchEvaluateSection({
   const [useRubricModel, setUseRubricModel] = useRubricModelSetting();
   const [useAiDetection, setUseAiDetection] = useAiDetectionSetting();
   const [starting, setStarting] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [job, setJob] = useState<BatchJob | null>(null);
   const [msg, setMsg] = useState<MessageState>(null);
   const running = starting || isActive(job);
@@ -152,6 +153,11 @@ export default function BatchEvaluateSection({
         text: `Batch evaluation stopped${when}: ${job.error ?? "unknown error"}. Results already produced are saved -- use Resume to grade the rest.`,
         kind: "error",
       });
+    } else if (job?.status === "stopped") {
+      setMsg({
+        text: `Stopped${when} after ${job.done} of ${job.total} submissions. Results already produced are saved -- use Resume to grade the rest, or Run again to grade them all again.`,
+        kind: "warning",
+      });
     } else if (job?.status === "interrupted") {
       setMsg({
         text: `This run was interrupted${when}: ${job.error ?? "the server stopped"} Results already produced are saved -- use Resume to grade the rest.`,
@@ -204,6 +210,20 @@ export default function BatchEvaluateSection({
       setMsg({ text: `Could not resume: ${err instanceof Error ? err.message : err}`, kind: "error" });
     } finally {
       setStarting(false);
+    }
+  }
+
+  /** Stop the run now. The one being graded this moment finishes; everything done so far is kept. */
+  async function stop() {
+    if (!job) return;
+    setMsg(null);
+    setStopping(true);
+    try {
+      setJob(await apiFetch<BatchJob>(`/auto-evaluate/jobs/${job.id}/stop`, { method: "POST" }));
+    } catch (err) {
+      setMsg({ text: `Could not stop: ${err instanceof Error ? err.message : err}`, kind: "error" });
+    } finally {
+      setStopping(false);
     }
   }
 
@@ -267,14 +287,32 @@ export default function BatchEvaluateSection({
         Skip submissions already evaluated with this rubric (use to resume)
       </label>
 
-      <button
-        type="button"
-        onClick={run}
-        disabled={running || !assignment || rubricId === null}
-        className="btn-primary mt-3 rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-50"
-      >
-        {starting ? "Starting…" : running ? "Evaluating…" : `Evaluate all${count !== undefined ? ` ${count} submission(s)` : ""}`}
-      </button>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={run}
+          disabled={running || !assignment || rubricId === null}
+          className="btn-primary rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-50"
+        >
+          {starting
+            ? "Starting…"
+            : running
+              ? "Evaluating…"
+              : `${job ? "Run again for all" : "Evaluate all"}${count !== undefined ? ` ${count} submission(s)` : ""}`}
+        </button>
+        {/* Any time while it runs: the one being graded now finishes, then it stops. */}
+        {job && isActive(job) && (
+          <button
+            type="button"
+            onClick={stop}
+            disabled={stopping}
+            className="btn-danger rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-50"
+            data-testid="stop-batch"
+          >
+            {stopping ? "Stopping…" : "Stop"}
+          </button>
+        )}
+      </div>
 
       {job && isActive(job) && (
         <div className="mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2" data-testid="batch-progress">
@@ -298,12 +336,13 @@ export default function BatchEvaluateSection({
           </div>
           <p className="mt-2 text-xs text-blue-900">
             Grading runs on the server and continues even if you close this page. Results appear below as each
-            submission finishes.
+            submission finishes. Press Stop to end it: the submission being graded now finishes, and what is done
+            is kept.
           </p>
         </div>
       )}
       <Message state={msg} />
-      {job && (job.status === "interrupted" || job.status === "failed") && (
+      {job && (job.status === "interrupted" || job.status === "failed" || job.status === "stopped") && (
         <button
           type="button"
           onClick={resume}

@@ -564,8 +564,8 @@ export interface BatchJob {
   subject_id: number;
   assignment_name: string;
   rubric_id: number;
-  /** "interrupted": the server stopped mid-run; it can be resumed. */
-  status: "queued" | "running" | "done" | "failed" | "interrupted";
+  /** "interrupted": the server stopped mid-run; "stopped": the instructor pressed Stop. Both can be resumed. */
+  status: "queued" | "running" | "done" | "failed" | "interrupted" | "stopped";
   total: number;
   /** Finished so far, whatever the outcome. */
   done: number;
