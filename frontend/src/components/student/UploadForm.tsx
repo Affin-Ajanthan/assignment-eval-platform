@@ -1,13 +1,17 @@
 "use client";
 
-import { FormEvent, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, ReactNode, useRef, useState } from "react";
 import { apiUpload, StudentAssignment, Submission, SubmissionType, UploadCancelled } from "@/lib/api";
 import Message, { MessageState } from "@/components/Message";
 import SubmissionFiles from "@/components/SubmissionFiles";
 import { TYPE_LABEL } from "@/components/student/labels";
 import { CODE_LANGUAGES, languageNames, languagesFor } from "@/lib/codeLanguages";
 
-const fileInput = "mt-1 mb-3 block w-full text-sm";
+// The file chooser: a dashed box with a clear button, so each upload is easy to see.
+const fileInput =
+  "block w-full cursor-pointer rounded-md border border-dashed border-gray-300 bg-gray-50 p-3 text-sm " +
+  "file:mr-3 file:cursor-pointer file:rounded-md file:border file:border-gray-300 file:bg-white file:px-3 " +
+  "file:py-1.5 file:text-sm file:font-semibold hover:file:bg-gray-100";
 // Every supported code extension (app/code_languages.py refuses anything else).
 const CODE_EXTENSIONS = [".zip", ...new Set(CODE_LANGUAGES.flatMap((l) => l.extensions))];
 const REPORT_ACCEPT = ".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -18,6 +22,46 @@ const UPLOAD_HINTS = {
   report: "PDF or DOCX. Max 25 MB.",
   video: "MP4, MOV, AVI, MKV, WEBM or M4V. Max 1 GB.",
 };
+const KINDS: SubmissionType[] = ["code", "report", "video"];
+
+/** One upload in its own box: a number and title, whether a file is chosen, then the chooser and its hints. */
+function UploadBox({
+  number,
+  title,
+  htmlFor,
+  chosen,
+  children,
+}: {
+  number: number;
+  title: string;
+  htmlFor: string;
+  chosen: string | null;
+  children: ReactNode;
+}) {
+  return (
+    <section className="mt-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm" data-testid="upload-box">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <label className="flex items-center gap-2 text-sm font-semibold" htmlFor={htmlFor}>
+          <span
+            aria-hidden="true"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs text-blue-800"
+          >
+            {number}
+          </span>
+          {title}
+        </label>
+        {chosen ? (
+          <span className="max-w-full truncate rounded bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-800">
+            ✓ {chosen}
+          </span>
+        ) : (
+          <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600">No file chosen</span>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
 
 /** Only the upload fields this assignment accepts, for a new submission or an edit. */
 export default function UploadForm({
@@ -36,11 +80,17 @@ export default function UploadForm({
   const videoRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState<MessageState>(null);
   const [submitting, setSubmitting] = useState(false);
+  // The name of the file chosen in each box (null: none), for the badge on the box.
+  const [chosen, setChosen] = useState<Record<SubmissionType, string | null>>({ code: null, report: null, video: null });
+  const pick = (kind: SubmissionType) => (e: ChangeEvent<HTMLInputElement>) =>
+    setChosen((c) => ({ ...c, [kind]: e.target.files?.[0]?.name ?? null }));
   // While uploading: the share sent so far (0..1), and how to stop it.
   const [progress, setProgress] = useState<number | null>(null);
   const upload = useRef<AbortController | null>(null);
   const id = (field: string) => `${field}-${assignment.id}`;
   const accepts = (kind: SubmissionType) => assignment.submission_types.includes(kind);
+  // The boxes are numbered in order, counting only the ones this assignment accepts.
+  const numberOf = (kind: SubmissionType) => KINDS.filter(accepts).indexOf(kind) + 1;
   // The instructor may require particular languages; otherwise every supported one.
   const restricted = (assignment.code_languages ?? []).length > 0;
   const languages = languagesFor(assignment.code_languages);
@@ -104,22 +154,19 @@ export default function UploadForm({
 
   return (
     <form onSubmit={handleSubmit} className="mt-4 rounded-md border border-gray-200 p-4">
-      <p className="mb-3 text-sm text-gray-600">
+      <p className="text-sm text-gray-600">
         Accepted for this assignment: {assignment.submission_types.map((t) => TYPE_LABEL[t]).join(", ")}.
       </p>
       {mode === "edit" && assignment.my_submission && (
-        <div className="mb-4">
+        <div className="mt-3">
           <p className="mb-2 text-sm font-semibold">Currently submitted files</p>
           <SubmissionFiles submissionId={assignment.my_submission.id} />
           <p className="mt-3 text-sm text-gray-600">Choose only the files you want to replace; the others are kept.</p>
         </div>
       )}
       {accepts("code") && (
-        <>
-          <label className="block text-sm font-semibold" htmlFor={id("code")}>
-            Code (zip or single file)
-          </label>
-          <div id={id("code-help")} className="mt-1 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-700">
+        <UploadBox number={numberOf("code")} title="Code (zip or single file)" htmlFor={id("code")} chosen={chosen.code}>
+          <div id={id("code-help")} className="mb-3 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-700">
             <p className="font-semibold">
               {restricted ? "Required language for this assignment" : "Accepted languages"}
             </p>
@@ -142,33 +189,42 @@ export default function UploadForm({
             ref={codeRef}
             accept={allowedExtensions.join(",")}
             aria-describedby={id("code-help")}
+            onChange={pick("code")}
             className={fileInput}
           />
-          <p className="mb-3 text-xs text-gray-500">{UPLOAD_HINTS.code}</p>
-        </>
+          <p className="mt-2 text-xs text-gray-500">{UPLOAD_HINTS.code}</p>
+        </UploadBox>
       )}
 
       {accepts("report") && (
-        <>
-          <label className="block text-sm font-semibold" htmlFor={id("report")}>
-            Report (PDF or DOCX)
-          </label>
-          <input id={id("report")} type="file" ref={reportRef} accept={REPORT_ACCEPT} className={fileInput} />
-          <p className="mb-3 text-xs text-gray-500">{UPLOAD_HINTS.report}</p>
-        </>
+        <UploadBox number={numberOf("report")} title="Report (PDF or DOCX)" htmlFor={id("report")} chosen={chosen.report}>
+          <input
+            id={id("report")}
+            type="file"
+            ref={reportRef}
+            accept={REPORT_ACCEPT}
+            onChange={pick("report")}
+            className={fileInput}
+          />
+          <p className="mt-2 text-xs text-gray-500">{UPLOAD_HINTS.report}</p>
+        </UploadBox>
       )}
 
       {accepts("video") && (
-        <>
-          <label className="block text-sm font-semibold" htmlFor={id("video")}>
-            Presentation video
-          </label>
-          <input id={id("video")} type="file" ref={videoRef} accept={VIDEO_ACCEPT} className={fileInput} />
-          <p className="mb-3 text-xs text-gray-500">{UPLOAD_HINTS.video}</p>
-        </>
+        <UploadBox number={numberOf("video")} title="Presentation video" htmlFor={id("video")} chosen={chosen.video}>
+          <input
+            id={id("video")}
+            type="file"
+            ref={videoRef}
+            accept={VIDEO_ACCEPT}
+            onChange={pick("video")}
+            className={fileInput}
+          />
+          <p className="mt-2 text-xs text-gray-500">{UPLOAD_HINTS.video}</p>
+        </UploadBox>
       )}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap gap-2">
         <button
           type="submit"
           disabled={submitting}
