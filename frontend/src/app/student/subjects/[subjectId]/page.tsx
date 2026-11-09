@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import BackLink from "@/components/BackLink";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, StudentAssignment, StudentSubject, UpcomingAssignment } from "@/lib/api";
@@ -183,9 +183,9 @@ export default function StudentSubjectPage() {
     <>
       <AccountBar user={user} width="max-w-4xl" />
       <main className="mx-auto max-w-4xl px-4 py-8">
-      <Link href="/student" className="inline-block text-sm font-semibold text-blue-700 hover:underline" data-testid="back-to-subjects">
-        ← All subjects
-      </Link>
+      <div className="mb-4">
+        <BackLink href="/student" label="All subjects" testId="back-to-subjects" />
+      </div>
 
       <PageHeader
         title={subject?.name ?? "Subject"}
