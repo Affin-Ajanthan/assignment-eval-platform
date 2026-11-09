@@ -654,3 +654,43 @@ def test_a_job_stopped_before_it_starts_is_not_run(monkeypatch):
     real_run(job_id)  # the worker only gets to it now
     job = _job(job_id)
     assert (job.status, job.evaluated) == ("stopped", 0)
+
+
+# ---- Consistency in the rows, and the instructor's own mark ------------------
+
+def test_batch_rows_carry_the_cross_modal_consistency_and_skipped_rows_keep_it():
+    subject, tok, rubric, assignment, subs = _setup(1, assignment="Consistency Rows")
+    first = _batch(subject, assignment, tok, rubric["id"]).json()["results"][0]
+    stored = client.get(f"/submissions/{subs[0]['id']}/auto-evaluate", headers=auth_headers(tok)).json()
+    assert first["cross_modal_consistency"] == stored["cross_modal_consistency"]
+    assert first["cross_modal_consistency"]["status"]  # consistent, limited_data, ... -- always reported
+
+    again = _batch(subject, assignment, tok, rubric["id"], skip_already_evaluated=True).json()["results"][0]
+    assert again["status"] == "skipped" and again["cross_modal_consistency"] == first["cross_modal_consistency"]
+
+
+def test_the_instructor_can_override_a_batch_suggestion_with_their_own_mark():
+    subject, tok, rubric, assignment, subs = _setup(1, assignment="Override Mark")
+    item = _batch(subject, assignment, tok, rubric["id"]).json()["results"][0]
+    sid = subs[0]["id"]
+
+    # The page saves a final mark only, on the rubric the batch used.
+    saved = client.post(f"/submissions/{sid}/grade", json={"rubric_id": rubric["id"], "total_score": 7.5},
+                        headers=auth_headers(tok))
+    assert saved.status_code == 200, saved.text
+    listed = client.get(f"/submissions?subject_id={subject['id']}", headers=auth_headers(tok)).json()
+    mine = next(s for s in listed if s["id"] == sid)
+    assert (mine["status"], mine["final_mark"], mine["max_mark"]) == ("graded", 7.5, 10)
+
+    # A second override replaces the first, and the suggestion itself is untouched.
+    client.post(f"/submissions/{sid}/grade", json={"rubric_id": rubric["id"], "total_score": 9},
+                headers=auth_headers(tok))
+    listed = client.get(f"/submissions?subject_id={subject['id']}", headers=auth_headers(tok)).json()
+    assert next(s for s in listed if s["id"] == sid)["final_mark"] == 9
+    stored = client.get(f"/submissions/{sid}/auto-evaluate", headers=auth_headers(tok)).json()
+    assert stored["recommended_score"] == item["recommended_score"]
+
+    # Above the rubric's maximum is refused.
+    too_high = client.post(f"/submissions/{sid}/grade", json={"rubric_id": rubric["id"], "total_score": 11},
+                           headers=auth_headers(tok))
+    assert too_high.status_code == 400

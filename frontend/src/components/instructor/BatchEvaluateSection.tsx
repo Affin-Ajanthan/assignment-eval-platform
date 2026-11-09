@@ -1,9 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { AISignal, apiFetch, Assignment, BatchEvaluationItem, BatchEvaluationResult, BatchJob, Rubric } from "@/lib/api";
+import { Fragment, useEffect, useState } from "react";
+import {
+  AISignal,
+  apiFetch,
+  Assignment,
+  BatchEvaluationItem,
+  BatchEvaluationResult,
+  BatchJob,
+  CrossModalConsistency,
+  Rubric,
+  Submission,
+} from "@/lib/api";
 import Badge from "@/components/Badge";
-import { methodLabel } from "@/components/AISignalsPanel";
+import { AISignalsView, methodLabel } from "@/components/AISignalsPanel";
+import CrossModalConsistencyPanel from "@/components/CrossModalConsistencyPanel";
 import { formatDateTime, formatMark } from "@/lib/datetime";
 import Message, { MessageState } from "@/components/Message";
 import DownloadExcelButton from "@/components/instructor/DownloadExcelButton";
@@ -42,6 +53,26 @@ function AISignalLine({ label, signal, report }: { label: string; signal: AISign
       {label}: <span className="capitalize">{signal.signal}</span> {signal.score} · {methodLabel(signal.method)}
       {report && heuristic && <span className="text-red-700"> (model not used)</span>}
     </div>
+  );
+}
+
+const CONSISTENCY_BADGE: Record<CrossModalConsistency["status"], { text: string; cls: string }> = {
+  consistent: { text: "Consistent", cls: "bg-green-50 text-green-800" },
+  review_recommended: { text: "Review", cls: "bg-yellow-50 text-yellow-800" },
+  limited_data: { text: "Limited data", cls: "bg-gray-100 text-gray-700" },
+  unavailable: { text: "Unavailable", cls: "bg-gray-100 text-gray-700" },
+  disabled: { text: "Disabled", cls: "bg-gray-100 text-gray-700" },
+};
+
+/** The code / report / video consistency of one row: its status and overall percent. */
+function ConsistencyCell({ c }: { c: CrossModalConsistency | null | undefined }) {
+  if (!c) return <span className="text-gray-400">—</span>;
+  const b = CONSISTENCY_BADGE[c.status];
+  return (
+    <span>
+      <span className={`rounded px-2 py-0.5 text-xs font-semibold ${b.cls}`}>{b.text}</span>
+      {c.overall !== null && <span className="ml-1 text-xs text-gray-600">{Math.round(c.overall * 100)}%</span>}
+    </span>
   );
 }
 
@@ -92,6 +123,13 @@ export default function BatchEvaluateSection({
   const [job, setJob] = useState<BatchJob | null>(null);
   const [msg, setMsg] = useState<MessageState>(null);
   const running = starting || isActive(job);
+  // Row details (consistency and AI reasons) opened, and the instructor's own marks on these submissions.
+  const [openId, setOpenId] = useState<number | null>(null);
+  const [marks, setMarks] = useState<Record<number, Submission>>({});
+  const [editId, setEditId] = useState<number | null>(null);
+  const [draft, setDraft] = useState("");
+  const [savingMark, setSavingMark] = useState(false);
+  const [markMsg, setMarkMsg] = useState<MessageState>(null);
 
   // Keep the selected assignment valid as the list changes.
   useEffect(() => {
@@ -165,6 +203,57 @@ export default function BatchEvaluateSection({
       });
     }
   }, [job?.status, job?.evaluated, job?.skipped, job?.failed, job?.total, job?.error, job?.finished_at]);
+
+  // The marks already given to this subject's submissions: loaded when a run starts or ends, and after an override.
+  async function loadMarks() {
+    try {
+      const rows = await apiFetch<Submission[]>(`/submissions?subject_id=${subjectId}`);
+      setMarks(Object.fromEntries(rows.map((s) => [s.id, s])));
+    } catch {
+      // only a convenience: the table then shows no marks, and saving still works
+    }
+  }
+  useEffect(() => {
+    if (job && !isActive(job)) loadMarks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subjectId, job?.id, job?.status]);
+
+  function startOverride(r: BatchEvaluationItem) {
+    const mine = marks[r.submission_id];
+    const start = mine?.status === "graded" ? (mine.raw_mark ?? mine.final_mark) : r.recommended_score;
+    setEditId(r.submission_id);
+    setDraft(start === null || start === undefined ? "" : String(start));
+    setMarkMsg(null);
+  }
+
+  /** Save the instructor's own mark for one submission: the same final-mark-only grade as manual grading. */
+  async function saveOverride(r: BatchEvaluationItem) {
+    const value = Number(draft);
+    if (draft.trim() === "" || Number.isNaN(value)) {
+      setMarkMsg({ text: "Enter a number for the mark.", kind: "error" });
+      return;
+    }
+    if (r.recommended_max !== null && (value < 0 || value > r.recommended_max)) {
+      setMarkMsg({ text: `The mark must be between 0 and ${r.recommended_max}.`, kind: "error" });
+      return;
+    }
+    if (!job) return;
+    setSavingMark(true);
+    setMarkMsg(null);
+    try {
+      await apiFetch(`/submissions/${r.submission_id}/grade`, {
+        method: "POST",
+        json: { rubric_id: job.rubric_id, total_score: value },
+      });
+      setEditId(null);
+      await loadMarks();
+      setMarkMsg({ text: `Mark for ${r.student_name} saved: ${formatMark(value, r.recommended_max)}.`, kind: "success" });
+    } catch (err) {
+      setMarkMsg({ text: `Could not save the mark: ${err instanceof Error ? err.message : err}`, kind: "error" });
+    } finally {
+      setSavingMark(false);
+    }
+  }
 
   const count = assignments.find((a) => a.name === assignment)?.submission_count;
   const finished = job ? job.results.filter((r): r is BatchEvaluationItem => r !== null) : [];
@@ -371,16 +460,19 @@ export default function BatchEvaluateSection({
               <tr className="bg-gray-50 text-left">
                 <th className="border-b border-gray-200 px-3 py-2">Student</th>
                 <th className="border-b border-gray-200 px-3 py-2">Status</th>
-                <th className="border-b border-gray-200 px-3 py-2">Marks</th>
+                <th className="border-b border-gray-200 px-3 py-2">Suggested</th>
+                <th className="border-b border-gray-200 px-3 py-2">Your mark</th>
                 <th className="border-b border-gray-200 px-3 py-2">Similarity flag</th>
                 <th className="border-b border-gray-200 px-3 py-2">AI detection flag</th>
+                <th className="border-b border-gray-200 px-3 py-2">Consistency</th>
                 <th className="border-b border-gray-200 px-3 py-2">Grader</th>
                 <th className="border-b border-gray-200 px-3 py-2">Notes</th>
               </tr>
             </thead>
             <tbody>
               {finished.map((r) => (
-                <tr key={r.submission_id}>
+                <Fragment key={r.submission_id}>
+                <tr>
                   <td className="border-b border-gray-200 px-3 py-2">
                     {r.student_name} (#{r.submission_id})
                   </td>
@@ -390,6 +482,58 @@ export default function BatchEvaluateSection({
                   <td className="border-b border-gray-200 px-3 py-2">
                     {r.recommended_score === null ? "—" : formatMark(r.recommended_score, r.recommended_max)}
                   </td>
+                  <td className="border-b border-gray-200 px-3 py-2" data-testid="batch-your-mark">
+                    {editId === r.submission_id ? (
+                      <div className="flex flex-wrap items-center gap-1">
+                        <input
+                          type="number"
+                          min={0}
+                          max={r.recommended_max ?? undefined}
+                          step="0.01"
+                          value={draft}
+                          onChange={(e) => setDraft(e.target.value)}
+                          aria-label={`Mark for ${r.student_name}`}
+                          className="w-20 rounded-md border border-gray-300 px-2 py-1 text-sm"
+                        />
+                        <span className="text-xs text-gray-500">/ {r.recommended_max ?? "?"}</span>
+                        <button
+                          type="button"
+                          onClick={() => saveOverride(r)}
+                          disabled={savingMark}
+                          className="btn-primary rounded-md px-2 py-1 text-xs font-semibold disabled:opacity-50"
+                          data-testid="save-override"
+                        >
+                          {savingMark ? "Saving…" : "Save"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditId(null)}
+                          disabled={savingMark}
+                          className="btn-secondary rounded-md px-2 py-1 text-xs font-semibold"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span>
+                          {marks[r.submission_id]?.status === "graded"
+                            ? formatMark(marks[r.submission_id].final_mark, marks[r.submission_id].max_mark)
+                            : "Not graded"}
+                        </span>
+                        {r.status !== "failed" && (
+                          <button
+                            type="button"
+                            onClick={() => startOverride(r)}
+                            className="btn-secondary rounded-md px-2 py-1 text-xs font-semibold"
+                            data-testid="override-mark"
+                          >
+                            {marks[r.submission_id]?.status === "graded" ? "Override" : "Set mark"}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </td>
                   <td className="border-b border-gray-200 px-3 py-2">
                     <FlagBadge flagged={r.similarity_flagged} />
                   </td>
@@ -397,6 +541,22 @@ export default function BatchEvaluateSection({
                     <FlagBadge flagged={r.ai_flagged} />
                     <AISignalLine label="Report" signal={r.ai_signals?.report ?? null} report />
                     <AISignalLine label="Code" signal={r.ai_signals?.code ?? null} />
+                  </td>
+                  <td className="border-b border-gray-200 px-3 py-2">
+                    <ConsistencyCell c={r.cross_modal_consistency} />
+                    {r.status !== "failed" && (
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => setOpenId(openId === r.submission_id ? null : r.submission_id)}
+                          className="mt-1 text-xs font-semibold text-blue-700 underline"
+                          aria-expanded={openId === r.submission_id}
+                          data-testid="batch-details"
+                        >
+                          {openId === r.submission_id ? "Hide details" : "Details"}
+                        </button>
+                      </div>
+                    )}
                   </td>
                   <td className="border-b border-gray-200 px-3 py-2">
                     {r.grader ? (r.model ? `${r.grader}, ${r.model}` : r.grader) : "—"}
@@ -410,12 +570,24 @@ export default function BatchEvaluateSection({
                     ))}
                   </td>
                 </tr>
+                {openId === r.submission_id && (
+                  <tr>
+                    <td colSpan={9} className="border-b border-gray-200 bg-gray-50 px-3 py-2">
+                      <CrossModalConsistencyPanel result={r.cross_modal_consistency ?? null} />
+                      <AISignalsView signals={r.ai_signals ?? null} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>
+          <Message state={markMsg} />
           <p className="mt-2 text-xs text-gray-500">
-            Open a submission in the table below and use &ldquo;Auto-evaluate&rdquo; to see the full per-criterion
-            breakdown, then grade manually.
+            &ldquo;Suggested&rdquo; is the automated mark; &ldquo;Your mark&rdquo; is the mark students see. Set or
+            override it here (it is saved as your final mark and replaces the previous one), or open a submission
+            in the table below and use &ldquo;Auto-evaluate&rdquo; for the full per-criterion breakdown, then grade
+            manually.
           </p>
         </div>
       )}

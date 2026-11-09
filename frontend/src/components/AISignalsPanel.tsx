@@ -44,7 +44,11 @@ function Row({ label, signal, missing }: { label: string; signal: AISignal | nul
 
 /** Always shows the report and code AI-content estimates, whatever their level. */
 export default function AISignalsPanel({ result }: { result: AutoEvaluation }) {
-  const signals = result.ai_signals;
+  return <AISignalsView signals={result.ai_signals} />;
+}
+
+/** The same panel from just the signals (the batch table has no full evaluation). */
+export function AISignalsView({ signals }: { signals: AutoEvaluation["ai_signals"] }) {
   return (
     <div className="mt-4 rounded-md border border-gray-200 p-4">
       <h4 className="text-base font-semibold">AI-content signals</h4>

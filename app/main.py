@@ -737,6 +737,9 @@ class BatchEvaluationItemOut(BaseModel):
     # Level, score and method behind ai_flagged, so the table can show which
     # detector ran. None when the submission failed or predates these details.
     ai_signals: Optional[AISignalsOut] = None
+    # The code / report / video consistency behind the row, so the table can show it without opening each
+    # submission. None when the submission failed or was evaluated before this was kept.
+    cross_modal_consistency: Optional[CrossModalConsistencyOut] = None
 
 
 class BatchAutoEvaluateOut(BaseModel):
@@ -3072,7 +3075,8 @@ def _run_batch_job(job_id: int) -> None:
                     grader=prev.grader, model=prev.model, review_flags=list(prev.review_flags or []),
                     similarity_flagged=prev.similarity_flagged,
                     ai_flagged=_ai_flagged(prev.code_ai_flagged, prev.report_ai_signal),
-                    ai_signals=prev.ai_signals).model_dump(mode="json")
+                    ai_signals=prev.ai_signals,
+                    cross_modal_consistency=prev.cross_modal_consistency).model_dump(mode="json")
             else:
                 to_run.append((position, submission.id))
 
@@ -3104,7 +3108,8 @@ def _run_batch_job(job_id: int) -> None:
                     grader=ev.grader, model=ev.model, review_flags=list(ev.review_flags or []),
                     similarity_flagged=ev.similarity_flagged,
                     ai_flagged=_ai_flagged(ev.code_ai_flagged, ev.report_ai_signal),
-                    ai_signals=ev.ai_signals)
+                    ai_signals=ev.ai_signals,
+                    cross_modal_consistency=ev.cross_modal_consistency)
             finally:
                 worker_db.close()
 

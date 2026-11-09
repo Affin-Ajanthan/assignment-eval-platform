@@ -227,6 +227,11 @@ logged in.
      can be resumed like an interrupted one; the page's "Run again" button
      starts a fresh run over every submission.
    - Every run is recorded in the `batch_jobs` table.
+   - Each result row also carries the code / report / video `cross_modal_consistency`
+     (kept for skipped rows too), next to the AI signals. On the page, "Details" on a row
+     opens the full consistency and AI-content panels, and "Set mark" / "Override" saves the
+     instructor's own final mark with the normal `POST /submissions/{id}/grade`
+     (`total_score`), replacing the earlier one; the suggestion itself is not changed.
 
    `POST /subjects/{id}/assignments/{name}/auto-evaluate` runs the same
    job but waits until every submission is done and returns all results

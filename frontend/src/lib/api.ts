@@ -544,7 +544,9 @@ export interface BatchEvaluationItem {
   /** AI-content review flag (code or report); never changes marks. Null when the submission failed. */
   ai_flagged: boolean | null;
   /** Level, score and method behind ai_flagged; null when failed or stored before these details. */
-  ai_signals?: { report: AISignal | null; code: AISignal | null } | null;
+  ai_signals?: { report: AISignal | null; code: AISignal | null; disabled?: boolean } | null;
+  /** Code / report / video-transcript consistency; null when failed or stored before it was kept. */
+  cross_modal_consistency?: CrossModalConsistency | null;
 }
 
 export interface BatchEvaluationResult {
