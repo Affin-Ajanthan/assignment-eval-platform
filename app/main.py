@@ -3250,3 +3250,8 @@ app.include_router(_subject_access_router)
 from .routers.similarity import router as _similarity_router  # noqa: E402
 
 app.include_router(_similarity_router)
+
+# The instructor's AI-content check of one assignment's submissions.
+from .routers.ai_content import router as _ai_content_router  # noqa: E402
+
+app.include_router(_ai_content_router)

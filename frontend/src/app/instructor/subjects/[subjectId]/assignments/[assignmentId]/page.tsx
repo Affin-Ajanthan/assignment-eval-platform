@@ -20,6 +20,7 @@ import SubmissionFiles from "@/components/SubmissionFiles";
 import RichText from "@/components/RichText";
 import TestRunPanel from "@/components/instructor/TestRunPanel";
 import AISignalsPanel from "@/components/AISignalsPanel";
+import AiContentSection from "@/components/instructor/AiContentSection";
 import BatchEvaluateSection from "@/components/instructor/BatchEvaluateSection";
 import DownloadExcelButton from "@/components/instructor/DownloadExcelButton";
 import ReportSimilarityPanel from "@/components/instructor/ReportSimilarityPanel";
@@ -169,8 +170,8 @@ function RubricField({
   );
 }
 
-type AssignmentTab = "grading" | "integrity" | "batch";
-const ASSIGNMENT_TABS: AssignmentTab[] = ["grading", "integrity", "batch"];
+type AssignmentTab = "grading" | "integrity" | "ai" | "batch";
+const ASSIGNMENT_TABS: AssignmentTab[] = ["grading", "integrity", "ai", "batch"];
 
 /**
  * One assignment of a subject: /instructor/subjects/<id>/assignments/<assignment id>, opened by Open on the subject
@@ -1024,6 +1025,7 @@ export default function InstructorAssignmentPage() {
                   ) : null,
               },
               { id: "integrity", label: "Similarity" },
+              { id: "ai", label: "AI content" },
               { id: "batch", label: "Batch evaluate" },
             ]}
           />
@@ -1196,6 +1198,10 @@ export default function InstructorAssignmentPage() {
 
           {/* Student self-check history */}
           <SelfCheckHistoryPanel assignments={assignments} />
+          </div>
+
+          <div {...tabPanelProps("ai", tab)}>
+            <AiContentSection subjectId={subjectId} assignmentName={assignment.name} />
           </div>
 
           <div {...tabPanelProps("batch", tab)}>

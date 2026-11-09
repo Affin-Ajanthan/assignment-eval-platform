@@ -623,6 +623,24 @@ export interface AISignal {
   reasons: string[];
 }
 
+/** One submission's row of the instructor's AI-content check; null = no readable report / no code. */
+export interface AiContentRow {
+  submission_id: number;
+  student_name: string;
+  student_email: string;
+  report: AISignal | null;
+  code: AISignal | null;
+}
+
+export interface AiContentCheckResult {
+  subject_id: number;
+  assignment_name: string;
+  checked: number;
+  /** Submissions with a high signal on the report or the code. */
+  flagged: number;
+  rows: AiContentRow[];
+}
+
 export type ConsistencyComponent = "code" | "report" | "transcript";
 
 export interface CrossModalConsistency {
