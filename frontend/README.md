@@ -6,7 +6,8 @@ role/screen:
 - `/admin` -- three tabs (Subjects, Instructors, Students): create and edit them; subjects and instructors are linked from either side
 - `/instructor` -- the subjects opened last ("Recently viewed", kept in the browser) as boxes, then the batches of their subjects
 - `/instructor/batches/<batch>` -- the subjects the instructor teaches in one batch
-- `/instructor/subjects/<id>` -- one subject, two tabs: Assignments (student access, and the two kinds, Submission and Code challenge, each opening its list) and Rubrics
+- `/instructor/subjects/<id>` -- one subject, two tabs: Assignments (the two kinds, Submission and Code challenge, each opening its list) and Rubrics; a Student access button next to the subject name
+- `/instructor/subjects/<id>/access` -- the student access of the subject: password, allow registration, optional end date
 - `/instructor/subjects/<id>/rubrics/new` and `/instructor/subjects/<id>/rubrics/<rubric id>` -- create a rubric (+ New on the Rubrics tab, which lists the rubrics as boxes) and edit one by clicking its box
 - `/instructor/subjects/<id>/assignments?kind=submission|code_challenge` -- the existing ones of that kind as boxes: + New at the top right, click a box to edit it, Open, Delete
 - `/instructor/subjects/<id>/assignments/<assignment id>` -- one assignment: Submissions & grading, Similarity, Batch evaluate
