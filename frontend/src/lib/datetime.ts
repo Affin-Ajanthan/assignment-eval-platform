@@ -24,7 +24,7 @@ export function formatTime(iso: string): string {
 }
 
 /** How long until a deadline, e.g. "Due in 3 days"; `urgent` under 24 hours. Null once it has passed. */
-export function timeLeft(iso: string, now: number = Date.now()): { text: string; urgent: boolean } | null {
+export function timeLeft(iso: string, now: number = Date.now()): { text: string; urgent: boolean; soon: boolean } | null {
   const ms = new Date(iso).getTime() - now;
   if (Number.isNaN(ms) || ms <= 0) return null;
   const minutes = Math.floor(ms / 60000);
@@ -36,7 +36,7 @@ export function timeLeft(iso: string, now: number = Date.now()): { text: string;
       : hours < 24
         ? `Due in ${hours} hour${hours === 1 ? "" : "s"}`
         : `Due in ${days} day${days === 1 ? "" : "s"}`;
-  return { text, urgent: hours < 24 };
+  return { text, urgent: hours < 24, soon: days < 3 };
 }
 
 function pad(n: number): string {
