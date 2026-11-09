@@ -19,11 +19,15 @@ function saveFile(blob: Blob, name: string) {
 
 function RowsTable({ rows }: { rows: StudentImportRow[] }) {
   return (
-    <div className="mt-3 max-h-96 overflow-auto rounded-md border border-gray-200">
+    <>
+    <p className="mt-3 text-xs text-gray-600">
+      Row numbers match your file. Row 1 holds the headings, so the first student is on row 2.
+    </p>
+    <div className="mt-1 max-h-96 overflow-auto rounded-md border border-gray-200">
       <table className="w-full min-w-[48rem] text-left text-sm">
         <thead className="sticky top-0 bg-gray-100 text-xs uppercase tracking-wide text-gray-600">
           <tr>
-            <th scope="col" className="px-3 py-2">Row</th>
+            <th scope="col" className="whitespace-nowrap px-3 py-2">Row in file</th>
             {/* Beside the row number: on a phone the columns after it are off-screen until scrolled to. */}
             <th scope="col" className="px-3 py-2">Result</th>
             <th scope="col" className="px-3 py-2">Full name</th>
@@ -56,6 +60,7 @@ function RowsTable({ rows }: { rows: StudentImportRow[] }) {
         </tbody>
       </table>
     </div>
+    </>
   );
 }
 
