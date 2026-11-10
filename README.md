@@ -164,9 +164,9 @@ logged in.
 
 | Phase (from the plan) | Where |
 | --- | --- |
-| Accounts + subject-wise access control | `app/auth.py`, `app/models.py`; `/auth/*` and `/admin/*` endpoints in `app/main.py`; `frontend/src/app/login`, `frontend/src/app/admin` |
-| Submission portal, rubric upload, manual grading | `app/main.py`: `/rubrics`, `/submissions`, `/submissions/{id}/grade` |
-| Pre-submission similarity + AI-content detection | `app/similarity/` (standalone CLI) + `app/main.py`'s `POST /subjects/{id}/assignments/{name}/check-similarity`; AI-text for reports lives in `app/evaluator/report_analysis.py` |
+| Accounts + subject-wise access control | `app/auth.py`, `app/models.py`; `/auth/*` and `/admin/*` endpoints in `app/routers/auth.py` and `app/routers/admin.py`; `frontend/src/app/login`, `frontend/src/app/admin` |
+| Submission portal, rubric upload, manual grading | `app/routers/rubrics.py`, `app/routers/submissions.py`, `app/routers/grading.py`: `/rubrics`, `/submissions`, `/submissions/{id}/grade` |
+| Pre-submission similarity + AI-content detection | `app/similarity/` (standalone CLI) + `app/routers/similarity.py`'s `POST /subjects/{id}/assignments/{name}/check-similarity`; AI-text for reports lives in `app/evaluator/report_analysis.py` |
 | Automated rubric grading for code + report | `app/evaluator/rubric_grading.py`, run via `POST /submissions/{id}/auto-evaluate` |
 | Video pipeline: transcription + content analysis | `app/evaluator/video_analysis.py`, run via the same auto-evaluate endpoint |
 | Cross-modal consistency + aggregated grade + instructor override | `app/evaluator/cross_modal.py` + `app/evaluator/pipeline.py`; the instructor dashboard shows the auto-evaluation, then the instructor grades manually (which always wins) |

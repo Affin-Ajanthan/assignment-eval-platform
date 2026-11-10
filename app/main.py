@@ -1,11 +1,19 @@
 """
-The single FastAPI application: accounts + subject-wise access control
-(admin/instructor/student, see app/auth.py and app/models.py), the
-submission portal + rubric engine + manual grading, the code-similarity
-checker (see ``app/similarity/``), and the multi-modal evaluator --
-report/code analysis, rubric grading, video analysis, cross-modal
-consistency (see ``app/evaluator/``). One process, one database, one
-set of dependencies.
+The FastAPI application: it sets up the database, starts the background model loading, and includes the routers.
+One process, one database, one set of dependencies.
+
+Where the routes are (each area in its own file under app/routers/):
+    auth.py            login, logout, the signed-in user, changing one's password
+    admin.py           the admin's subjects, instructors and students (and the spreadsheet import)
+    rubrics.py         rubrics and their criteria
+    assignments.py     assignments, starter code, report templates
+    submissions.py     students' submissions and downloading their files
+    grading.py         manual grading, and the Excel export of a whole-assignment evaluation
+    auto_evaluation.py the automated multi-modal evaluation, whole-assignment batch jobs, code tests
+    self_checks.py, student_runs.py, subject_access.py, similarity.py, ai_content.py
+The request and response models are in app/schemas.py; helpers several routers share are in app/route_helpers.py.
+The similarity checker is in app/similarity/ and the evaluator (report/code analysis, rubric grading, video
+analysis, cross-modal consistency) in app/evaluator/.
 
 Access control, in one paragraph: an admin creates every account --
 there is no self-registration. An admin also creates subjects and
@@ -197,40 +205,20 @@ def health():
     }
 
 
-app.include_router(_auth_router)
-
-
-app.include_router(_admin_router)
-
-
+# Rubrics saved before criteria had ids get them, once, at startup.
 _ensure_criterion_ids()
 
-
+# Every route, by area. FastAPI tries routes in the order they are included: this is the order they had when they
+# were all in this file, so keep it.
+app.include_router(_auth_router)
+app.include_router(_admin_router)
 app.include_router(_rubrics_router)
-
-
 app.include_router(_assignments_router)
-
-
 app.include_router(_submissions_router)
-
-
 app.include_router(_grading_router)
-
-
 app.include_router(_auto_evaluation_router)
-
-
 app.include_router(_self_check_router)
-
-
 app.include_router(_student_run_router)
-
-
 app.include_router(_subject_access_router)
-
-
 app.include_router(_similarity_router)
-
-
 app.include_router(_ai_content_router)
