@@ -30,7 +30,7 @@ from ..models import (
     TaskUnlock,
     User,
 )
-from ..route_helpers import _discard_derived_results, _remove_upload_part, _user_out
+from ..route_helpers import _discard_derived_results, _remove_upload_part, _user_out, _users_out
 from ..schemas import (
     ImportPreviewOut,
     ImportResultOut,
@@ -185,7 +185,7 @@ def create_instructor(payload: InstructorCreate, _admin: User = Depends(require_
 @router.get("/admin/instructors", response_model=list[UserOut])
 def list_instructors(_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     instructors = db.query(User).filter(User.role == "instructor").order_by(User.full_name).all()
-    return [_user_out(i, db) for i in instructors]
+    return _users_out(instructors, db)
 
 
 def _admin_managed_user(db: Session, user_id: int, role: str) -> User:
@@ -450,7 +450,8 @@ def list_students(_admin: User = Depends(require_admin), db: Session = Depends(g
     counts = dict(
         db.query(Submission.student_id, func.count(Submission.id)).group_by(Submission.student_id).all()
     )
-    return [_user_out(s, db).model_copy(update={"submission_count": counts.get(s.id, 0)}) for s in students]
+    return [out.model_copy(update={"submission_count": counts.get(s.id, 0)})
+            for s, out in zip(students, _users_out(students, db))]
 
 
 @router.put("/admin/students/{student_id}", response_model=UserOut)

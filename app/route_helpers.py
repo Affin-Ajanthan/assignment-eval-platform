@@ -4,11 +4,12 @@ and the code several sections need. Moved out of app/main.py; a helper used by o
 from __future__ import annotations
 
 import shutil
+from collections import defaultdict
 from datetime import datetime
 from typing import Optional
 
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from .auth import instructor_subject_ids
 from .db import BASE_DIR, UPLOAD_DIR
@@ -17,18 +18,32 @@ from .models import AutoEvaluation, Enrollment, InstructorAssignment, Rubric, Si
 from .schemas import UserOut
 
 
+# Ids per IN (...) list: well under SQLite's limit on query parameters, whatever its version.
+_IN_CHUNK = 900
+
+
+def _users_out(users: list[User], db: Session) -> list[UserOut]:
+    """Users with their subjects (an instructor's teaching subjects, a student's enrolments). The subjects of all of
+    them are read together, with the subject rows in the same query: a list of 500 students takes two queries, not
+    one or more per student."""
+    subjects: dict[int, list] = defaultdict(list)
+    for link, owner, role in ((InstructorAssignment, InstructorAssignment.instructor_id, "instructor"),
+                              (Enrollment, Enrollment.student_id, "student")):
+        ids = [u.id for u in users if u.role == role]
+        for start in range(0, len(ids), _IN_CHUNK):
+            rows = (db.query(link).options(joinedload(link.subject))
+                    .filter(owner.in_(ids[start:start + _IN_CHUNK])).order_by(link.id).all())
+            for row in rows:
+                subjects[row.instructor_id if role == "instructor" else row.student_id].append(row.subject)
+    return [UserOut(id=u.id, email=u.email, full_name=u.full_name, role=u.role,
+                    subjects=subjects.get(u.id, []) if u.role in ("instructor", "student") else [],
+                    batch=u.batch or "", register_number=u.register_number or "",
+                    must_change_password=bool(u.must_change_password))
+            for u in users]
+
+
 def _user_out(user: User, db: Session) -> UserOut:
-    if user.role == "instructor":
-        rows = db.query(InstructorAssignment).filter(InstructorAssignment.instructor_id == user.id).all()
-        subjects = [row.subject for row in rows]
-    elif user.role == "student":
-        rows = db.query(Enrollment).filter(Enrollment.student_id == user.id).all()
-        subjects = [row.subject for row in rows]
-    else:
-        subjects = []
-    return UserOut(id=user.id, email=user.email, full_name=user.full_name, role=user.role, subjects=subjects,
-                   batch=user.batch or "", register_number=user.register_number or "",
-                   must_change_password=bool(user.must_change_password))
+    return _users_out([user], db)[0]
 
 
 def _require_assignment_rubric(submission: Submission, rubric: Rubric) -> None:

@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from sqlalchemy.orm import Session
+from sqlalchemy import case, func
+from sqlalchemy.orm import Session, selectinload
 
 from .. import code_answers as _code_answers, code_languages as _langs
 from ..auth import get_current_user, instructor_subject_ids, require_instructor, require_student, student_subject_ids
@@ -97,8 +98,24 @@ def _require_unique_assignment_name(db: Session, subject_id: int, name: str, exc
             raise HTTPException(409, f"An assignment named '{other.name}' already exists in this subject")
 
 
-def _assignment_out(db: Session, a: Assignment) -> AssignmentOut:
-    subs = db.query(Submission).filter(Submission.assignment_id == a.id).all()
+def _submission_counts(db: Session, assignment_ids: list[int]) -> dict[int, tuple[int, int, int]]:
+    """For each assignment: how many submissions it has, how many are graded, how many came in late. One grouped
+    query for any number of assignments; no submission rows are loaded."""
+    if not assignment_ids:
+        return {}
+    rows = (db.query(Submission.assignment_id, func.count(Submission.id),
+                     func.sum(case((Submission.status == "graded", 1), else_=0)),
+                     func.sum(case((Submission.late_seconds.isnot(None), 1), else_=0)))
+            .filter(Submission.assignment_id.in_(assignment_ids)).group_by(Submission.assignment_id).all())
+    return {aid: (total, graded or 0, late or 0) for aid, total, graded, late in rows}
+
+
+def _assignment_out(db: Session, a: Assignment,
+                    counts: Optional[dict[int, tuple[int, int, int]]] = None) -> AssignmentOut:
+    """`counts`: from _submission_counts, when a whole list is built (one query for all); otherwise read here."""
+    if counts is None:
+        counts = _submission_counts(db, [a.id])
+    submission_count, graded_count, late_count = counts.get(a.id, (0, 0, 0))
     return AssignmentOut(
         id=a.id, subject_id=a.subject_id, subject_name=a.subject.name if a.subject else "",
         name=a.name, description=a.description or "",
@@ -107,7 +124,7 @@ def _assignment_out(db: Session, a: Assignment) -> AssignmentOut:
         rubric_id=a.rubric_id, rubric_name=a.rubric.name if a.rubric else None,
         max_points=a.rubric.max_total if a.rubric else None,
         submission_types=a.accepted_types(),
-        submission_count=len(subs), graded_count=sum(1 for s in subs if s.status == "graded"),
+        submission_count=submission_count, graded_count=graded_count,
         created_at=_as_utc(a.created_at), updated_at=_as_utc(a.updated_at),
         starter_code=a.starter_code or "", starter_code_filename=a.starter_code_filename or "",
         report_template_filename=a.report_template_filename or "",
@@ -129,7 +146,7 @@ def _assignment_out(db: Session, a: Assignment) -> AssignmentOut:
         late_penalty_max_percent=100 if a.late_penalty_max_percent is None else a.late_penalty_max_percent,
         late_penalty_unit=a.late_penalty_unit or "percent", late_penalty_marks=a.late_penalty_marks or 0,
         late_penalty_max_marks=a.late_penalty_max_marks,
-        late_count=sum(1 for s in subs if s.late_seconds is not None),
+        late_count=late_count,
     )
 
 
@@ -281,17 +298,30 @@ def _my_submission_out(submission: Submission, assignment_open: bool, now: datet
     )
 
 
-def _student_assignment_out(db: Session, student: User, a: Assignment, now: datetime) -> StudentAssignmentOut:
+# "Not given": _student_assignment_out then reads the student's submission itself.
+_NOT_GIVEN = object()
+
+
+def _latest_submissions(db: Session, student: User, assignment_ids: list[int]) -> dict[int, Submission]:
+    """The student's latest submission to each of these assignments, in one query."""
+    latest: dict[int, Submission] = {}
+    if assignment_ids:
+        for s in (db.query(Submission).filter(Submission.student_id == student.id,
+                                              Submission.assignment_id.in_(assignment_ids))
+                  .order_by(Submission.id.desc())):
+            latest.setdefault(s.assignment_id, s)
+    return latest
+
+
+def _student_assignment_out(db: Session, student: User, a: Assignment, now: datetime,
+                            mine=_NOT_GIVEN) -> StudentAssignmentOut:
+    """`mine`: the student's latest submission (or None), when a whole list is built; otherwise read here."""
     status = a.status_at(now)
     past_deadline = status == "closed"
     if past_deadline and a.accepts_at(now):
         status = "open"  # late work is still taken: the page treats the assignment as open (see `past_deadline`)
-    mine = (
-        db.query(Submission)
-        .filter(Submission.assignment_id == a.id, Submission.student_id == student.id)
-        .order_by(Submission.id.desc())
-        .first()
-    )
+    if mine is _NOT_GIVEN:
+        mine = _latest_submissions(db, student, [a.id]).get(a.id)
     unlocked = _code_answers.tasks_unlocked(db, student.id, a)
     return StudentAssignmentOut(
         id=a.id, subject_id=a.subject_id, subject_name=a.subject.name if a.subject else "",
@@ -385,12 +415,17 @@ def list_assignments(
         if subject_id not in allowed:
             raise HTTPException(403, "You don't have access to this subject")
         allowed = {subject_id}
-    query = db.query(Assignment).filter(Assignment.subject_id.in_(allowed)).order_by(Assignment.deadline)
+    # Each assignment's subject and rubric are read with the list (two queries), not one by one.
+    query = (db.query(Assignment).filter(Assignment.subject_id.in_(allowed)).order_by(Assignment.deadline)
+             .options(selectinload(Assignment.subject), selectinload(Assignment.rubric)))
     now = _utcnow_naive()
     if user.role == "student":
         visible = query.filter(Assignment.available_from <= now).all()
-        return [_student_assignment_out(db, user, a, now) for a in visible]
-    return [_assignment_out(db, a) for a in query.all()]
+        latest = _latest_submissions(db, user, [a.id for a in visible])
+        return [_student_assignment_out(db, user, a, now, mine=latest.get(a.id)) for a in visible]
+    assignments = query.all()
+    counts = _submission_counts(db, [a.id for a in assignments])
+    return [_assignment_out(db, a, counts) for a in assignments]
 
 
 @router.get("/upcoming-assignments", response_model=list[UpcomingAssignmentOut])
