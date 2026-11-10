@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from .auth import instructor_subject_ids
 from .db import BASE_DIR, UPLOAD_DIR
 from .evaluator.document_extraction import EXTRACTED_MARKDOWN_NAME, EXTRACTION_META_NAME
-from .models import AutoEvaluation, Enrollment, InstructorAssignment, SimilarityFlag, Submission, User
+from .models import AutoEvaluation, Enrollment, InstructorAssignment, Rubric, SimilarityFlag, Submission, User
 from .schemas import UserOut
 
 
@@ -29,6 +29,19 @@ def _user_out(user: User, db: Session) -> UserOut:
     return UserOut(id=user.id, email=user.email, full_name=user.full_name, role=user.role, subjects=subjects,
                    batch=user.batch or "", register_number=user.register_number or "",
                    must_change_password=bool(user.must_change_password))
+
+
+def _require_assignment_rubric(submission: Submission, rubric: Rubric) -> None:
+    """An assignment with a rubric is graded (and auto-evaluated) with that rubric
+    only, so marks never end up on another rubric. Without one, any rubric of the
+    subject is allowed."""
+    assignment = submission.assignment
+    if assignment is not None and assignment.kind == "code_challenge":
+        raise HTTPException(400, "A code challenge is marked from its tests, not with a rubric.")
+    if assignment is not None and assignment.rubric_id is not None and assignment.rubric_id != rubric.id:
+        raise HTTPException(
+            400, f"This assignment is graded with the rubric '{assignment.rubric.name}', not '{rubric.name}'"
+        )
 
 
 def _can_view_submission(user: User, submission: Submission, db: Session) -> bool:

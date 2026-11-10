@@ -14,7 +14,7 @@ from ..auth import get_current_user, instructor_subject_ids, require_instructor
 from ..common import instructor_subject as _instructor_subject
 from ..db import get_db
 from ..models import Grade, Rubric, Submission, User
-from ..route_helpers import _can_view_submission
+from ..route_helpers import _can_view_submission, _require_assignment_rubric
 from ..schemas import BatchAutoEvaluateOut, GradeIn, GradeOut
 
 
@@ -25,19 +25,6 @@ def _require_two_decimals(label: str, score: float) -> None:
     """Manual marks have at most 2 decimal places (7.25 is fine, 7.3333 is not)."""
     if round(score, 2) != score:
         raise HTTPException(400, f"{label} must have at most 2 decimal places, got {score}")
-
-
-def _require_assignment_rubric(submission: Submission, rubric: Rubric) -> None:
-    """An assignment with a rubric is graded (and auto-evaluated) with that rubric
-    only, so marks never end up on another rubric. Without one, any rubric of the
-    subject is allowed."""
-    assignment = submission.assignment
-    if assignment is not None and assignment.kind == "code_challenge":
-        raise HTTPException(400, "A code challenge is marked from its tests, not with a rubric.")
-    if assignment is not None and assignment.rubric_id is not None and assignment.rubric_id != rubric.id:
-        raise HTTPException(
-            400, f"This assignment is graded with the rubric '{assignment.rubric.name}', not '{rubric.name}'"
-        )
 
 
 @router.post("/submissions/{submission_id}/grade", response_model=GradeOut)
