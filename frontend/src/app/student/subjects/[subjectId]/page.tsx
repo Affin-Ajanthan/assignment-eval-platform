@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import BackLink from "@/components/BackLink";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, StudentAssignment, StudentSubject, UpcomingAssignment } from "@/lib/api";
@@ -41,6 +41,24 @@ function TeacherList({ subject }: { subject: StudentSubject }) {
   );
 }
 
+// The phone-only filter above the list. From the md breakpoint up the page always shows every assignment.
+type PhoneFilter = "all" | "todo" | "submitted" | "graded";
+const PHONE_FILTERS: { id: PhoneFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "todo", label: "To do" },
+  { id: "submitted", label: "Submitted" },
+  { id: "graded", label: "Graded" },
+];
+
+/** Which filter tab an assignment is under, besides All (a past assignment with nothing handed in is under All only). */
+function phoneFilterOf(a: StudentAssignment): PhoneFilter | null {
+  const sub = a.my_submission;
+  const tasks = a.assignment_type === "code_challenge" ? (a.questions?.length ?? 0) : 0;
+  if (a.status === "open" && (!sub || (tasks > 1 && sub.questions_submitted < tasks))) return "todo";
+  if (!sub) return null;
+  return sub.final_mark !== null && !a.marks_release_at ? "graded" : "submitted";
+}
+
 /**
  * One subject of the student: /student/subjects/<id>, opened from the subject boxes on /student. A student who has
  * not joined it gets the password box (and the teachers' names); once they join, the page is reloaded and shows the
@@ -64,6 +82,7 @@ export default function StudentSubjectPage() {
   const [notice, setNotice] = useState<{ assignmentId: number; state: MessageState } | null>(null);
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
+  const [phoneFilter, setPhoneFilter] = useState<PhoneFilter>("all");
 
   const load = useCallback(async () => {
     try {
@@ -142,9 +161,15 @@ export default function StudentSubjectPage() {
   // Open ones by the deadline that comes first; past ones with the most recent first.
   const open = listed.filter((a) => a.status === "open").sort((x, y) => deadline(x) - deadline(y));
   const past = listed.filter((a) => a.status === "closed").sort((x, y) => deadline(y) - deadline(x));
+  const inPhoneFilter = (a: StudentAssignment) => phoneFilter === "all" || phoneFilterOf(a) === phoneFilter;
+  const phoneCount = (id: PhoneFilter) =>
+    id === "all" ? listed.length : listed.filter((a) => phoneFilterOf(a) === id).length;
+  // A section with nothing under the chosen filter is left out on a phone.
+  const phoneSection = (shown: boolean) => (shown ? "" : "max-md:hidden");
   const card = (a: StudentAssignment) => (
     <AssignmentCard
       key={a.id}
+      hiddenOnPhone={!inPhoneFilter(a)}
       a={a}
       openForm={openForm}
       setOpenForm={setOpenForm}
@@ -158,9 +183,9 @@ export default function StudentSubjectPage() {
     <>
       <AccountBar user={user} width="max-w-4xl" />
       <main className="mx-auto max-w-4xl px-4 py-8">
-      <Link href="/student" className="inline-block text-sm font-semibold text-blue-700 hover:underline" data-testid="back-to-subjects">
-        ← All subjects
-      </Link>
+      <div className="mb-4">
+        <BackLink href="/student" label="All subjects" testId="back-to-subjects" />
+      </div>
 
       <PageHeader
         title={subject?.name ?? "Subject"}
@@ -195,7 +220,7 @@ export default function StudentSubjectPage() {
 
           {/* What needs doing, at a glance. */}
           {assignments !== null && open.length > 0 && (
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="student-overview">
+            <div className="grid grid-cols-2 gap-3 max-md:hidden lg:grid-cols-4" data-testid="student-overview">
               <StatTile label="Open assignments" value={open.length} href="#available" />
               <StatTile
                 label="Not submitted yet"
@@ -217,7 +242,39 @@ export default function StudentSubjectPage() {
             </div>
           )}
 
-          <section className="mt-6 scroll-mt-4" id="available">
+          {/* On a phone the tabs take the place of the figures above: the same counts, and they filter the list. */}
+          {listed.length > 0 && (
+            <div
+              className="mt-6 flex gap-1.5 overflow-x-auto pb-1 md:hidden"
+              role="group"
+              aria-label="Show assignments"
+              data-testid="phone-filter"
+            >
+              {PHONE_FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  aria-pressed={phoneFilter === f.id}
+                  onClick={() => setPhoneFilter(f.id)}
+                  className={`min-h-11 flex-1 shrink-0 whitespace-nowrap rounded-md px-2 text-xs font-semibold ${
+                    phoneFilter === f.id ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"
+                  }`}
+                >
+                  {f.label} ({phoneCount(f.id)})
+                </button>
+              ))}
+            </div>
+          )}
+          {phoneFilter !== "all" && !listed.some(inPhoneFilter) && (
+            <p className="empty-state mt-3 md:hidden" data-testid="phone-filter-empty">
+              No assignments here.
+            </p>
+          )}
+
+          <section
+            className={`mt-6 scroll-mt-4 ${phoneSection(phoneFilter === "all" || open.some(inPhoneFilter))}`}
+            id="available"
+          >
             <h2 className="text-xl font-semibold">Available assignments</h2>
             {loadError && (
               <div role="alert" className="mt-2 flex flex-wrap items-center gap-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -241,7 +298,7 @@ export default function StudentSubjectPage() {
           </section>
 
           {upcoming.length > 0 && (
-            <section className="mt-8" data-testid="coming-soon">
+            <section className={`mt-8 ${phoneSection(phoneFilter === "all")}`} data-testid="coming-soon">
               <h2 className="text-xl font-semibold">Coming soon</h2>
               <p className="mt-1 text-sm text-gray-600">
                 Not open yet. The details appear here when each one opens.
@@ -263,7 +320,7 @@ export default function StudentSubjectPage() {
           )}
 
           {past.length > 0 && (
-            <section className="mt-8">
+            <section className={`mt-8 ${phoneSection(past.some(inPhoneFilter))}`}>
               <h2 className="text-xl font-semibold">Past assignments</h2>
               <ul className="mt-3 space-y-4">{past.map(card)}</ul>
             </section>
