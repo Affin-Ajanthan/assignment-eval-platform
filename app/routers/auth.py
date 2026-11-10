@@ -18,26 +18,13 @@ from ..auth import (
     password_problems,
 )
 from ..db import get_db
-from ..models import AuthSession, Enrollment, InstructorAssignment, User
+from ..models import AuthSession, User
+from ..route_helpers import _user_out
 from ..schemas import LoginIn, LoginOut, PasswordChangeIn, UserOut
 from .student_runs import RunLimitError as _RunLimitError, UnlockLimiter as _UnlockLimiter
 
 
 router = APIRouter()
-
-
-def _user_out(user: User, db: Session) -> UserOut:
-    if user.role == "instructor":
-        rows = db.query(InstructorAssignment).filter(InstructorAssignment.instructor_id == user.id).all()
-        subjects = [row.subject for row in rows]
-    elif user.role == "student":
-        rows = db.query(Enrollment).filter(Enrollment.student_id == user.id).all()
-        subjects = [row.subject for row in rows]
-    else:
-        subjects = []
-    return UserOut(id=user.id, email=user.email, full_name=user.full_name, role=user.role, subjects=subjects,
-                   batch=user.batch or "", register_number=user.register_number or "",
-                   must_change_password=bool(user.must_change_password))
 
 
 @router.post("/auth/login", response_model=LoginOut)
