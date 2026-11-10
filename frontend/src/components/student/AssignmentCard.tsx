@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { StudentAssignment } from "@/lib/api";
 import { taskName, timedTasks, timeLimitText } from "@/lib/tasks";
 import { formatDateTime, formatMark, timeLeft } from "@/lib/datetime";
@@ -31,6 +32,12 @@ export default function AssignmentCard({
   notice: MessageState;
 }) {
   const sub = a.my_submission;
+  // The clock behind "Due in ...": it moves on every 30 seconds, so the minutes stay right while the page is open.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(timer);
+  }, []);
   // A code challenge is answered by typing code on the challenge's own page (checking it with Run, then handing
   // in one task at a time), not by uploading a file. Only when the server can run its language: otherwise
   // the usual upload form is used.
@@ -63,8 +70,8 @@ export default function AssignmentCard({
     ? [sub.has_code && "code", sub.has_report && "report", sub.has_video && "video"].filter(Boolean).join(", ")
     : "";
   const formMode = openForm?.id === a.id ? openForm.mode : null;
-  // "Due in 3 days" on an open assignment; red under 24 hours.
-  const due = a.status === "open" ? timeLeft(a.deadline) : null;
+  // "Due in 3 days 4 hours 12 minutes" on an open assignment; red under 24 hours.
+  const due = a.status === "open" ? timeLeft(a.deadline, now) : null;
   const closeForm = () => setOpenForm(null);
   const finishForm = async (text: string) => {
     setOpenForm(null);

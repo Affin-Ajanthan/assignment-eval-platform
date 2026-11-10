@@ -23,20 +23,25 @@ export function formatTime(iso: string): string {
   return d.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
-/** How long until a deadline, e.g. "Due in 3 days"; `urgent` under 24 hours. Null once it has passed. */
+/**
+ * How long until a deadline in days, hours and minutes, e.g. "Due in 2 days 5 hours 30 minutes" (a unit that is
+ * zero is left out: "Due in 4 hours 12 minutes", "Due in 12 minutes"); `urgent` under 24 hours. Null once it has
+ * passed.
+ */
 export function timeLeft(iso: string, now: number = Date.now()): { text: string; urgent: boolean } | null {
   const ms = new Date(iso).getTime() - now;
   if (Number.isNaN(ms) || ms <= 0) return null;
-  const minutes = Math.floor(ms / 60000);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-  const text =
-    minutes < 60
-      ? `Due in ${Math.max(1, minutes)} minute${minutes === 1 ? "" : "s"}`
-      : hours < 24
-        ? `Due in ${hours} hour${hours === 1 ? "" : "s"}`
-        : `Due in ${days} day${days === 1 ? "" : "s"}`;
-  return { text, urgent: hours < 24 };
+  const totalMinutes = Math.max(1, Math.floor(ms / 60000));
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor(totalMinutes / 60) % 24;
+  const minutes = totalMinutes % 60;
+  const unit = (n: number, name: string) => `${n} ${name}${n === 1 ? "" : "s"}`;
+  const parts = [
+    days > 0 ? unit(days, "day") : "",
+    hours > 0 ? unit(hours, "hour") : "",
+    minutes > 0 ? unit(minutes, "minute") : "",
+  ].filter(Boolean);
+  return { text: `Due in ${parts.join(" ")}`, urgent: days === 0 };
 }
 
 function pad(n: number): string {
