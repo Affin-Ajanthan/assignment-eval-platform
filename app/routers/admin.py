@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import logging
 import re
-import shutil
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -17,24 +16,21 @@ from sqlalchemy.orm import Session
 
 from .. import exports as _exports, student_import as _student_import
 from ..auth import hash_password, require_admin
-from ..db import BASE_DIR, UPLOAD_DIR, get_db
-from ..evaluator.document_extraction import EXTRACTED_MARKDOWN_NAME, EXTRACTION_META_NAME
+from ..db import get_db
 from ..models import (
     Assignment,
     AuthSession,
-    AutoEvaluation,
     Enrollment,
     Grade,
     InstructorAssignment,
     Rubric,
-    SimilarityFlag,
     Subject,
     Submission,
     TaskStart,
     TaskUnlock,
     User,
 )
-from ..route_helpers import _user_out
+from ..route_helpers import _discard_derived_results, _remove_upload_part, _user_out
 from ..schemas import (
     ImportPreviewOut,
     ImportResultOut,
@@ -479,29 +475,3 @@ def set_student_subjects(
     _require_subjects_exist(db, payload.subject_ids)
     _set_student_subjects(db, student, payload.subject_ids)
     return _user_out(student, db)
-
-
-def _remove_upload_part(rel_path: Optional[str], kind: str) -> None:
-    """Delete one stored part (code/report/video) of a submission, plus the
-    report's extraction sidecars; never touches anything outside uploads/."""
-    if not rel_path:
-        return
-    target = (BASE_DIR / rel_path).resolve()
-    root = UPLOAD_DIR.resolve()
-    if not target.is_relative_to(root) or target == root:
-        return
-    upload_dir = root / target.relative_to(root).parts[0]
-    shutil.rmtree(upload_dir / kind, ignore_errors=True)
-    if kind == "report":
-        for sidecar in (EXTRACTED_MARKDOWN_NAME, EXTRACTION_META_NAME):
-            (upload_dir / sidecar).unlink(missing_ok=True)
-    if upload_dir.is_dir() and not any(upload_dir.iterdir()):
-        upload_dir.rmdir()
-
-
-def _discard_derived_results(db: Session, submission_id: int) -> None:
-    """Similarity flags and automated evaluations describe the old files."""
-    db.query(SimilarityFlag).filter(
-        (SimilarityFlag.submission_a_id == submission_id) | (SimilarityFlag.submission_b_id == submission_id)
-    ).delete(synchronize_session=False)
-    db.query(AutoEvaluation).filter(AutoEvaluation.submission_id == submission_id).delete(synchronize_session=False)

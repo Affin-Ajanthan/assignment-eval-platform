@@ -36,7 +36,7 @@ from ..models import (
     TaskUnlock,
     User,
 )
-from ..route_helpers import _clean_name
+from ..route_helpers import _clean_name, _marks_released
 from ..schemas import (
     AssignmentIn,
     AssignmentOut,
@@ -46,7 +46,6 @@ from ..schemas import (
     QuestionIn,
     QuestionOut,
     StudentAssignmentOut,
-    SubmissionOut,
     TestCaseIn,
     TestCaseOut,
     UpcomingAssignmentOut,
@@ -248,13 +247,6 @@ def _criterion_marks(grade: Grade | None) -> list[CriterionMarkOut]:
     ]
 
 
-def _marks_released(submission: Submission, now: datetime) -> bool:
-    """Whether the student may see this submission's marks and feedback yet.
-    Before the assignment's release date the student is told only that the
-    work was submitted -- not even that it has been graded."""
-    return submission.assignment is None or submission.assignment.marks_released_at(now)
-
-
 def _is_code_challenge(submission: Submission) -> bool:
     return submission.assignment is not None and submission.assignment.kind == "code_challenge"
 
@@ -287,14 +279,6 @@ def _my_submission_out(submission: Submission, assignment_open: bool, now: datet
         criterion_marks=_criterion_marks(grade),
         feedback=grade.feedback if grade else None,
     )
-
-
-def _student_submission_out(submission: Submission, now: datetime) -> SubmissionOut:
-    """A submission as its student sees it: no mark before the release date."""
-    out = SubmissionOut.model_validate(submission)
-    if not _marks_released(submission, now):
-        out = out.model_copy(update={"status": "submitted", "final_mark": None, "max_mark": None, "raw_mark": None})
-    return out
 
 
 def _student_assignment_out(db: Session, student: User, a: Assignment, now: datetime) -> StudentAssignmentOut:

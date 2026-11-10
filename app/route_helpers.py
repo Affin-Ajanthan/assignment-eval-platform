@@ -3,12 +3,16 @@ and the code several sections need. Moved out of app/main.py; a helper used by o
 
 from __future__ import annotations
 
+import shutil
+from datetime import datetime
 from typing import Optional
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from .models import Enrollment, InstructorAssignment, User
+from .db import BASE_DIR, UPLOAD_DIR
+from .evaluator.document_extraction import EXTRACTED_MARKDOWN_NAME, EXTRACTION_META_NAME
+from .models import AutoEvaluation, Enrollment, InstructorAssignment, SimilarityFlag, Submission, User
 from .schemas import UserOut
 
 
@@ -39,3 +43,36 @@ def _clean_name(name: Optional[str], what: str) -> str:
     if not cleaned:
         raise HTTPException(400, f"{what} is required")
     return cleaned
+
+
+def _marks_released(submission: Submission, now: datetime) -> bool:
+    """Whether the student may see this submission's marks and feedback yet.
+    Before the assignment's release date the student is told only that the
+    work was submitted -- not even that it has been graded."""
+    return submission.assignment is None or submission.assignment.marks_released_at(now)
+
+
+def _remove_upload_part(rel_path: Optional[str], kind: str) -> None:
+    """Delete one stored part (code/report/video) of a submission, plus the
+    report's extraction sidecars; never touches anything outside uploads/."""
+    if not rel_path:
+        return
+    target = (BASE_DIR / rel_path).resolve()
+    root = UPLOAD_DIR.resolve()
+    if not target.is_relative_to(root) or target == root:
+        return
+    upload_dir = root / target.relative_to(root).parts[0]
+    shutil.rmtree(upload_dir / kind, ignore_errors=True)
+    if kind == "report":
+        for sidecar in (EXTRACTED_MARKDOWN_NAME, EXTRACTION_META_NAME):
+            (upload_dir / sidecar).unlink(missing_ok=True)
+    if upload_dir.is_dir() and not any(upload_dir.iterdir()):
+        upload_dir.rmdir()
+
+
+def _discard_derived_results(db: Session, submission_id: int) -> None:
+    """Similarity flags and automated evaluations describe the old files."""
+    db.query(SimilarityFlag).filter(
+        (SimilarityFlag.submission_a_id == submission_id) | (SimilarityFlag.submission_b_id == submission_id)
+    ).delete(synchronize_session=False)
+    db.query(AutoEvaluation).filter(AutoEvaluation.submission_id == submission_id).delete(synchronize_session=False)
