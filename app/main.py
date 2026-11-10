@@ -289,6 +289,7 @@ class RubricOut(BaseModel):
     name: str
     subject_id: int
     subject_name: str
+    subject_code: str = ""  # the rubric's own subject, shown next to its name in the assignment's rubric list
     criteria: list[dict]  # [{"id", "name", "description", "max_points"}, ...]
     max_total: float
     created_at: UTCDateTime
@@ -1342,7 +1343,7 @@ def _rubric_out(db: Session, rubric: Rubric) -> RubricOut:
     assignments = db.query(Assignment).filter(Assignment.rubric_id == rubric.id).order_by(Assignment.name).all()
     return RubricOut(
         id=rubric.id, name=rubric.name, subject_id=rubric.subject_id, subject_name=rubric.subject_name,
-        criteria=rubric.criteria, max_total=rubric.max_total, created_at=rubric.created_at,
+        subject_code=rubric.subject_code, criteria=rubric.criteria, max_total=rubric.max_total, created_at=rubric.created_at,
         graded_count=graded, locked=graded > 0, assignment_names=[a.name for a in assignments],
     )
 
@@ -1373,6 +1374,30 @@ def list_rubrics(
             raise HTTPException(403, "You are not assigned to this subject")
         query = query.filter(Rubric.subject_id == subject_id)
     return [_rubric_out(db, r) for r in query.order_by(Rubric.created_at.desc()).all()]
+
+
+class SubjectInstructorOut(BaseModel):
+    id: int
+    name: str
+    email: str
+
+
+@app.get("/instructor/subjects/{subject_id}/instructors", response_model=list[SubjectInstructorOut])
+def list_subject_instructors(
+    subject_id: int, instructor: User = Depends(require_instructor), db: Session = Depends(get_db)
+):
+    """Who teaches one of the instructor's subjects (themselves included), so the rubric form can say who will see and
+    use a new rubric: every instructor of that subject, and nobody else. Only the subject's own instructors can ask,
+    and it never tells what other subjects those instructors teach."""
+    subject = _instructor_subject(db, instructor, subject_id)
+    rows = (
+        db.query(User.id, User.full_name, User.email)
+        .join(InstructorAssignment, InstructorAssignment.instructor_id == User.id)
+        .filter(InstructorAssignment.subject_id == subject.id)
+        .order_by(User.full_name)
+        .all()
+    )
+    return [SubjectInstructorOut(id=i, name=name, email=email) for i, name, email in rows]
 
 
 @app.get("/rubrics/{rubric_id}", response_model=RubricOut)
