@@ -32,26 +32,30 @@ from __future__ import annotations
 import logging
 import os
 import re
-import tempfile
 import shutil
+import tempfile
 import uuid
 import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Optional
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
-from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from .demo_data import demo_data_enabled, seed_demo_data
+from . import (
+    code_answers as _code_answers,
+    code_languages as _langs,
+    exports as _exports,
+    student_import as _student_import,
+)
 from .auth import (
     bootstrap_admin,
     create_session,
@@ -67,26 +71,35 @@ from .auth import (
     require_student,
     student_subject_ids,
 )
-from .db import BASE_DIR, UPLOAD_DIR, Base, SessionLocal, add_missing_columns, engine, get_db, make_index_non_unique
+from .common import (
+    ANALYZED_EXTENSIONS as _ANALYZED_EXTENSIONS,
+    CODE_EXTENSIONS as _CODE_EXTENSIONS,
+    as_utc as _as_utc,
+    instructor_assignment as _instructor_assignment,
+    instructor_subject as _instructor_subject,
+    norm_name as _norm_name,
+    on_flag as _on,
+    utcnow_naive as _utcnow_naive,
+)
+from .db import Base, BASE_DIR, SessionLocal, UPLOAD_DIR, add_missing_columns, engine, get_db, make_index_non_unique
+from .demo_data import demo_data_enabled, seed_demo_data
+from .evaluator import code_testing as _code_testing
+from .evaluator.ai_text_detection import get_ai_text_detector, model_name as ai_text_model_name
+from .evaluator.code_execution import SandboxUnavailable, sandbox_enabled as _sandbox_enabled
 from .evaluator.document_extraction import (
-    SUPPORTED_REPORT_EXTENSIONS,
-    ReportValidationError,
-    extract_and_store,
     EXTRACTED_MARKDOWN_NAME,
     EXTRACTION_META_NAME,
+    ReportValidationError,
+    SUPPORTED_REPORT_EXTENSIONS,
+    extract_and_store,
     load_extraction,
     report_max_bytes,
     validate_report_file,
 )
 from .evaluator.pipeline import evaluate_submission as _run_pipeline
-from .evaluator.semantic_consistency import get_consistency_service
-from .evaluator.ai_text_detection import get_ai_text_detector, model_name as ai_text_model_name
 from .evaluator.rubric_grading import Criterion as _EvalCriterion, HeuristicRubricGrader
-from . import code_answers as _code_answers
-from .evaluator import code_testing as _code_testing
-from .evaluator.code_execution import SandboxUnavailable, sandbox_enabled as _sandbox_enabled
+from .evaluator.semantic_consistency import get_consistency_service
 from .models import (
-    SUBMISSION_TYPES,
     Assignment,
     AuthSession,
     AutoEvaluation,
@@ -98,693 +111,174 @@ from .models import (
     SimilarityFlag,
     Subject,
     Submission,
+    SUBMISSION_TYPES,
     TaskStart,
     TaskUnlock,
     User,
 )
-from .similarity.ai_heuristics import score_source as _score_ai_code
 from .notebook import read_code
-from . import code_languages as _langs
-from .code_languages import CodeLanguage
-from .similarity import report_similarity as _report_sim
-from . import exports as _exports
-from . import student_import as _student_import
-from .common import (
-    ANALYZED_EXTENSIONS as _ANALYZED_EXTENSIONS,
-    CODE_EXTENSIONS as _CODE_EXTENSIONS,
-    UTCDateTime,
-    as_utc as _as_utc,
-    instructor_assignment as _instructor_assignment,
-    instructor_subject as _instructor_subject,
-    norm_name as _norm_name,
-    on_flag as _on,
-    utcnow_naive as _utcnow_naive,
+from .routers.ai_content import router as _ai_content_router
+from .routers.self_checks import router as _self_check_router
+from .routers.similarity import router as _similarity_router
+from .routers.student_runs import (
+    RunLimitError as _RunLimitError,
+    UnlockLimiter as _UnlockLimiter,
+    router as _student_run_router,
 )
+from .routers.subject_access import router as _subject_access_router
+from .schemas import (
+    AssignmentIn,
+    AssignmentOut,
+    AssignmentUpdate,
+    AutoEvaluateIn,
+    AutoEvaluationOut,
+    BatchAutoEvaluateIn,
+    BatchAutoEvaluateOut,
+    BatchEvaluationItemOut,
+    BatchJobOut,
+    Criterion,
+    CriterionMarkOut,
+    CriterionUpdate,
+    GradeIn,
+    GradeOut,
+    ImportPreviewOut,
+    ImportResultOut,
+    ImportRowOut,
+    InstructorCreate,
+    LoginIn,
+    LoginOut,
+    MySubmissionOut,
+    PasswordChangeIn,
+    QuestionIn,
+    QuestionOut,
+    RubricCreate,
+    RubricOut,
+    RubricUpdate,
+    StudentAssignmentOut,
+    StudentCreate,
+    SubjectCreate,
+    SubjectIdsIn,
+    SubjectOut,
+    SubjectUpdate,
+    SubmissionFileOut,
+    SubmissionOut,
+    TestCaseIn,
+    TestCaseOut,
+    TestResultOut,
+    TestRunOut,
+    TestRunQuestionOut,
+    UpcomingAssignmentOut,
+    UserOut,
+    UserUpdate,
+)
+from .similarity import report_similarity as _report_sim
+from .similarity.ai_heuristics import score_source as _score_ai_code
 from .similarity.semantic import get_semantic_service
 
 
 Base.metadata.create_all(bind=engine)
+
+
 add_missing_columns("similarity_flags", {
     "semantic_similarity": "FLOAT", "flag_level": "VARCHAR", "flag_reason": "VARCHAR",
 })
+
+
 add_missing_columns("auto_evaluations", {"cross_modal_consistency": "JSON", "ai_signals": "JSON", "model": "VARCHAR"})
+
+
 # Submissions made before assignments existed keep assignment_id NULL (and
 # their free-text assignment_name); nothing else about them changes.
 add_missing_columns("submissions", {"assignment_id": "INTEGER REFERENCES assignments(id)"})
+
+
 add_missing_columns("grades", {"feedback": "TEXT"})
+
+
 add_missing_columns("users", {"batch": "VARCHAR", "register_number": "VARCHAR"})
+
+
 # Existing accounts get False: nobody already using the platform is asked to change their password.
 add_missing_columns("users", {"must_change_password": "BOOLEAN NOT NULL DEFAULT 0"})
+
+
 # Every batch has the same subjects with the same codes, so a subject code is no longer unique.
 make_index_non_unique("subjects", "code")
+
+
 add_missing_columns("subjects", {"batch": "VARCHAR NOT NULL DEFAULT ''"})
+
+
 add_missing_columns("subjects", {"open_to_students": "BOOLEAN NOT NULL DEFAULT 0", "join_password": "VARCHAR"})
+
+
 add_missing_columns("subjects", {"registration_ends_at": "DATETIME"})
+
+
 add_missing_columns("assignments", {"marks_release_at": "DATETIME"})
+
+
 add_missing_columns("submissions", {"test_earned": "FLOAT", "test_total": "FLOAT", "tests_run_at": "DATETIME"})
+
+
 add_missing_columns("submissions", {"question_results": "JSON"})
+
+
 add_missing_columns("assignments", {"test_cases": "JSON"})
+
+
 add_missing_columns("assignments", {"test_main_file": "VARCHAR"})
+
+
 add_missing_columns("assignments", {"code_questions": "JSON"})
+
+
 add_missing_columns("assignments", {"task_password": "VARCHAR", "tasks_in_order": "BOOLEAN NOT NULL DEFAULT 0"})
+
+
 add_missing_columns("assignments", {"assignment_type": "VARCHAR NOT NULL DEFAULT 'submission'"})
+
+
 add_missing_columns("assignments", {"submission_types": "JSON"})
+
+
 add_missing_columns("assignments", {"starter_code": "TEXT", "starter_code_filename": "VARCHAR"})
+
+
 add_missing_columns("assignments", {"report_template_text": "TEXT", "report_template_filename": "VARCHAR"})
+
+
 add_missing_columns("assignments", {"code_languages": "JSON"})
+
+
 add_missing_columns("assignments", {"student_similarity_check": "BOOLEAN NOT NULL DEFAULT 1",
                                     "student_ai_check": "BOOLEAN NOT NULL DEFAULT 1"})
+
+
 add_missing_columns("assignments", {"ignore_common_code": "BOOLEAN NOT NULL DEFAULT 1"})
+
+
 add_missing_columns("assignments", {
     "late_grace_minutes": "INTEGER NOT NULL DEFAULT 0", "late_until": "DATETIME",
     "late_penalty_percent": "FLOAT NOT NULL DEFAULT 0", "late_penalty_max_percent": "FLOAT NOT NULL DEFAULT 100",
     "late_penalty_unit": "VARCHAR NOT NULL DEFAULT 'percent'", "late_penalty_marks": "FLOAT NOT NULL DEFAULT 0",
     "late_penalty_max_marks": "FLOAT"})
+
+
 add_missing_columns("submissions", {"late_seconds": "INTEGER", "late_penalty_percent": "FLOAT NOT NULL DEFAULT 0",
                                     "late_penalty_marks": "FLOAT NOT NULL DEFAULT 0"})
 
 
-# --------------------------------------------------------------------------
-# Pydantic schemas
-# --------------------------------------------------------------------------
-
-
-
-
-
-
-class LoginIn(BaseModel):
-    # 254 is the longest e-mail address there can be; no password is anywhere near 1024 characters. Longer input is
-    # refused before any work is done (and before the login limiter keeps a copy of the e-mail).
-    email: str = Field(max_length=254)
-    password: str = Field(max_length=1024)
-
-
-class SubjectCreate(BaseModel):
-    name: str
-    code: str
-    batch: str = Field(default="", max_length=100)
-    instructor_ids: list[int] = []  # the instructors who teach it
-
-
-class SubjectUpdate(BaseModel):
-    """Admin edit of a subject. Fields left out are kept."""
-    name: Optional[str] = Field(default=None, max_length=200)
-    code: Optional[str] = Field(default=None, max_length=50)
-    batch: Optional[str] = Field(default=None, max_length=100)
-    instructor_ids: Optional[list[int]] = None  # replaces the instructors who teach it
-
-
-class SubjectOut(BaseModel):
-    id: int
-    name: str
-    code: str
-    batch: str = ""
-    # Admin subject endpoints only: the instructors who teach it (empty everywhere else).
-    instructor_ids: list[int] = []
-    created_at: UTCDateTime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class UserOut(BaseModel):
-    id: int
-    email: str
-    full_name: str
-    role: str
-    subjects: list[SubjectOut] = []
-    # Admin lists only: how many submissions a student has (shown before
-    # deleting the account, which deletes them too).
-    submission_count: int = 0
-    # A student's batch and register number ("" when not given, and for other roles).
-    batch: str = ""
-    register_number: str = ""
-    # True until the user replaces the password an admin gave them (the frontend then shows the change-password page).
-    must_change_password: bool = False
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class LoginOut(BaseModel):
-    token: str
-    user: UserOut
-
-
-class SubjectIdsIn(BaseModel):
-    subject_ids: list[int] = []
-
-
-class InstructorCreate(BaseModel):
-    email: str
-    full_name: str
-    password: str = Field(min_length=4)
-    subject_ids: list[int] = []
-
-
-class StudentCreate(BaseModel):
-    email: str
-    full_name: str
-    password: str = Field(min_length=4)
-    subject_ids: list[int] = []
-    batch: str = Field(default="", max_length=100)
-    register_number: str = Field(default="", max_length=50)
-
-
-class ImportRowOut(BaseModel):
-    """One row of a student import: what would be stored, and what stops it being created (nothing: it can be)."""
-    row: int
-    full_name: str
-    email: str
-    batch: str
-    register_number: str
-    problems: list[str]
-
-
-class ImportPreviewOut(BaseModel):
-    rows: list[ImportRowOut]
-    ready: int
-    with_problems: int
-
-
-class ImportResultOut(BaseModel):
-    created: list[ImportRowOut]
-    skipped: list[ImportRowOut]
-    # The list of first passwords, an .xlsx file in base64. Only in this answer: it is kept nowhere. "" if none created.
-    passwords_file: str
-
-
-class UserUpdate(BaseModel):
-    """Admin edit of an instructor or student. Fields left out are kept;
-    a blank password keeps the current one."""
-    email: Optional[str] = Field(default=None, max_length=254)
-    full_name: Optional[str] = Field(default=None, max_length=200)
-    password: Optional[str] = Field(default=None, max_length=200)
-    subject_ids: Optional[list[int]] = None
-    # Students only (ignored for an instructor); "" clears them. The register number is TST/<batch>/<number>
-    # (e.g. TST/01/001) and needs the batch, which is the middle part.
-    batch: Optional[str] = Field(default=None, max_length=100)
-    register_number: Optional[str] = Field(default=None, max_length=50)
-
-
-class Criterion(BaseModel):
-    name: str = Field(max_length=200)
-    description: str = Field(default="", max_length=2000)
-    max_points: float = Field(gt=0, le=10_000)
-
-
-class CriterionUpdate(BaseModel):
-    name: Optional[str] = Field(default=None, max_length=200)
-    description: Optional[str] = Field(default=None, max_length=2000)
-    max_points: Optional[float] = Field(default=None, gt=0, le=10_000)
-
-
-class RubricCreate(BaseModel):
-    name: str = Field(max_length=200)
-    subject_id: int
-    # A rubric is created with all of its criteria in one record; more can
-    # be added later with POST /rubrics/{id}/criteria.
-    criteria: list[Criterion] = Field(min_length=1)
-
-
-class RubricUpdate(BaseModel):
-    name: str = Field(max_length=200)
-
-
-class RubricOut(BaseModel):
-    id: int
-    name: str
-    subject_id: int
-    subject_name: str
-    criteria: list[dict]  # [{"id", "name", "description", "max_points"}, ...]
-    max_total: float
-    created_at: UTCDateTime
-    # Grades recorded against this rubric. Once > 0 its structure (criterion
-    # names, points, add/delete) is locked so recorded marks stay meaningful.
-    graded_count: int = 0
-    locked: bool = False
-    assignment_names: list[str] = []
-
-
 _import_log = logging.getLogger("app.student_import")
 
-SubmissionType = Literal["code", "report", "video"]
-_STARTER_CODE_MAX = 200_000
-_TEST_CASES_MAX = 50  # in all, whatever the number of questions
-_QUESTIONS_MAX = 20
-_STATEMENT_MAX = 10_000
-_TASK_STARTER_MAX = 50_000  # the student editor's limit (MAX_CODE_CHARS in app/routers/student_runs.py)
-_TEST_TEXT_MAX = 10_000
-_TASK_PASSWORD_MAX = 100
-_TASK_TIME_MAX = 24 * 3600  # a task's time limit, in seconds
-_LATE_GRACE_MAX = 7 * 24 * 60  # the grace period after a deadline, in minutes
-_LATE_MARKS_MAX = 1000  # the most marks a late penalty can take (per day or in all)
+
 REGISTER_PREFIX = "TST"  # every register number starts with it: TST/<batch>/<number>, e.g. TST/01/001
-LatePenaltyUnit = Literal["percent", "marks"]  # what a late penalty is counted in
-
-
-class QuestionIn(BaseModel):
-    """One task of a code challenge: the question students are asked to answer in code. Its test cases are
-    the ones whose ``question`` is its number (its place in the list, from 1). The pages call it a task;
-    the API and the database call it a question."""
-
-    title: str = Field(default="", max_length=200)  # blank: "Task 1", "Task 2", ... (when there are several)
-    statement: str = Field(default="", max_length=_STATEMENT_MAX)  # the question text, shown above the code box
-    # Optional starting code: put in the student's code box when they open the task, for them to write on.
-    # (The assignment's own starter_code is a different thing: instructor-only, left out of the similarity check.)
-    starter_code: str = Field(default="", max_length=_TASK_STARTER_MAX)
-    # Optional time limit in seconds (the page takes minutes and seconds): the student's clock for this task
-    # starts when they open it, and when it runs out their code is handed in as it stands. 0: no limit.
-    time_limit_seconds: int = Field(default=0, ge=0, le=_TASK_TIME_MAX)
-
-
-class QuestionOut(QuestionIn):
-    id: int
-
-
-class TestCaseIn(BaseModel):
-    """One test for submitted code: ``input`` goes to the program's standard
-    input and its output is compared with ``expected_output``."""
-
-    name: str = Field(default="", max_length=200)  # blank: "Test 1", "Test 2", ... (counted within its question)
-    # The question this test belongs to (1 is the first); only a challenge with several questions needs it.
-    question: int = Field(default=1, ge=1, le=_QUESTIONS_MAX)
-    input: str = Field(default="", max_length=_TEST_TEXT_MAX)
-    expected_output: str = Field(max_length=_TEST_TEXT_MAX)
-    # exact: the whole output (ignoring trailing spaces and line-ending style);
-    # contains: the expected text appears somewhere in the output (menu programs).
-    match: Literal["exact", "contains"] = "exact"
-    visible: bool = False  # visible tests are shown to students; hidden ones never are
-    points: float = Field(default=1, gt=0, le=1000)
-
-
-class TestCaseOut(TestCaseIn):
-    id: int
-
-
-AssignmentType = Literal["submission", "code_challenge"]
-
-
-class AssignmentIn(BaseModel):
-    subject_id: int
-    name: str = Field(max_length=200)
-    # "submission": students upload files. "code_challenge": code only, run
-    # against test_cases. Left out: a code challenge if there are test cases.
-    assignment_type: Optional[AssignmentType] = None
-    description: str = Field(default="", max_length=10_000)
-    # ISO 8601. Times with an offset are converted to UTC; times without
-    # one are taken as UTC (the frontend always sends UTC).
-    available_from: datetime
-    deadline: datetime
-    rubric_id: Optional[int] = None
-    # Which kinds of file students may submit. Defaults to all of them.
-    submission_types: list[SubmissionType] = Field(default_factory=lambda: list(SUBMISSION_TYPES))
-    # Optional instructor starter code (one file). Its fingerprints are left
-    # out of the token similarity check; the file name's extension decides
-    # which submitted files it is subtracted from.
-    starter_code: str = Field(default="", max_length=_STARTER_CODE_MAX)
-    starter_code_filename: str = Field(default="", max_length=200)
-    # Optional: the only languages students may submit code in. Empty = any.
-    code_languages: list[CodeLanguage] = Field(default_factory=list)
-    # Student self-checks before the deadline; both on by default.
-    student_similarity_check: bool = True
-    student_ai_check: bool = True
-    # Code similarity ignores code most of the class shares (both checks).
-    ignore_common_code: bool = True
-    # Optional: students see no marks or feedback before this time. None shows
-    # each mark as soon as it is saved.
-    marks_release_at: Optional[datetime] = None
-    # Optional test cases for submitted code; needs "code" in submission_types.
-    test_cases: list[TestCaseIn] = Field(default_factory=list, max_length=_TEST_CASES_MAX)
-    # The tasks of a code challenge (called questions here), each with its own question text and test
-    # cases (a test's ``question`` is the place of its task in this list, from 1). Left out: one task,
-    # which all the test cases belong to.
-    questions: list[QuestionIn] = Field(default_factory=list, max_length=_QUESTIONS_MAX)
-    # The file the tests run (a name or a path in the submission); blank picks it automatically.
-    # Only used by a challenge with a single task.
-    test_main_file: str = Field(default="", max_length=200)
-    # A code challenge's access password: students enter it before they see or do the tasks. Blank: none.
-    task_password: str = Field(default="", max_length=_TASK_PASSWORD_MAX)
-    # A code challenge's tasks must be handed in in order, the first before the second, and so on.
-    tasks_in_order: bool = False
-    # Late work. Minutes after the deadline in which work still counts as on time; the late deadline, the date until
-    # which late work is accepted at all (None: not after the grace period); and the penalty for every day or part
-    # of a day late, at most the maximum: in percent of the mark, or in marks (`late_penalty_unit` says which).
-    late_grace_minutes: int = Field(default=0, ge=0, le=_LATE_GRACE_MAX)
-    late_until: Optional[datetime] = None
-    late_penalty_unit: LatePenaltyUnit = "percent"
-    late_penalty_percent: float = Field(default=0, ge=0, le=100)
-    late_penalty_max_percent: float = Field(default=100, ge=0, le=100)
-    late_penalty_marks: float = Field(default=0, ge=0, le=_LATE_MARKS_MAX)
-    late_penalty_max_marks: Optional[float] = Field(default=None, ge=0, le=_LATE_MARKS_MAX)  # None: no limit
-
-
-class AssignmentUpdate(BaseModel):
-    name: Optional[str] = Field(default=None, max_length=200)
-    description: Optional[str] = Field(default=None, max_length=10_000)
-    available_from: Optional[datetime] = None
-    deadline: Optional[datetime] = None
-    rubric_id: Optional[int] = None  # send null explicitly to detach the rubric
-    submission_types: Optional[list[SubmissionType]] = None
-    starter_code: Optional[str] = Field(default=None, max_length=_STARTER_CODE_MAX)  # "" removes it
-    starter_code_filename: Optional[str] = Field(default=None, max_length=200)
-    code_languages: Optional[list[CodeLanguage]] = None  # [] removes the restriction
-    student_similarity_check: Optional[bool] = None  # can be changed at any time
-    student_ai_check: Optional[bool] = None
-    ignore_common_code: Optional[bool] = None  # can be changed at any time
-    marks_release_at: Optional[datetime] = None  # send null explicitly to release marks now
-    # Replaces the whole list ([] removes every test); leave out to keep them.
-    test_cases: Optional[list[TestCaseIn]] = Field(default=None, max_length=_TEST_CASES_MAX)
-    # Replaces the whole list of tasks; leave out to keep them. Their number can't change once
-    # students have submitted (their code is saved per task).
-    questions: Optional[list[QuestionIn]] = Field(default=None, max_length=_QUESTIONS_MAX)
-    test_main_file: Optional[str] = Field(default=None, max_length=200)  # "" picks it automatically
-    task_password: Optional[str] = Field(default=None, max_length=_TASK_PASSWORD_MAX)  # "" removes it
-    tasks_in_order: Optional[bool] = None  # can be changed at any time
-    # The late rules can change at any time; work already handed in keeps the penalty it got.
-    late_grace_minutes: Optional[int] = Field(default=None, ge=0, le=_LATE_GRACE_MAX)
-    late_until: Optional[datetime] = None  # send null explicitly to stop accepting late work
-    late_penalty_percent: Optional[float] = Field(default=None, ge=0, le=100)
-    late_penalty_max_percent: Optional[float] = Field(default=None, ge=0, le=100)
-    late_penalty_unit: Optional[LatePenaltyUnit] = None
-    late_penalty_marks: Optional[float] = Field(default=None, ge=0, le=_LATE_MARKS_MAX)
-    late_penalty_max_marks: Optional[float] = Field(default=None, ge=0, le=_LATE_MARKS_MAX)  # null: no limit
-
-
-class AssignmentOut(BaseModel):
-    """Instructor view of an assignment."""
-
-    id: int
-    subject_id: int
-    subject_name: str
-    assignment_type: str = "submission"  # submission | code_challenge
-    name: str
-    description: str
-    available_from: UTCDateTime
-    deadline: UTCDateTime
-    status: str  # upcoming | open | closed
-    rubric_id: Optional[int]
-    rubric_name: Optional[str]
-    max_points: Optional[float]
-    submission_types: list[str]
-    submission_count: int
-    graded_count: int
-    created_at: UTCDateTime
-    updated_at: Optional[UTCDateTime]
-    starter_code: str = ""
-    starter_code_filename: str = ""
-    # Template PDF cut out of student reports before the report similarity check.
-    report_template_filename: str = ""
-    report_template_words: int = 0
-    # Languages students must use for code; empty = any supported language.
-    code_languages: list[str] = []
-    student_similarity_check: bool = True
-    student_ai_check: bool = True
-    ignore_common_code: bool = True
-    marks_release_at: Optional[UTCDateTime] = None
-    marks_released: bool = True  # whether students can see marks and feedback now
-    # Every test case, hidden ones included: this is the instructor view only.
-    test_cases: list[TestCaseOut] = []
-    questions: list[QuestionOut] = []  # a code challenge's tasks; empty for other assignments
-    test_main_file: str = ""
-    task_password: str = ""  # the code challenge's access password, for the instructor to read back and share
-    tasks_in_order: bool = False
-    late_grace_minutes: int = 0
-    late_until: Optional[UTCDateTime] = None
-    late_penalty_percent: float = 0
-    late_penalty_max_percent: float = 100
-    late_penalty_unit: LatePenaltyUnit = "percent"
-    late_penalty_marks: float = 0
-    late_penalty_max_marks: Optional[float] = None
-    late_count: int = 0  # submissions handed in late
-
-
-class CriterionMarkOut(BaseModel):
-    name: str
-    score: float
-    max_points: float
-
-
-class MySubmissionOut(BaseModel):
-    """What a student sees about their own submission: status, the final
-    total, the per-criterion marks and the instructor's feedback for them
-    -- never the internal comments or the evaluator output."""
-
-    id: int
-    submitted_at: UTCDateTime
-    status: str  # submitted | graded
-    has_code: bool
-    has_report: bool
-    has_video: bool
-    final_mark: Optional[float]  # after any late penalty
-    max_mark: Optional[float]
-    # Handed in after the deadline and its grace period: seconds after the deadline (None: on time), the percent
-    # of the mark or the marks that cost, and the mark before that penalty (shown with the final one, e.g. 34 -> 30.6).
-    late_seconds: Optional[int] = None
-    late_penalty_percent: float = 0
-    late_penalty_marks: float = 0
-    raw_mark: Optional[float] = None
-    # Empty when graded with "Final mark only" (no per-criterion marks) or not graded.
-    criterion_marks: list[CriterionMarkOut] = []
-    feedback: Optional[str] = None
-    can_edit: bool  # assignment open, not yet graded, and not a code challenge (its code cannot be replaced)
-    # The student may delete the submission: the assignment is open and (unless it is a code challenge, which is
-    # marked from its tests at once) it is not graded yet. A graded code challenge can still be deleted and redone.
-    can_delete: bool = False
-    # A code challenge is handed in one task at a time: how many tasks have been (0 for other assignments).
-    questions_submitted: int = 0
-
-
-class StudentAssignmentOut(BaseModel):
-    id: int
-    subject_id: int
-    subject_name: str
-    name: str
-    description: str
-    available_from: UTCDateTime
-    deadline: UTCDateTime
-    status: str  # open | closed (upcoming assignments aren't listed)
-    assignment_type: str = "submission"  # submission | code_challenge (a challenge is answered in the code editor)
-    submission_types: list[str]
-    code_languages: list[str] = []  # empty = any supported language
-    # Which self-checks the instructor allows for this assignment.
-    student_similarity_check: bool = True
-    student_ai_check: bool = True
-    # Set only while marks are still held back: when they will be released.
-    marks_release_at: Optional[UTCDateTime] = None
-    # What a code challenge asks, task by task (title and question text only). No test case is
-    # ever part of this: a student meets the tests only through the result of "Run"
-    # (POST /assignments/{id}/run-code), where a visible test that fails shows its expected and
-    # actual output and everything else is only counted. While the challenge has a password the student
-    # has not entered yet, each task keeps its number and title but its question and starting code are empty.
-    questions: list[QuestionOut] = []
-    # A code challenge with a password: the student must enter it (POST /assignments/{id}/unlock-tasks) before
-    # the questions are shown. The password itself is never sent.
-    has_task_password: bool = False
-    tasks_unlocked: bool = True  # False: has_task_password and this student has not entered it yet
-    tasks_in_order: bool = False  # the tasks must be handed in in order
-    # Late work. `status` stays "open" while late work is still taken, so `past_deadline` says the deadline has gone.
-    # `accept_until` is the last moment work is taken when that is after the deadline (grace period or late date).
-    past_deadline: bool = False
-    accept_until: Optional[UTCDateTime] = None
-    late_grace_minutes: int = 0
-    late_penalty_percent: float = 0
-    late_penalty_max_percent: float = 100
-    late_penalty_unit: LatePenaltyUnit = "percent"
-    late_penalty_marks: float = 0
-    late_penalty_max_marks: Optional[float] = None
-    penalty_now_percent: float = 0  # what handing in right now would cost (0 inside the grace period)
-    penalty_now_marks: float = 0
-    my_submission: Optional[MySubmissionOut]
-
-
-class SubmissionOut(BaseModel):
-    id: int
-    student_id: int
-    student_name: str
-    student_email: str
-    subject_id: int
-    subject_name: str
-    assignment_name: str
-    assignment_id: Optional[int] = None
-    code_path: Optional[str]
-    report_path: Optional[str]
-    video_path: Optional[str]
-    submitted_at: UTCDateTime
-    status: str
-    # Final total of the latest grade (and the rubric's maximum); the only
-    # grading information this response carries.
-    final_mark: Optional[float] = None  # after any late penalty
-    max_mark: Optional[float] = None
-    # Handed in late: seconds after the deadline (None: on time), the percent of the mark or the marks lost for it,
-    # and the mark before that.
-    late_seconds: Optional[int] = None
-    late_penalty_percent: float = 0
-    late_penalty_marks: float = 0
-    raw_mark: Optional[float] = None
-    # Kinds of file uploaded: a subset of code, report, video.
-    submitted_types: list[str] = []
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class GradeIn(BaseModel):
-    rubric_id: int
-    criterion_scores: dict[str, float] = Field(default_factory=dict)
-    # Final mark only, without per-criterion marks. Send this OR criterion_scores.
-    total_score: Optional[float] = None
-    comments: Optional[str] = None  # internal notes, instructors only
-    feedback: Optional[str] = Field(default=None, max_length=5000)  # for the student
-
-
-class GradeOut(BaseModel):
-    id: int
-    submission_id: int
-    rubric_id: int
-    criterion_scores: dict[str, float]
-    total_score: float
-    comments: Optional[str]
-    feedback: Optional[str] = None
-    graded_by: Optional[str]
-    graded_at: UTCDateTime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class AutoEvaluateIn(BaseModel):
-    rubric_id: int
-    # False: grade with the built-in heuristic grader instead of the rubric
-    # model (local Ollama). Everything else in the pipeline runs.
-    use_rubric_model: bool = True
-    # False: skip AI-content detection (the report's AI-text model and the
-    # code heuristic). Cross-modal consistency and everything else still run.
-    use_ai_detection: bool = True
-
-
-class ConsistencyComponentOut(BaseModel):
-    available: bool
-    words: int = 0
-    chunks: int = 0
-    note: Optional[str] = None  # why it's unavailable
-
-
-class ReportExtractionOut(BaseModel):
-    """How the report text was obtained (MarkItDown); shown to instructors."""
-
-    status: str  # ok | empty | failed | unsupported
-    backend: str
-    chars: int = 0
-    words: int = 0
-    error: Optional[str] = None
-    extracted_at: Optional[str] = None
-
-
-class CrossModalConsistencyOut(BaseModel):
-    """Semantic similarity (0-1) between the code documentation, report and
-    video transcript. None = not evaluated (component missing / analysis
-    unavailable) -- never a stand-in for 0. A review signal only."""
-
-    code_report: Optional[float]
-    code_transcript: Optional[float]
-    report_transcript: Optional[float]
-    overall: Optional[float]
-    status: str  # consistent | review_recommended | limited_data | unavailable | disabled
-    reason: str
-    threshold: float
-    model: str
-    warning: Optional[str] = None
-    components: dict[str, ConsistencyComponentOut] = {}
-    report_extraction: Optional[ReportExtractionOut] = None
-
-
-class AISignalOut(BaseModel):
-    signal: str  # low | medium | high
-    score: int  # 0-100, higher = more AI-like
-    method: str  # e.g. "style-heuristic", "fast-detectgpt:Qwen2.5-0.5B"
-    reasons: list[str]
-
-
-class AISignalsOut(BaseModel):
-    """AI-content estimates for the report and the code. Review signals
-    only: they never change the suggested score. None = not assessed."""
-
-    report: Optional[AISignalOut] = None
-    code: Optional[AISignalOut] = None
-    # True when the instructor switched AI-content detection off for this run.
-    disabled: bool = False
-
-
-class AutoEvaluationOut(BaseModel):
-    id: int
-    submission_id: int
-    rubric_id: int
-    recommended_score: float
-    recommended_max: float
-    review_flags: list[str]
-    criterion_breakdown: list[dict]
-    grader: str
-    model: Optional[str] = None
-    similarity_flagged: bool
-    code_ai_flagged: bool
-    report_ai_signal: Optional[str]
-    consistency_score: Optional[int]
-    cross_modal_consistency: Optional[CrossModalConsistencyOut] = None
-    ai_signals: Optional[AISignalsOut] = None
-    created_at: UTCDateTime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class BatchAutoEvaluateIn(BaseModel):
-    rubric_id: int
-    # Resume after an interruption: leave submissions that already have an
-    # evaluation against this rubric untouched.
-    skip_already_evaluated: bool = False
-    # See AutoEvaluateIn.use_rubric_model / use_ai_detection.
-    use_rubric_model: bool = True
-    use_ai_detection: bool = True
 
 
 def _ai_flagged(code_ai_flagged: bool, report_ai_signal: Optional[str]) -> bool:
     """AI-content review flag: the code or report signal is high. Never changes marks."""
     return bool(code_ai_flagged) or report_ai_signal == "high"
 
-
-class BatchEvaluationItemOut(BaseModel):
-    submission_id: int
-    student_name: str
-    status: str  # evaluated | skipped | failed
-    recommended_score: Optional[float] = None
-    recommended_max: Optional[float] = None
-    grader: Optional[str] = None
-    model: Optional[str] = None
-    review_flags: list[str] = []
-    error: Optional[str] = None
-    # Review flags shown as their own table columns; None when the submission failed.
-    similarity_flagged: Optional[bool] = None
-    ai_flagged: Optional[bool] = None
-    # Level, score and method behind ai_flagged, so the table can show which
-    # detector ran. None when the submission failed or predates these details.
-    ai_signals: Optional[AISignalsOut] = None
-    # The code / report / video consistency behind the row, so the table can show it without opening each
-    # submission. None when the submission failed or was evaluated before this was kept.
-    cross_modal_consistency: Optional[CrossModalConsistencyOut] = None
-
-
-class BatchAutoEvaluateOut(BaseModel):
-    subject_id: int
-    assignment_name: str
-    rubric_id: int
-    job_id: Optional[int] = None  # the BatchJob that recorded this run
-    total: int
-    evaluated: int
-    skipped: int
-    failed: int
-    results: list[BatchEvaluationItemOut]
-
-
-# --------------------------------------------------------------------------
-# App
-# --------------------------------------------------------------------------
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
@@ -807,6 +301,7 @@ async def _lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="AI-Assisted Assignment Evaluation Platform", version="0.2.0", lifespan=_lifespan)
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -832,8 +327,6 @@ def health():
         },
     }
 
-
-# ---- helpers ---------------------------------------------------------------
 
 def _user_out(user: User, db: Session) -> UserOut:
     if user.role == "instructor":
@@ -899,8 +392,6 @@ def _can_view_submission(user: User, submission: Submission, db: Session) -> boo
     return False
 
 
-# ---- Auth -------------------------------------------------------------------
-
 @app.post("/auth/login", response_model=LoginOut)
 def login(payload: LoginIn, db: Session = Depends(get_db)):
     # Password guessing is limited per account, as for subject and task passwords: after a few wrong passwords
@@ -934,11 +425,6 @@ def me(user: User = Depends(get_user_changing_password), db: Session = Depends(g
     return _user_out(user, db)
 
 
-class PasswordChangeIn(BaseModel):
-    current_password: str = Field(max_length=1024)
-    new_password: str = Field(max_length=1024)
-
-
 @app.post("/auth/change-password", response_model=UserOut)
 def change_password(
     payload: PasswordChangeIn,
@@ -963,8 +449,6 @@ def change_password(
     db.commit()
     return _user_out(user, db)
 
-
-# ---- Admin: subjects ---------------------------------------------------------
 
 def _check_subject_code_free(db: Session, code: str, batch: str, own_id: Optional[int] = None) -> None:
     """The same subject code is fine in different batches (each batch has the same subjects), but not twice in one
@@ -1053,8 +537,6 @@ def update_subject(
     db.refresh(subject)
     return _admin_subject_out(subject, _subject_instructors(db, subject.id))
 
-
-# ---- Admin: instructors -------------------------------------------------------
 
 @app.post("/admin/instructors", response_model=UserOut)
 def create_instructor(payload: InstructorCreate, _admin: User = Depends(require_admin), db: Session = Depends(get_db)):
@@ -1228,8 +710,6 @@ def set_instructor_subjects(
     return _user_out(instructor, db)
 
 
-# ---- Admin: students -----------------------------------------------------------
-
 @app.post("/admin/students", response_model=UserOut)
 def create_student(payload: StudentCreate, _admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == payload.email).first():
@@ -1371,7 +851,6 @@ def set_student_subjects(
     return _user_out(student, db)
 
 
-# ---- Rubrics --------------------------------------------------------------
 #
 # One rubric holds all of its criteria (Rubric.criteria). Criteria are
 # added, edited and removed through /rubrics/{id}/criteria -- never by
@@ -1583,7 +1062,6 @@ def delete_criterion(
     return _rubric_out(db, rubric)
 
 
-# ---- Assignments -------------------------------------------------------------
 #
 # Times are stored as naive UTC, like every other timestamp in this app, and
 # returned with an explicit UTC offset so browsers show them in local time.
@@ -1936,18 +1414,6 @@ def list_assignments(
     return [_assignment_out(db, a) for a in query.all()]
 
 
-class UpcomingAssignmentOut(BaseModel):
-    """An assignment that has not opened yet, as a student sees it in "Coming soon": only when it opens and
-    closes. Its description, tasks and settings stay hidden until it opens (the instructor may still be
-    changing them)."""
-    name: str
-    subject_id: int  # which of the student's subjects it belongs to (two subjects can share a name)
-    subject_name: str
-    assignment_type: str
-    available_from: UTCDateTime
-    deadline: UTCDateTime
-
-
 @app.get("/upcoming-assignments", response_model=list[UpcomingAssignmentOut])
 def list_upcoming_assignments(student: User = Depends(require_student), db: Session = Depends(get_db)):
     """The not-yet-open assignments of the student's subjects, soonest first. GET /assignments still lists
@@ -2150,8 +1616,6 @@ def delete_assignment(assignment_id: int, instructor: User = Depends(require_ins
     return {"status": "deleted", "submissions_kept": kept}
 
 
-# ---- Submissions -----------------------------------------------------------
-
 # Uploads are untrusted input: every file is checked for type and size,
 # saved under a sanitized name inside its own uploads/<uuid>/ folder, and
 # never executed. A rejected upload removes everything already written.
@@ -2159,15 +1623,29 @@ def delete_assignment(assignment_id: int, instructor: User = Depends(require_ins
 # never compared (TypeScript, Kotlin, Swift, Rust, JSX, ...) would leave a
 # submission silently unchecked, so it is refused at upload instead.
 _UPLOAD_CODE_EXTENSIONS = _ANALYZED_EXTENSIONS | {".zip"}
+
+
 _ACCEPTED_LANGUAGES_TEXT = (
     "Python (.py, .ipynb), Java (.java), JavaScript (.js), C (.c, .h), "
     "C++ (.cpp, .cc, .cxx, .h, .hpp, .hh, .hxx), C# (.cs), Go (.go), Ruby (.rb), PHP (.php)"
 )
+
+
 _VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"}
+
+
 _CODE_MAX_BYTES = 50 * 1024 * 1024
+
+
 _ZIP_MAX_UNCOMPRESSED_BYTES = 200 * 1024 * 1024
+
+
 _ZIP_MAX_ENTRIES = 5000
+
+
 _VIDEO_MAX_BYTES = 1024 * 1024 * 1024
+
+
 _UNSAFE_NAME_CHARS = re.compile(r"[^A-Za-z0-9._ -]")
 
 
@@ -2576,13 +2054,14 @@ def get_submission(submission_id: int, user: User = Depends(get_current_user), d
     return submission
 
 
-# ---- Submitted files (owning student, the subject's instructors, admins) ----
 #
 # Uploaded files are untrusted: they're only ever sent as downloads
 # (Content-Disposition: attachment, nosniff), and anything that a browser
 # could execute or render (HTML, SVG, JS, ...) is sent as text/plain.
 
 _SUBMISSION_KINDS = ("code", "report", "video")
+
+
 _SAFE_MEDIA_TYPES = {
     ".pdf": "application/pdf",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -2590,13 +2069,6 @@ _SAFE_MEDIA_TYPES = {
     ".mp4": "video/mp4", ".m4v": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm",
     ".mkv": "video/x-matroska", ".avi": "video/x-msvideo",
 }
-
-
-class SubmissionFileOut(BaseModel):
-    kind: str  # code | report | video
-    path: str  # relative to that part of the submission, "/"-separated
-    name: str
-    size: int
 
 
 def _viewable_submission(db: Session, user: User, submission_id: int) -> Submission:
@@ -2659,8 +2131,6 @@ def download_submission_file(
     return FileResponse(target, media_type=media_type, filename=target.name,
                         headers={"X-Content-Type-Options": "nosniff"})
 
-
-# ---- Manual grading ---------------------------------------------------------
 
 @app.post("/submissions/{submission_id}/grade", response_model=GradeOut)
 def grade_submission(
@@ -2743,7 +2213,6 @@ def get_grade(submission_id: int, user: User = Depends(get_current_user), db: Se
     )
 
 
-# ---- Excel export of a whole-assignment evaluation already shown to the instructor
 #
 # The browser sends back the result it received and gets the same data as
 # .xlsx, so nothing is re-run. Instructor-only, for their own subjects. (The
@@ -2760,8 +2229,6 @@ def export_batch_evaluation(
         _exports.batch_evaluation_xlsx(payload, f"{subject.name} ({subject.code})", rubric_name),
         "evaluation", payload.assignment_name)
 
-
-# ---- Automated multi-modal evaluation --------------------------
 
 def _ai_signal_dict(result, method: Optional[str] = None) -> dict:
     return {"signal": result.signal, "score": result.score,
@@ -2908,27 +2375,6 @@ def get_auto_evaluation(submission_id: int, user: User = Depends(get_current_use
 # OLLAMA_NUM_PARALLEL set to the same number Ollama grades that many at once.
 # All of them share one GPU, so the gain depends on its memory: measure first.
 AUTO_EVAL_WORKERS = max(1, int(os.environ.get("AUTO_EVAL_WORKERS", "1")))
-
-
-class BatchJobOut(BaseModel):
-    """A batch auto-evaluation run and its progress so far."""
-
-    id: int
-    subject_id: int
-    assignment_name: str
-    rubric_id: int
-    status: str  # queued | running | done | failed | interrupted | stopped
-    total: int
-    done: int  # finished so far, whatever the outcome
-    evaluated: int
-    skipped: int
-    failed: int
-    # One entry per submission in submission order; null while still waiting or running.
-    results: list[Optional[BatchEvaluationItemOut]] = []
-    error: Optional[str] = None
-    created_at: UTCDateTime
-    started_at: Optional[UTCDateTime] = None
-    finished_at: Optional[UTCDateTime] = None
 
 
 def _batch_job_status_out(job: BatchJob) -> BatchJobOut:
@@ -3269,50 +2715,6 @@ def _run_batch_job(job_id: int) -> None:
         db.close()
 
 
-class TestResultOut(BaseModel):
-    """One test's outcome. This is the instructor view: it includes hidden
-    tests and the expected output."""
-
-    test_id: int
-    name: str
-    visible: bool
-    points: float
-    match: str
-    status: str  # passed | failed | error | timeout | skipped (no code was submitted for its task)
-    passed: bool
-    expected_output: str
-    actual_output: str
-    stderr: str = ""
-    question: int = 1  # the task the test belongs to
-
-
-class TestRunQuestionOut(BaseModel):
-    """How one task of a code challenge did on a submission."""
-
-    question: int
-    title: str
-    answered: bool  # false: the student wrote no code for this question, so its tests earn nothing
-    file: str  # the file that was run ("" when none was)
-    language: str
-    passed: int  # its tests passed
-    total: int  # its tests
-    earned_points: float
-    total_points: float
-
-
-class TestRunOut(BaseModel):
-    submission_id: int
-    file: str  # the file that was run (one per question that was answered, comma separated)
-    language: str
-    passed: int  # tests passed
-    total: int  # tests run
-    saved: bool = False  # true when the score was saved as the submission's mark
-    earned_points: float  # points of the tests that passed
-    total_points: float  # points of every test run
-    results: list[TestResultOut]  # every question's tests, in order
-    questions: list[TestRunQuestionOut] = []  # the same, question by question
-
-
 def _run_tests_for(db: Session, instructor: User, submission_id: int, *, challenge_only: bool = False):
     """Check access, then run the assignment's tests on a submission's code in
     the Docker sandbox, question by question. Returns (submission, runs, score), `runs` being
@@ -3384,32 +2786,20 @@ def mark_submission_from_tests(
     return _test_run_out(submission, runs, score, saved=True)
 
 
-# Student self-checks live in app/routers/self_checks.py.
-from .routers.self_checks import router as _self_check_router  # noqa: E402  (after `app` exists)
-
 app.include_router(_self_check_router)
 
-# Students run their typed code against a code challenge's tests: app/routers/student_runs.py.
-from .routers.student_runs import router as _student_run_router  # noqa: E402
-from .routers.student_runs import RunLimitError as _RunLimitError, UnlockLimiter as _UnlockLimiter  # noqa: E402
 
 app.include_router(_student_run_router)
+
 
 # Wrong passwords at /auth/login: 10 in 15 minutes per account, then no more tries until the oldest ages out.
 login_limiter = _UnlockLimiter(tries=10, window=15 * 60)
 
-# Every subject is listed to students; an instructor allows registration with a password and students join with it:
-# app/routers/subject_access.py.
-from .routers.subject_access import router as _subject_access_router  # noqa: E402
 
 app.include_router(_subject_access_router)
 
-# The instructor's code and report similarity checks and their exports.
-from .routers.similarity import router as _similarity_router  # noqa: E402
 
 app.include_router(_similarity_router)
 
-# The instructor's AI-content check of one assignment's submissions.
-from .routers.ai_content import router as _ai_content_router  # noqa: E402
 
 app.include_router(_ai_content_router)
