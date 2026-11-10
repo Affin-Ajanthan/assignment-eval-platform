@@ -92,7 +92,7 @@ export default function AssignmentsSection({
               {/* The name is a link stretched over the whole box; Edit and Delete sit above it. */}
               <Link
                 href={`/instructor/subjects/${subjectId}/assignments/${a.id}`}
-                className="text-base font-bold after:absolute after:inset-0"
+                className="break-words text-base font-bold after:absolute after:inset-0"
                 data-testid="open-assignment"
               >
                 {a.name}
@@ -101,18 +101,18 @@ export default function AssignmentsSection({
                 <Badge tone={STATUS_STYLE[a.status].cls}>{STATUS_STYLE[a.status].text}</Badge>
               </div>
               <dl className="mt-3 space-y-1 text-xs text-gray-600">
-                <div className="flex gap-1">
+                <div className="flex flex-wrap gap-x-1">
                   <dt className="font-semibold">Deadline:</dt>
                   <dd>{formatDateTime(a.deadline)}</dd>
                 </div>
-                <div className="flex gap-1">
+                <div className="flex flex-wrap gap-x-1">
                   <dt className="font-semibold">Submissions:</dt>
                   <dd>
                     {a.submission_count} ({a.graded_count} graded)
                   </dd>
                 </div>
               </dl>
-              <div className="relative z-10 mt-auto flex gap-2 pt-4">
+              <div className="relative z-10 mt-auto flex flex-wrap gap-2 pt-4">
                 <Link
                   href={`/instructor/assignments/${a.id}`}
                   className="btn-secondary rounded-md px-3 py-1.5 text-xs font-semibold"
