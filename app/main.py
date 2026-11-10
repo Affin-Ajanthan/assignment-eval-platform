@@ -39,14 +39,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from . import code_answers as _code_answers, exports as _exports
+from . import code_answers as _code_answers
 from .auth import bootstrap_admin, get_current_user, instructor_subject_ids, require_instructor
-from .common import (
-    ANALYZED_EXTENSIONS as _ANALYZED_EXTENSIONS,
-    as_utc as _as_utc,
-    instructor_subject as _instructor_subject,
-    utcnow_naive as _utcnow_naive,
-)
+from .common import ANALYZED_EXTENSIONS as _ANALYZED_EXTENSIONS, as_utc as _as_utc, utcnow_naive as _utcnow_naive
 from .db import Base, BASE_DIR, SessionLocal, add_missing_columns, engine, get_db, make_index_non_unique
 from .demo_data import demo_data_enabled, seed_demo_data
 from .evaluator import code_testing as _code_testing
@@ -56,15 +51,16 @@ from .evaluator.document_extraction import extract_and_store, load_extraction
 from .evaluator.pipeline import evaluate_submission as _run_pipeline
 from .evaluator.rubric_grading import Criterion as _EvalCriterion, HeuristicRubricGrader
 from .evaluator.semantic_consistency import get_consistency_service
-from .models import Assignment, AutoEvaluation, BatchJob, Grade, Rubric, SimilarityFlag, Submission, User
+from .models import Assignment, AutoEvaluation, BatchJob, Rubric, SimilarityFlag, Submission, User
 from .notebook import read_code
+from .route_helpers import _can_view_submission
 from .routers.ai_content import router as _ai_content_router
+from .routers.grading import _require_assignment_rubric
 from .routers.rubrics import _ensure_criterion_ids
 from .routers.self_checks import router as _self_check_router
 from .routers.similarity import router as _similarity_router
 from .routers.student_runs import router as _student_run_router
 from .routers.subject_access import router as _subject_access_router
-from .routers.submissions import _can_view_submission
 from .schemas import (
     AutoEvaluateIn,
     AutoEvaluationOut,
@@ -72,8 +68,6 @@ from .schemas import (
     BatchAutoEvaluateOut,
     BatchEvaluationItemOut,
     BatchJobOut,
-    GradeIn,
-    GradeOut,
     TestResultOut,
     TestRunOut,
     TestRunQuestionOut,
@@ -83,6 +77,7 @@ from .similarity.semantic import get_semantic_service
 from .routers.admin import router as _admin_router
 from .routers.assignments import router as _assignments_router
 from .routers.auth import router as _auth_router
+from .routers.grading import router as _grading_router
 from .routers.rubrics import router as _rubrics_router
 from .routers.submissions import router as _submissions_router
 
@@ -233,25 +228,6 @@ def health():
     }
 
 
-def _require_two_decimals(label: str, score: float) -> None:
-    """Manual marks have at most 2 decimal places (7.25 is fine, 7.3333 is not)."""
-    if round(score, 2) != score:
-        raise HTTPException(400, f"{label} must have at most 2 decimal places, got {score}")
-
-
-def _require_assignment_rubric(submission: Submission, rubric: Rubric) -> None:
-    """An assignment with a rubric is graded (and auto-evaluated) with that rubric
-    only, so marks never end up on another rubric. Without one, any rubric of the
-    subject is allowed."""
-    assignment = submission.assignment
-    if assignment is not None and assignment.kind == "code_challenge":
-        raise HTTPException(400, "A code challenge is marked from its tests, not with a rubric.")
-    if assignment is not None and assignment.rubric_id is not None and assignment.rubric_id != rubric.id:
-        raise HTTPException(
-            400, f"This assignment is graded with the rubric '{assignment.rubric.name}', not '{rubric.name}'"
-        )
-
-
 app.include_router(_auth_router)
 
 
@@ -270,102 +246,7 @@ app.include_router(_assignments_router)
 app.include_router(_submissions_router)
 
 
-@app.post("/submissions/{submission_id}/grade", response_model=GradeOut)
-def grade_submission(
-    submission_id: int, payload: GradeIn, instructor: User = Depends(require_instructor), db: Session = Depends(get_db)
-):
-    submission = db.get(Submission, submission_id)
-    rubric = db.get(Rubric, payload.rubric_id)
-    if not submission:
-        raise HTTPException(404, "Submission not found")
-    if not rubric:
-        raise HTTPException(404, "Rubric not found")
-    if submission.subject_id not in instructor_subject_ids(db, instructor):
-        raise HTTPException(403, "You are not assigned to this subject")
-    if rubric.subject_id != submission.subject_id:
-        raise HTTPException(400, "That rubric belongs to a different subject than this submission")
-    _require_assignment_rubric(submission, rubric)
-
-    if payload.total_score is not None:
-        # Final mark only: no per-criterion marks are stored, rather than
-        # inventing a split the instructor never decided.
-        if payload.criterion_scores:
-            raise HTTPException(400, "Send either criterion_scores or total_score, not both")
-        if payload.total_score < 0 or payload.total_score > rubric.max_total:
-            raise HTTPException(
-                400,
-                f"Final mark must be between 0 and {rubric.max_total}, got {payload.total_score}",
-            )
-        _require_two_decimals("Final mark", payload.total_score)
-        total = payload.total_score
-    else:
-        valid_names = {c["name"] for c in rubric.criteria}
-        max_points = {c["name"]: c["max_points"] for c in rubric.criteria}
-        unknown = set(payload.criterion_scores) - valid_names
-        if unknown:
-            raise HTTPException(400, f"Unknown criteria for this rubric: {sorted(unknown)}")
-        for name, score in payload.criterion_scores.items():
-            if score < 0 or score > max_points[name]:
-                raise HTTPException(
-                    400,
-                    f"Score for '{name}' must be between 0 and {max_points[name]}, got {score}",
-                )
-            _require_two_decimals(f"Score for '{name}'", score)
-        total = round(sum(payload.criterion_scores.values()), 2)  # no 0.1 + 0.2 float noise
-
-
-    grade = Grade(
-        submission_id=submission_id,
-        rubric_id=payload.rubric_id,
-        criterion_scores=payload.criterion_scores,
-        total_score=total,
-        comments=payload.comments,
-        feedback=(payload.feedback or "").strip() or None,
-        graded_by_id=instructor.id,
-        graded_by=instructor.full_name,
-    )
-    submission.status = "graded"
-    db.add(grade)
-    db.add(submission)
-    db.commit()
-    db.refresh(grade)
-    return grade
-
-
-@app.get("/submissions/{submission_id}/grade", response_model=Optional[GradeOut])
-def get_grade(submission_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if user.role == "student":
-        # Criterion-level marks and comments are instructor-only; students get
-        # their final mark from GET /submissions and GET /assignments.
-        raise HTTPException(403, "Detailed grading is only available to instructors.")
-    submission = db.get(Submission, submission_id)
-    if not submission:
-        raise HTTPException(404, "Submission not found")
-    if not _can_view_submission(user, submission, db):
-        raise HTTPException(403, "You cannot view this submission")
-    return (
-        db.query(Grade)
-        .filter(Grade.submission_id == submission_id)
-        .order_by(Grade.graded_at.desc())
-        .first()
-    )
-
-
-#
-# The browser sends back the result it received and gets the same data as
-# .xlsx, so nothing is re-run. Instructor-only, for their own subjects. (The
-# similarity exports are in app/routers/similarity.py.)
-
-@app.post("/exports/batch-evaluation.xlsx")
-def export_batch_evaluation(
-    payload: BatchAutoEvaluateOut, instructor: User = Depends(require_instructor), db: Session = Depends(get_db)
-):
-    subject = _instructor_subject(db, instructor, payload.subject_id)
-    rubric = db.get(Rubric, payload.rubric_id)
-    rubric_name = rubric.name if rubric and rubric.subject_id == subject.id else f"Rubric #{payload.rubric_id}"
-    return _exports.xlsx_response(
-        _exports.batch_evaluation_xlsx(payload, f"{subject.name} ({subject.code})", rubric_name),
-        "evaluation", payload.assignment_name)
+app.include_router(_grading_router)
 
 
 def _ai_signal_dict(result, method: Optional[str] = None) -> dict:

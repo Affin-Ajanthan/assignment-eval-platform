@@ -10,6 +10,7 @@ from typing import Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from .auth import instructor_subject_ids
 from .db import BASE_DIR, UPLOAD_DIR
 from .evaluator.document_extraction import EXTRACTED_MARKDOWN_NAME, EXTRACTION_META_NAME
 from .models import AutoEvaluation, Enrollment, InstructorAssignment, SimilarityFlag, Submission, User
@@ -28,6 +29,16 @@ def _user_out(user: User, db: Session) -> UserOut:
     return UserOut(id=user.id, email=user.email, full_name=user.full_name, role=user.role, subjects=subjects,
                    batch=user.batch or "", register_number=user.register_number or "",
                    must_change_password=bool(user.must_change_password))
+
+
+def _can_view_submission(user: User, submission: Submission, db: Session) -> bool:
+    if user.role == "admin":
+        return True
+    if user.role == "student":
+        return submission.student_id == user.id
+    if user.role == "instructor":
+        return submission.subject_id in instructor_subject_ids(db, user)
+    return False
 
 
 #

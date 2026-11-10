@@ -28,21 +28,11 @@ from ..evaluator.document_extraction import (
     validate_report_file,
 )
 from ..models import Assignment, Submission, User
-from ..route_helpers import _discard_derived_results, _marks_released, _remove_upload_part
+from ..route_helpers import _can_view_submission, _discard_derived_results, _marks_released, _remove_upload_part
 from ..schemas import SubmissionFileOut, SubmissionOut
 
 
 router = APIRouter()
-
-
-def _can_view_submission(user: User, submission: Submission, db: Session) -> bool:
-    if user.role == "admin":
-        return True
-    if user.role == "student":
-        return submission.student_id == user.id
-    if user.role == "instructor":
-        return submission.subject_id in instructor_subject_ids(db, user)
-    return False
 
 
 def _student_submission_out(submission: Submission, now: datetime) -> SubmissionOut:
