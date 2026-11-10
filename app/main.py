@@ -42,8 +42,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .auth import bootstrap_admin
-from .db import Base, add_missing_columns, engine, get_db, make_index_non_unique
+from .auth import bootstrap_admin, hash_stored_session_tokens
+from .db import Base, SessionLocal, add_missing_columns, engine, get_db, make_index_non_unique
 from .demo_data import demo_data_enabled, seed_demo_data
 from .evaluator.ai_text_detection import get_ai_text_detector, model_name as ai_text_model_name
 from .evaluator.semantic_consistency import get_consistency_service
@@ -155,6 +155,9 @@ add_missing_columns("assignments", {
 
 add_missing_columns("submissions", {"late_seconds": "INTEGER", "late_penalty_percent": "FLOAT NOT NULL DEFAULT 0",
                                     "late_penalty_marks": "FLOAT NOT NULL DEFAULT 0"})
+# Session tokens are stored as hashes now: hash any saved before that, so nobody is logged out by the change.
+with SessionLocal() as _db:
+    hash_stored_session_tokens(_db)
 
 
 @asynccontextmanager

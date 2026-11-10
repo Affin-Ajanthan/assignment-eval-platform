@@ -16,6 +16,7 @@ from ..auth import (
     invalidate_session,
     password_matches,
     password_problems,
+    session_token_hash,
 )
 from ..db import get_db
 from ..models import AuthSession, User
@@ -79,7 +80,9 @@ def change_password(
     user.password_hash, user.password_salt = hash_password(payload.new_password)
     user.must_change_password = False
     current = authorization.split(" ", 1)[1].strip() if authorization and " " in authorization else ""
-    db.query(AuthSession).filter(AuthSession.user_id == user.id, AuthSession.token != current).delete(
+    # Stored tokens are hashes: compare with the hash of the one this request came with.
+    db.query(AuthSession).filter(AuthSession.user_id == user.id,
+                                 AuthSession.token != session_token_hash(current)).delete(
         synchronize_session=False)
     db.commit()
     return _user_out(user, db)
