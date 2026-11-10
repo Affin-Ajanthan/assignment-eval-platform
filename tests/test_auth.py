@@ -169,10 +169,11 @@ class _Clock:
 
 
 def _limited_login(monkeypatch, tries=3, window=900):
-    import app.main as main
+    import app.routers.auth as auth_routes
 
     clock = _Clock()
-    monkeypatch.setattr(main, "login_limiter", main._UnlockLimiter(tries=tries, window=window, clock=clock))
+    monkeypatch.setattr(auth_routes, "login_limiter",
+                        auth_routes._UnlockLimiter(tries=tries, window=window, clock=clock))
     return clock
 
 

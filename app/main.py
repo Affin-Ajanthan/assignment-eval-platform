@@ -42,7 +42,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from sqlalchemy import func
@@ -58,14 +58,9 @@ from . import (
 )
 from .auth import (
     bootstrap_admin,
-    create_session,
     get_current_user,
-    get_user_changing_password,
     hash_password,
     instructor_subject_ids,
-    invalidate_session,
-    password_matches,
-    password_problems,
     require_admin,
     require_instructor,
     require_student,
@@ -118,13 +113,10 @@ from .models import (
 )
 from .notebook import read_code
 from .routers.ai_content import router as _ai_content_router
+from .routers.auth import _user_out
 from .routers.self_checks import router as _self_check_router
 from .routers.similarity import router as _similarity_router
-from .routers.student_runs import (
-    RunLimitError as _RunLimitError,
-    UnlockLimiter as _UnlockLimiter,
-    router as _student_run_router,
-)
+from .routers.student_runs import router as _student_run_router
 from .routers.subject_access import router as _subject_access_router
 from .schemas import (
     AssignmentIn,
@@ -145,10 +137,7 @@ from .schemas import (
     ImportResultOut,
     ImportRowOut,
     InstructorCreate,
-    LoginIn,
-    LoginOut,
     MySubmissionOut,
-    PasswordChangeIn,
     QuestionIn,
     QuestionOut,
     RubricCreate,
@@ -174,6 +163,7 @@ from .schemas import (
 from .similarity import report_similarity as _report_sim
 from .similarity.ai_heuristics import score_source as _score_ai_code
 from .similarity.semantic import get_semantic_service
+from .routers.auth import router as _auth_router
 
 
 Base.metadata.create_all(bind=engine)
@@ -328,20 +318,6 @@ def health():
     }
 
 
-def _user_out(user: User, db: Session) -> UserOut:
-    if user.role == "instructor":
-        rows = db.query(InstructorAssignment).filter(InstructorAssignment.instructor_id == user.id).all()
-        subjects = [row.subject for row in rows]
-    elif user.role == "student":
-        rows = db.query(Enrollment).filter(Enrollment.student_id == user.id).all()
-        subjects = [row.subject for row in rows]
-    else:
-        subjects = []
-    return UserOut(id=user.id, email=user.email, full_name=user.full_name, role=user.role, subjects=subjects,
-                   batch=user.batch or "", register_number=user.register_number or "",
-                   must_change_password=bool(user.must_change_password))
-
-
 def _set_instructor_subjects(db: Session, instructor: User, subject_ids: list[int]) -> None:
     db.query(InstructorAssignment).filter(InstructorAssignment.instructor_id == instructor.id).delete()
     for sid in subject_ids:
@@ -392,62 +368,7 @@ def _can_view_submission(user: User, submission: Submission, db: Session) -> boo
     return False
 
 
-@app.post("/auth/login", response_model=LoginOut)
-def login(payload: LoginIn, db: Session = Depends(get_db)):
-    # Password guessing is limited per account, as for subject and task passwords: after a few wrong passwords
-    # the account takes no more tries, not even the right one, until the oldest wrong try ages out. The key is the
-    # e-mail as typed, case and spaces ignored, so an unknown address is limited the same way (and gives nothing away).
-    key = payload.email.strip().lower()
-    try:
-        login_limiter.check(key)
-    except _RunLimitError as exc:
-        raise HTTPException(exc.status, exc.detail)
-    user = db.query(User).filter(User.email == payload.email).first()
-    # password_matches hashes even when there is no such user, so a wrong password takes as long for an unknown
-    # e-mail as for a real one: the response time doesn't reveal which e-mails have accounts.
-    if not password_matches(user, payload.password):
-        login_limiter.miss(key)
-        raise HTTPException(401, "Incorrect email or password")
-    login_limiter.clear(key)
-    token = create_session(db, user)
-    return LoginOut(token=token, user=_user_out(user, db))
-
-
-@app.post("/auth/logout")
-def logout(authorization: Optional[str] = Header(default=None), db: Session = Depends(get_db)):
-    if authorization and authorization.lower().startswith("bearer "):
-        invalidate_session(db, authorization.split(" ", 1)[1].strip())
-    return {"status": "ok"}
-
-
-@app.get("/auth/me", response_model=UserOut)
-def me(user: User = Depends(get_user_changing_password), db: Session = Depends(get_db)):
-    return _user_out(user, db)
-
-
-@app.post("/auth/change-password", response_model=UserOut)
-def change_password(
-    payload: PasswordChangeIn,
-    authorization: Optional[str] = Header(default=None),
-    user: User = Depends(get_user_changing_password),
-    db: Session = Depends(get_db),
-):
-    """The user sets a password of their own: the current one first, then a new one that passes password_problems.
-    Clears must_change_password, and logs the account out everywhere else (this session stays)."""
-    if not password_matches(user, payload.current_password):
-        raise HTTPException(400, "Your current password is not right.")
-    problems = password_problems(payload.new_password)
-    if problems:
-        raise HTTPException(400, "The new password needs " + ", ".join(problems) + ".")
-    if payload.new_password == payload.current_password:
-        raise HTTPException(400, "Choose a new password that is different from the current one.")
-    user.password_hash, user.password_salt = hash_password(payload.new_password)
-    user.must_change_password = False
-    current = authorization.split(" ", 1)[1].strip() if authorization and " " in authorization else ""
-    db.query(AuthSession).filter(AuthSession.user_id == user.id, AuthSession.token != current).delete(
-        synchronize_session=False)
-    db.commit()
-    return _user_out(user, db)
+app.include_router(_auth_router)
 
 
 def _check_subject_code_free(db: Session, code: str, batch: str, own_id: Optional[int] = None) -> None:
@@ -2790,10 +2711,6 @@ app.include_router(_self_check_router)
 
 
 app.include_router(_student_run_router)
-
-
-# Wrong passwords at /auth/login: 10 in 15 minutes per account, then no more tries until the oldest ages out.
-login_limiter = _UnlockLimiter(tries=10, window=15 * 60)
 
 
 app.include_router(_subject_access_router)
