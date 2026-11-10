@@ -13,25 +13,11 @@ from ..auth import instructor_subject_ids, require_instructor
 from ..common import norm_name as _norm_name
 from ..db import get_db
 from ..models import Assignment, AutoEvaluation, Grade, Rubric, User
+from ..route_helpers import _clean_name
 from ..schemas import Criterion, CriterionUpdate, RubricCreate, RubricOut, RubricUpdate
 
 
 router = APIRouter()
-
-
-#
-# One rubric holds all of its criteria (Rubric.criteria). Criteria are
-# added, edited and removed through /rubrics/{id}/criteria -- never by
-# creating another rubric -- and a second rubric with the same name in a
-# subject is rejected. Grades store scores keyed by criterion name, so once
-# a rubric has been used for grading its structure is locked: only
-# descriptions can still be edited.
-
-def _clean_name(name: Optional[str], what: str) -> str:
-    cleaned = " ".join((name or "").split())
-    if not cleaned:
-        raise HTTPException(400, f"{what} is required")
-    return cleaned
 
 
 def _instructor_rubric(db: Session, instructor: User, rubric_id: int) -> Rubric:
