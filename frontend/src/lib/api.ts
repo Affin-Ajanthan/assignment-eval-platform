@@ -50,6 +50,29 @@ export interface StudentSubject {
   registration_ends_at: string | null;
 }
 
+/** One row of a student import: what would be stored, and what stops it being created. */
+export interface StudentImportRow {
+  row: number;
+  full_name: string;
+  email: string;
+  batch: string;
+  register_number: string;
+  problems: string[];
+}
+
+export interface StudentImportPreview {
+  rows: StudentImportRow[];
+  ready: number;
+  with_problems: number;
+}
+
+export interface StudentImportResult {
+  created: StudentImportRow[];
+  skipped: StudentImportRow[];
+  /** The list of first passwords: an .xlsx file in base64, "" when nobody was created. Only ever in this answer. */
+  passwords_file: string;
+}
+
 export interface UserInfo {
   id: number;
   email: string;
