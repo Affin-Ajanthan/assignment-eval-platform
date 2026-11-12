@@ -114,9 +114,9 @@ export default function RubricEditor({
 
   return (
     <div data-testid="rubric-card">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         {renaming !== null ? (
-          <div className="flex flex-1 flex-wrap gap-2">
+          <div className="flex min-w-0 flex-1 flex-wrap gap-2">
             <input
               aria-label="Rubric name"
               value={renaming}
@@ -152,7 +152,7 @@ export default function RubricEditor({
           </div>
         )}
         {renaming === null && (
-          <div className="flex shrink-0 gap-2">
+          <div className="flex shrink-0 flex-wrap gap-2">
             <button
               type="button"
               className={grayBtn}
@@ -180,7 +180,7 @@ export default function RubricEditor({
                   lockStructure={r.locked}
                   onChange={(patch) => setEditing({ ...editing, row: { ...editing.row, ...patch } })}
                 />
-                <div className="mt-2 flex gap-2">
+                <div className="mt-2 flex flex-wrap gap-2">
                   <button type="button" disabled={busy} className={blueBtn} onClick={saveCriterionEdit}>
                     Save
                   </button>
@@ -190,13 +190,13 @@ export default function RubricEditor({
                 </div>
               </>
             ) : (
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1 basis-48">
                   <p className="font-semibold">{c.name}</p>
                   {c.description && <p className="whitespace-pre-line break-words text-sm text-gray-600">{c.description}</p>}
                   <p className="text-sm">Maximum points: {c.max_points}</p>
                 </div>
-                <div className="flex shrink-0 gap-2">
+                <div className="flex shrink-0 flex-wrap gap-2">
                   <button
                     type="button"
                     className={grayBtn}

@@ -349,6 +349,10 @@ class Rubric(Base):
     def subject_name(self) -> str:
         return self.subject.name if self.subject else ""
 
+    @property
+    def subject_code(self) -> str:
+        return self.subject.code if self.subject else ""
+
 
 class Submission(Base):
     __tablename__ = "submissions"

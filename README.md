@@ -165,7 +165,7 @@ logged in.
 | Phase (from the plan) | Where |
 | --- | --- |
 | Accounts + subject-wise access control | `app/auth.py`, `app/models.py`; `/auth/*` and `/admin/*` endpoints in `app/main.py`; `frontend/src/app/login`, `frontend/src/app/admin` |
-| Submission portal, rubric upload, manual grading | `app/main.py`: `/rubrics`, `/submissions`, `/submissions/{id}/grade` |
+| Submission portal, rubric upload, manual grading | `app/main.py`: `/rubrics` (each rubric belongs to one subject and carries its name and code; `GET /instructor/subjects/{id}/instructors` tells who teaches it, so the new-rubric form can say who will see it), `/submissions`, `/submissions/{id}/grade` |
 | Pre-submission similarity + AI-content detection | `app/similarity/` (standalone CLI) + `app/main.py`'s `POST /subjects/{id}/assignments/{name}/check-similarity`; AI-text for reports lives in `app/evaluator/report_analysis.py` |
 | Automated rubric grading for code + report | `app/evaluator/rubric_grading.py`, run via `POST /submissions/{id}/auto-evaluate` |
 | Video pipeline: transcription + content analysis | `app/evaluator/video_analysis.py`, run via the same auto-evaluate endpoint |

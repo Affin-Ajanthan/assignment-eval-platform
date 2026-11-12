@@ -836,7 +836,7 @@ export default function InstructorAssignmentPage() {
           </div>
           {gradingMode === "final" && (
             <div className="mt-2">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <label className="text-sm font-semibold" htmlFor="final-mark">
                   Final mark
                 </label>
@@ -876,14 +876,14 @@ export default function InstructorAssignmentPage() {
                 const empty = showEmptyMarks && (criterionScores[c.name] ?? "").trim() === "";
                 const inputId = `score-${c.name}`;
                 return (
-                  <div key={c.name} className="flex items-start gap-3">
+                  <div key={c.name} className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-3">
                     <label className="flex-1 pt-1.5 text-sm" htmlFor={inputId}>
                       {c.name}{" "}
                       <small className="text-gray-500">
                         ({c.description || "no description"}, max {c.max_points})
                       </small>
                     </label>
-                    <div className="w-28 shrink-0">
+                    <div className="w-full sm:w-28 sm:shrink-0">
                       <input
                         id={inputId}
                         // Text, not type="number": a number box reports "abc" as empty,
@@ -1329,7 +1329,7 @@ export default function InstructorAssignmentPage() {
             </div>
 
             <div className="mt-3 flex flex-wrap items-end gap-3 text-sm">
-              <div>
+              <div className="w-full sm:w-auto">
                 <label className="block text-xs font-semibold" htmlFor="submissions-search">
                   Student
                 </label>
@@ -1339,7 +1339,7 @@ export default function InstructorAssignmentPage() {
                   value={submissionSearch}
                   onChange={(e) => setSubmissionSearch(e.target.value)}
                   placeholder="Search by name or email"
-                  className="mt-0.5 w-56 rounded-md border border-gray-300 px-2 py-1 text-sm"
+                  className="mt-0.5 w-full rounded-md border border-gray-300 px-2 py-1 text-sm sm:w-56"
                 />
               </div>
               <div>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch, StudentAssignment, StudentSubject, UpcomingAssignment } from "@/lib/api";
 import { useRequireRole } from "@/lib/useRequireRole";
 import { recordRecentSubject } from "@/lib/recentSubjects";
@@ -11,10 +11,19 @@ import AccountBar from "@/components/AccountBar";
 import { MessageState } from "@/components/Message";
 import ConfirmDialog, { ConfirmRequest } from "@/components/ConfirmDialog";
 import AssignmentCard from "@/components/student/AssignmentCard";
+import AssignmentRow from "@/components/student/AssignmentRow";
 import JoinForm from "@/components/student/JoinForm";
 import { OpenForm } from "@/components/student/labels";
 import PageLoading from "@/components/PageLoading";
-import PageHeader, { StatTile } from "@/components/PageHeader";
+import PageHeader from "@/components/PageHeader";
+
+/** The filter on "Available assignments": all, still to hand in, already handed in. */
+type AssignmentFilter = "all" | "need" | "submitted";
+const FILTERS: { id: AssignmentFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "need", label: "Need to submit" },
+  { id: "submitted", label: "Submitted" },
+];
 
 /** The subject's teachers: names for everyone, and e-mail addresses for a student who joined (the server only sends those to them). */
 function TeacherList({ subject }: { subject: StudentSubject }) {
@@ -56,11 +65,12 @@ export default function StudentSubjectPage() {
   // null until the first load: "no assignments" is shown only once the list has arrived.
   const [assignments, setAssignments] = useState<StudentAssignment[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  // When the list arrived: "due within 3 days" counts from then.
-  const [loadedAt, setLoadedAt] = useState(0);
   // Not open yet: name and dates only. A failure here just leaves the list out.
   const [upcoming, setUpcoming] = useState<UpcomingAssignment[]>([]);
   const [openForm, setOpenForm] = useState<OpenForm>(null);
+  // The available assignment whose details are open (none at first).
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [filter, setFilter] = useState<AssignmentFilter>("all");
   const [notice, setNotice] = useState<{ assignmentId: number; state: MessageState } | null>(null);
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
@@ -68,7 +78,6 @@ export default function StudentSubjectPage() {
   const load = useCallback(async () => {
     try {
       setAssignments(await apiFetch<StudentAssignment[]>(`/assignments?subject_id=${subjectId}`));
-      setLoadedAt(Date.now());
       setLoadError(null);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err));
@@ -80,6 +89,16 @@ export default function StudentSubjectPage() {
       .then((all) => setUpcoming(all.filter((u) => u.subject_id === subjectId)))
       .catch(() => setUpcoming([]));
   }, [subjectId]);
+
+  // A box on the home page's "Due in the next 7 days" links here with ?assignment=<id>: open that one's details
+  // once the list has arrived (only the first time, so closing it again sticks).
+  const deepLinked = useRef(false);
+  useEffect(() => {
+    if (deepLinked.current || assignments === null) return;
+    deepLinked.current = true;
+    const wanted = Number(new URLSearchParams(window.location.search).get("assignment"));
+    if (wanted && assignments.some((a) => a.id === wanted && a.status === "open")) setExpandedId(wanted);
+  }, [assignments]);
 
   // First find out whether the student is in this subject; only then are its assignments asked for.
   useEffect(() => {
@@ -141,6 +160,16 @@ export default function StudentSubjectPage() {
   const deadline = (a: StudentAssignment) => new Date(a.deadline).getTime();
   // Open ones by the deadline that comes first; past ones with the most recent first.
   const open = listed.filter((a) => a.status === "open").sort((x, y) => deadline(x) - deadline(y));
+  // The filter above the list: how many there are of each, and the ones to show.
+  const counts: Record<AssignmentFilter, number> = {
+    all: open.length,
+    need: open.filter((a) => !a.my_submission).length,
+    submitted: open.filter((a) => a.my_submission).length,
+  };
+  // The one whose details are open stays in the list, so handing it in does not make it vanish under its own message.
+  const shownOpen = open.filter(
+    (a) => filter === "all" || a.id === expandedId || (filter === "need" ? !a.my_submission : !!a.my_submission),
+  );
   const past = listed.filter((a) => a.status === "closed").sort((x, y) => deadline(y) - deadline(x));
   const card = (a: StudentAssignment) => (
     <AssignmentCard
@@ -193,30 +222,6 @@ export default function StudentSubjectPage() {
         <>
           <TeacherList subject={subject} />
 
-          {/* What needs doing, at a glance. */}
-          {assignments !== null && open.length > 0 && (
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="student-overview">
-              <StatTile label="Open assignments" value={open.length} href="#available" />
-              <StatTile
-                label="Not submitted yet"
-                value={open.filter((a) => !a.my_submission).length}
-                tone={open.some((a) => !a.my_submission) ? "attention" : "good"}
-                href="#available"
-              />
-              <StatTile
-                label="Due within 3 days"
-                value={open.filter((a) => deadline(a) - loadedAt < 3 * 864e5).length}
-                tone={open.some((a) => deadline(a) - loadedAt < 3 * 864e5) ? "attention" : "neutral"}
-                href="#available"
-              />
-              <StatTile
-                label="Marked, with feedback"
-                value={listed.filter((a) => a.my_submission?.final_mark != null).length}
-                tone="good"
-              />
-            </div>
-          )}
-
           <section className="mt-6 scroll-mt-4" id="available">
             <h2 className="text-xl font-semibold">Available assignments</h2>
             {loadError && (
@@ -236,7 +241,52 @@ export default function StudentSubjectPage() {
             ) : open.length === 0 ? (
               <p className="empty-state mt-2">There are no assignments open for submission right now.</p>
             ) : (
-              <ul className="mt-3 space-y-4">{open.map(card)}</ul>
+              <>
+              {/* Which of them to show: all, the ones still to hand in, or the ones already handed in. */}
+              <div role="group" aria-label="Filter assignments" className="mt-3 flex flex-wrap gap-2" data-testid="assignment-filter">
+                {FILTERS.map((f) => {
+                  const active = filter === f.id;
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => {
+                        setFilter(f.id);
+                        setExpandedId(null);
+                      }}
+                      className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
+                        active ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      }`}
+                      data-testid={`filter-${f.id}`}
+                    >
+                      {f.label} ({counts[f.id]})
+                    </button>
+                  );
+                })}
+              </div>
+              {shownOpen.length === 0 ? (
+                <p className="empty-state mt-3" data-testid="filter-empty">
+                  {filter === "need"
+                    ? "Nothing left to submit -- you have handed in every open assignment."
+                    : "You have not submitted any of the open assignments yet."}
+                </p>
+              ) : (
+              // One line each, with the due date; pressing one opens its details under it (one at a time).
+              <ul className="mt-3 space-y-3" data-testid="available-list">
+                {shownOpen.map((a) => (
+                  <AssignmentRow
+                    key={a.id}
+                    a={a}
+                    expanded={expandedId === a.id}
+                    onToggle={() => setExpandedId(expandedId === a.id ? null : a.id)}
+                  >
+                    {card(a)}
+                  </AssignmentRow>
+                ))}
+              </ul>
+              )}
+              </>
             )}
           </section>
 
