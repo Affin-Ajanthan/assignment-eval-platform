@@ -193,7 +193,7 @@ export default function RubricEditor({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold">{c.name}</p>
-                  {c.description && <p className="break-words text-sm text-gray-600">{c.description}</p>}
+                  {c.description && <p className="whitespace-pre-line break-words text-sm text-gray-600">{c.description}</p>}
                   <p className="text-sm">Maximum points: {c.max_points}</p>
                 </div>
                 <div className="flex shrink-0 gap-2">

@@ -10,7 +10,7 @@ import AssignmentPageLayout from "@/components/instructor/AssignmentPageLayout";
 import ReportTemplateControl from "@/components/instructor/ReportTemplateControl";
 import PageLoading from "@/components/PageLoading";
 
-/** Edit an assignment: /instructor/assignments/<id>, opened by clicking its box on the subject page. */
+/** Edit an assignment: /instructor/assignments/<id>, opened by Edit on its box or on the assignment page. */
 export default function EditAssignmentPage() {
   const { user, ready } = useRequireRole("instructor");
   const { id } = useParams<{ id: string }>();
