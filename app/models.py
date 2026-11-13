@@ -127,12 +127,12 @@ class Enrollment(Base):
 
 
 class AuthSession(Base):
-    """One opaque bearer token per login (see app/auth.py). The
-    frontend sends this back as `Authorization: Bearer <token>`."""
+    """One login (see app/auth.py). The frontend sends its opaque bearer token back as
+    `Authorization: Bearer <token>`; this table keeps only the token's SHA-256 (auth.session_token_hash)."""
 
     __tablename__ = "auth_sessions"
 
-    token = Column(String, primary_key=True)
+    token = Column(String, primary_key=True)  # the SHA-256 of the token, in hexadecimal; never the token itself
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     expires_at = Column(DateTime, nullable=False)
     created_at = Column(DateTime, default=_utcnow)

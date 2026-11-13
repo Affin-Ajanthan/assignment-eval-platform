@@ -13,7 +13,7 @@ from openpyxl import Workbook, load_workbook
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import app.main as main_module
+import app.routers.admin as admin_routes
 from app import student_import as si
 from app.auth import password_problems, verify_password
 from app.db import SessionLocal
@@ -380,7 +380,7 @@ def test_if_the_database_refuses_one_none_are_created(monkeypatch):
         return [si.ImportRow(row=2, full_name="Fresh", email=fresh),
                 si.ImportRow(row=3, full_name="Clash", email=taken["email"])]
 
-    monkeypatch.setattr(main_module, "_checked_import_rows", stale)
+    monkeypatch.setattr(admin_routes, "_checked_import_rows", stale)
     no_exceptions = TestClient(fastapi_app, raise_server_exceptions=False)
     r = no_exceptions.post("/admin/students/import", headers=H(admin), files=_upload(_xlsx([])), data={"subject_ids": ""})
     assert r.status_code == 409, r.text

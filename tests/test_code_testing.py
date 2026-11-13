@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from fastapi.testclient import TestClient
 
-import app.main as main
+import app.evaluator.code_testing as code_testing
 from app.evaluator import code_testing as ct
 from app.evaluator.code_execution import SandboxUnavailable
 from app.main import app as fastapi_app
@@ -530,7 +530,7 @@ def test_running_tests_returns_every_test_for_the_instructor(monkeypatch):
                    for t in tests]
         return ct.TestRun(file="main.py", language="python", results=results)
 
-    monkeypatch.setattr(main._code_testing, "run_tests", fake_run_tests)
+    monkeypatch.setattr(code_testing, "run_tests", fake_run_tests)
     r = client.post(f"/submissions/{sub['id']}/run-tests", headers=auth_headers(itok))
     assert r.status_code == 200, r.text
     body = r.json()
@@ -551,7 +551,7 @@ def test_running_tests_checks_access_and_what_can_be_run(monkeypatch):
     subject, itok, _ = setup_subject_with_users(client)
     _assignment_with_tests(subject, itok, "Guards", API_TESTS)
     sub = _submit_code(subject, "Guards")
-    plain = main._code_testing.run_tests
+    plain = code_testing.run_tests
     url = f"/submissions/{sub['id']}/run-tests"
     run = lambda token=itok: client.post(url, headers=auth_headers(token))  # noqa: E731
 
@@ -568,19 +568,19 @@ def test_running_tests_checks_access_and_what_can_be_run(monkeypatch):
     def cannot_pick(*args, **kwargs):
         raise ct.CodeTestError("Several code files were found; set the main file name on the assignment.")
 
-    monkeypatch.setattr(main._code_testing, "run_tests", cannot_pick)
+    monkeypatch.setattr(code_testing, "run_tests", cannot_pick)
     assert run().status_code == 400
 
     def no_docker(*args, **kwargs):
         raise SandboxUnavailable("Docker is not available, so the tests were not run")
 
-    monkeypatch.setattr(main._code_testing, "run_tests", no_docker)
+    monkeypatch.setattr(code_testing, "run_tests", no_docker)
     assert run().status_code == 503
 
     # An assignment without test cases has nothing to run.
     _assignment_with_tests(subject, itok, "No tests", [])
     plain_sub = _submit_code(subject, "No tests")
-    monkeypatch.setattr(main._code_testing, "run_tests", plain)
+    monkeypatch.setattr(code_testing, "run_tests", plain)
     r = client.post(f"/submissions/{plain_sub['id']}/run-tests", headers=auth_headers(itok))
     assert r.status_code == 400 and "no test cases" in r.json()["detail"]
 
@@ -877,7 +877,7 @@ def _mark(submission_id, itok):
 def test_marking_from_the_tests_saves_the_points_as_the_mark_the_student_sees(monkeypatch):
     subject, itok, stok, assignment, sub_id = _challenge_submission("Marked by tests")
     monkeypatch.setenv("CODE_SANDBOX", "docker")
-    monkeypatch.setattr(main._code_testing, "run_tests", _fake_run({1}))  # test 1 (2 points) passes, test 2 (1 point) fails
+    monkeypatch.setattr(code_testing, "run_tests", _fake_run({1}))  # test 1 (2 points) passes, test 2 (1 point) fails
 
     r = _mark(sub_id, itok)
     assert r.status_code == 200, r.text
@@ -894,7 +894,7 @@ def test_marking_from_the_tests_saves_the_points_as_the_mark_the_student_sees(mo
     assert [(s["final_mark"], s["max_mark"]) for s in listed] == [(2, 3)]
 
     # Running again replaces the mark.
-    monkeypatch.setattr(main._code_testing, "run_tests", _fake_run({1, 2}))
+    monkeypatch.setattr(code_testing, "run_tests", _fake_run({1, 2}))
     assert _mark(sub_id, itok).json()["earned_points"] == 3
     assert client.get(f"/submissions/{sub_id}", headers=auth_headers(itok)).json()["final_mark"] == 3
 
@@ -902,7 +902,7 @@ def test_marking_from_the_tests_saves_the_points_as_the_mark_the_student_sees(mo
 def test_just_running_the_tests_does_not_change_the_mark(monkeypatch):
     subject, itok, stok, assignment, sub_id = _challenge_submission("Run only")
     monkeypatch.setenv("CODE_SANDBOX", "docker")
-    monkeypatch.setattr(main._code_testing, "run_tests", _fake_run({1, 2}))
+    monkeypatch.setattr(code_testing, "run_tests", _fake_run({1, 2}))
 
     r = client.post(f"/submissions/{sub_id}/run-tests", headers=auth_headers(itok))
     assert r.status_code == 200 and r.json()["saved"] is False
@@ -913,7 +913,7 @@ def test_just_running_the_tests_does_not_change_the_mark(monkeypatch):
 def test_a_tests_mark_is_held_back_until_the_release_date(monkeypatch):
     subject, itok, stok, assignment, sub_id = _challenge_submission("Held back")
     monkeypatch.setenv("CODE_SANDBOX", "docker")
-    monkeypatch.setattr(main._code_testing, "run_tests", _fake_run({1}))
+    monkeypatch.setattr(code_testing, "run_tests", _fake_run({1}))
     put = lambda body: client.put(f"/assignments/{assignment['id']}", headers=auth_headers(itok), json=body)  # noqa: E731
     later = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
     assert put({"marks_release_at": later}).status_code == 200
@@ -933,7 +933,7 @@ def test_marking_follows_the_same_access_rules_as_running_the_tests(monkeypatch)
 
     subject, itok, stok, assignment, sub_id = _challenge_submission("Mark access")
     monkeypatch.setenv("CODE_SANDBOX", "docker")
-    monkeypatch.setattr(main._code_testing, "run_tests", _fake_run({1}))
+    monkeypatch.setattr(code_testing, "run_tests", _fake_run({1}))
     _, other_itok, _ = setup_subject_with_users(client)
     assert _mark(sub_id, other_itok).status_code == 403                       # another subject's instructor
     assert _mark(sub_id, new_student(client, subject["id"])).status_code == 403  # a student
