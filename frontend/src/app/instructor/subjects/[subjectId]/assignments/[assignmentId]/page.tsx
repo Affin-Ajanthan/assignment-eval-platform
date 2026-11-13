@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -20,6 +21,7 @@ import SubmissionFiles from "@/components/SubmissionFiles";
 import RichText from "@/components/RichText";
 import TestRunPanel from "@/components/instructor/TestRunPanel";
 import AISignalsPanel from "@/components/AISignalsPanel";
+import AiContentSection from "@/components/instructor/AiContentSection";
 import BatchEvaluateSection from "@/components/instructor/BatchEvaluateSection";
 import DownloadExcelButton from "@/components/instructor/DownloadExcelButton";
 import ReportSimilarityPanel from "@/components/instructor/ReportSimilarityPanel";
@@ -169,11 +171,11 @@ function RubricField({
   );
 }
 
-type AssignmentTab = "grading" | "integrity" | "batch";
-const ASSIGNMENT_TABS: AssignmentTab[] = ["grading", "integrity", "batch"];
+type AssignmentTab = "grading" | "integrity" | "ai" | "batch";
+const ASSIGNMENT_TABS: AssignmentTab[] = ["grading", "integrity", "ai", "batch"];
 
 /**
- * One assignment of a subject: /instructor/subjects/<id>/assignments/<assignment id>, opened by Open on the subject
+ * One assignment of a subject: /instructor/subjects/<id>/assignments/<assignment id>, opened by clicking its box on the subject
  * page. Everything here is about this one assignment: its submissions and grading, the similarity checks and the
  * batch evaluation.
  */
@@ -834,7 +836,7 @@ export default function InstructorAssignmentPage() {
           </div>
           {gradingMode === "final" && (
             <div className="mt-2">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <label className="text-sm font-semibold" htmlFor="final-mark">
                   Final mark
                 </label>
@@ -874,14 +876,14 @@ export default function InstructorAssignmentPage() {
                 const empty = showEmptyMarks && (criterionScores[c.name] ?? "").trim() === "";
                 const inputId = `score-${c.name}`;
                 return (
-                  <div key={c.name} className="flex items-start gap-3">
+                  <div key={c.name} className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-3">
                     <label className="flex-1 pt-1.5 text-sm" htmlFor={inputId}>
                       {c.name}{" "}
                       <small className="text-gray-500">
                         ({c.description || "no description"}, max {c.max_points})
                       </small>
                     </label>
-                    <div className="w-28 shrink-0">
+                    <div className="w-full sm:w-28 sm:shrink-0">
                       <input
                         id={inputId}
                         // Text, not type="number": a number box reports "abc" as empty,
@@ -1001,10 +1003,26 @@ export default function InstructorAssignmentPage() {
 
       <PageHeader
         divider={false}
-        back={{ href: subjectPage, label: currentSubject ? subjectLabel(currentSubject) : "Subject" }}
+        back={{
+          // Back to the list this assignment was opened from (its kind).
+          href: assignment
+            ? `${subjectPage}/assignments?kind=${assignment.assignment_type === "code_challenge" ? "code_challenge" : "submission"}`
+            : subjectPage,
+          label: assignment?.assignment_type === "code_challenge" ? "Code challenges" : "Submission assignments",
+        }}
         title={assignment?.name ?? "Assignment"}
-        description="Grade the submissions to this assignment, check them for copying, or run the automated evaluator on all of them -- you always have the final say."
-      />
+        description="Edit this assignment, grade its submissions one by one, check them for copying or AI content, or run the automated evaluator on all of them -- you always have the final say."
+      >
+        {assignment && (
+          <Link
+            href={`/instructor/assignments/${assignment.id}`}
+            className="btn-secondary rounded-md px-4 py-2 text-sm font-semibold"
+            data-testid="edit-assignment-button"
+          >
+            Edit assignment
+          </Link>
+        )}
+      </PageHeader>
 
       {subjectId !== null && assignment && (
         <>
@@ -1024,6 +1042,7 @@ export default function InstructorAssignmentPage() {
                   ) : null,
               },
               { id: "integrity", label: "Similarity" },
+              { id: "ai", label: "AI content" },
               { id: "batch", label: "Batch evaluate" },
             ]}
           />
@@ -1198,6 +1217,10 @@ export default function InstructorAssignmentPage() {
           <SelfCheckHistoryPanel assignments={assignments} />
           </div>
 
+          <div {...tabPanelProps("ai", tab)}>
+            <AiContentSection subjectId={subjectId} assignmentName={assignment.name} />
+          </div>
+
           <div {...tabPanelProps("batch", tab)}>
           {/* Evaluate every submission to this assignment */}
           {isCodeChallenge(assignment.id) ? (
@@ -1306,7 +1329,7 @@ export default function InstructorAssignmentPage() {
             </div>
 
             <div className="mt-3 flex flex-wrap items-end gap-3 text-sm">
-              <div>
+              <div className="w-full sm:w-auto">
                 <label className="block text-xs font-semibold" htmlFor="submissions-search">
                   Student
                 </label>
@@ -1316,7 +1339,7 @@ export default function InstructorAssignmentPage() {
                   value={submissionSearch}
                   onChange={(e) => setSubmissionSearch(e.target.value)}
                   placeholder="Search by name or email"
-                  className="mt-0.5 w-56 rounded-md border border-gray-300 px-2 py-1 text-sm"
+                  className="mt-0.5 w-full rounded-md border border-gray-300 px-2 py-1 text-sm sm:w-56"
                 />
               </div>
               <div>

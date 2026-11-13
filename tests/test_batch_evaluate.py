@@ -569,3 +569,128 @@ def test_a_failing_submission_in_a_background_job_shows_in_its_progress(monkeypa
     failed = body["results"][1]
     assert (failed["submission_id"], failed["status"]) == (bad_id, "failed")
     assert "Ollama exploded" in failed["error"] and body["error"] is None
+
+
+def _stop(job_id, tok):
+    return client.post(f"/auto-evaluate/jobs/{job_id}/stop", headers=auth_headers(tok))
+
+
+def test_a_running_evaluation_can_be_stopped_and_frees_the_assignment(monkeypatch):
+    subject, tok, rubric, assignment, subs = _setup(2)
+    monkeypatch.setattr(main, "_run_batch_job", lambda job_id: None)  # still queued/running
+    job_id = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+    assert _start_job(subject, assignment, tok, rubric["id"]).status_code == 409  # blocked while running
+
+    r = _stop(job_id, tok)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "stopped" and body["finished_at"]
+    assert "Stopped by you after 0 of 2 submissions" in body["error"]
+    assert _start_job(subject, assignment, tok, rubric["id"]).status_code == 202  # free for a new run
+
+    # Only a running one can be stopped, and only by the subject's instructors.
+    again = _stop(job_id, tok)
+    assert again.status_code == 409 and "this one is stopped" in again.json()["detail"]
+    assert _stop(999999, tok).status_code == 404
+    _, other_tok, _ = setup_subject_with_users(client)
+    new_id = client.get(
+        f"/subjects/{subject['id']}/assignments/{assignment}/auto-evaluate/jobs/latest", headers=auth_headers(tok)
+    ).json()["id"]  # the run started above is still going
+    assert _stop(new_id, other_tok).status_code == 403
+
+
+def test_a_stopped_run_can_be_resumed(monkeypatch):
+    subject, tok, rubric, assignment, subs = _setup(2)
+    real_run = main._run_batch_job
+    monkeypatch.setattr(main, "_run_batch_job", lambda job_id: None)
+    job_id = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+    assert _stop(job_id, tok).status_code == 200
+
+    monkeypatch.setattr(main, "_run_batch_job", real_run)
+    r = client.post(f"/auto-evaluate/jobs/{job_id}/resume", headers=auth_headers(tok))
+    assert r.status_code == 202, r.text
+    job = _job(r.json()["id"])
+    assert (job.status, job.total, job.evaluated, job.failed) == ("done", 2, 2, 0)
+
+
+def test_the_worker_stops_before_the_next_submission_once_stop_is_pressed(monkeypatch):
+    from app.db import SessionLocal
+    from app.models import BatchJob
+
+    subject, tok, rubric, assignment, subs = _setup(3)
+    real = main._run_auto_evaluation
+    graded = []
+
+    def stop_after_first(db, submission, rubric_, **kwargs):
+        ev = real(db, submission, rubric_, **kwargs)
+        graded.append(submission.id)
+        if len(graded) == 1:  # what POST .../stop does, while the first submission is being graded
+            other = SessionLocal()
+            try:
+                job = other.query(BatchJob).order_by(BatchJob.id.desc()).first()
+                job.status = "stopped"
+                other.commit()
+            finally:
+                other.close()
+        return ev
+
+    monkeypatch.setattr(main, "_run_auto_evaluation", stop_after_first)
+    job_id = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+
+    job = _job(job_id)
+    assert job.status == "stopped"  # not overwritten with "done"
+    assert graded == [subs[0]["id"]]  # the other two were never started
+    assert (job.evaluated, job.failed) == (1, 0)
+    assert job.results[0]["status"] == "evaluated" and job.results[1:] == [None, None]
+
+
+def test_a_job_stopped_before_it_starts_is_not_run(monkeypatch):
+    subject, tok, rubric, assignment, subs = _setup(2)
+    real_run = main._run_batch_job
+    monkeypatch.setattr(main, "_run_batch_job", lambda job_id: None)
+    job_id = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
+    assert _stop(job_id, tok).status_code == 200
+
+    real_run(job_id)  # the worker only gets to it now
+    job = _job(job_id)
+    assert (job.status, job.evaluated) == ("stopped", 0)
+
+
+# ---- Consistency in the rows, and the instructor's own mark ------------------
+
+def test_batch_rows_carry_the_cross_modal_consistency_and_skipped_rows_keep_it():
+    subject, tok, rubric, assignment, subs = _setup(1, assignment="Consistency Rows")
+    first = _batch(subject, assignment, tok, rubric["id"]).json()["results"][0]
+    stored = client.get(f"/submissions/{subs[0]['id']}/auto-evaluate", headers=auth_headers(tok)).json()
+    assert first["cross_modal_consistency"] == stored["cross_modal_consistency"]
+    assert first["cross_modal_consistency"]["status"]  # consistent, limited_data, ... -- always reported
+
+    again = _batch(subject, assignment, tok, rubric["id"], skip_already_evaluated=True).json()["results"][0]
+    assert again["status"] == "skipped" and again["cross_modal_consistency"] == first["cross_modal_consistency"]
+
+
+def test_the_instructor_can_override_a_batch_suggestion_with_their_own_mark():
+    subject, tok, rubric, assignment, subs = _setup(1, assignment="Override Mark")
+    item = _batch(subject, assignment, tok, rubric["id"]).json()["results"][0]
+    sid = subs[0]["id"]
+
+    # The page saves a final mark only, on the rubric the batch used.
+    saved = client.post(f"/submissions/{sid}/grade", json={"rubric_id": rubric["id"], "total_score": 7.5},
+                        headers=auth_headers(tok))
+    assert saved.status_code == 200, saved.text
+    listed = client.get(f"/submissions?subject_id={subject['id']}", headers=auth_headers(tok)).json()
+    mine = next(s for s in listed if s["id"] == sid)
+    assert (mine["status"], mine["final_mark"], mine["max_mark"]) == ("graded", 7.5, 10)
+
+    # A second override replaces the first, and the suggestion itself is untouched.
+    client.post(f"/submissions/{sid}/grade", json={"rubric_id": rubric["id"], "total_score": 9},
+                headers=auth_headers(tok))
+    listed = client.get(f"/submissions?subject_id={subject['id']}", headers=auth_headers(tok)).json()
+    assert next(s for s in listed if s["id"] == sid)["final_mark"] == 9
+    stored = client.get(f"/submissions/{sid}/auto-evaluate", headers=auth_headers(tok)).json()
+    assert stored["recommended_score"] == item["recommended_score"]
+
+    # Above the rubric's maximum is refused.
+    too_high = client.post(f"/submissions/{sid}/grade", json={"rubric_id": rubric["id"], "total_score": 11},
+                           headers=auth_headers(tok))
+    assert too_high.status_code == 400

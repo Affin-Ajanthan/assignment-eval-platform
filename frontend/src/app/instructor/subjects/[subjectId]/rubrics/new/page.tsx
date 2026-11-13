@@ -32,10 +32,12 @@ export default function NewRubricPage() {
       subtitle={subjectLabel(subject)}
     >
       <RubricCreateForm
+        subjects={user.subjects}
         subjectId={subject.id}
-        onSaved={(message) => {
+        onSaved={(message, savedSubjectId) => {
           setFlash(message);
-          router.push(back);
+          // Back to the rubrics of the subject it was saved for, which may not be the one the form was opened from.
+          router.push(`/instructor/subjects/${savedSubjectId}?tab=rubrics`);
         }}
         onCancel={() => router.push(back)}
       />

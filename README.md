@@ -165,7 +165,7 @@ logged in.
 | Phase (from the plan) | Where |
 | --- | --- |
 | Accounts + subject-wise access control | `app/auth.py`, `app/models.py`; `/auth/*` and `/admin/*` endpoints in `app/main.py`; `frontend/src/app/login`, `frontend/src/app/admin` |
-| Submission portal, rubric upload, manual grading | `app/main.py`: `/rubrics`, `/submissions`, `/submissions/{id}/grade` |
+| Submission portal, rubric upload, manual grading | `app/main.py`: `/rubrics` (each rubric belongs to one subject and carries its name and code; `GET /instructor/subjects/{id}/instructors` tells who teaches it, so the new-rubric form can say who will see it), `/submissions`, `/submissions/{id}/grade` |
 | Pre-submission similarity + AI-content detection | `app/similarity/` (standalone CLI) + `app/main.py`'s `POST /subjects/{id}/assignments/{name}/check-similarity`; AI-text for reports lives in `app/evaluator/report_analysis.py` |
 | Automated rubric grading for code + report | `app/evaluator/rubric_grading.py`, run via `POST /submissions/{id}/auto-evaluate` |
 | Video pipeline: transcription + content analysis | `app/evaluator/video_analysis.py`, run via the same auto-evaluate endpoint |
@@ -203,7 +203,7 @@ logged in.
      `{"rubric_id": ...}` starts the job and answers at once (202, status
      `queued`).
    - `GET /auto-evaluate/jobs/{job_id}` reports its progress: status
-     (`queued` / `running` / `done` / `failed` / `interrupted`), `done` of
+     (`queued` / `running` / `done` / `failed` / `interrupted` / `stopped`), `done` of
      `total`, the evaluated / skipped / failed counts, and each finished
      submission's result in submission order (`null` while still waiting).
      The page polls it every 3 s to show a progress bar and fill in the
@@ -220,7 +220,18 @@ logged in.
      rest with the same settings, skipping submissions already evaluated.
      Note that `uvicorn --reload` restarts the server whenever a code file
      is saved, which interrupts a running job.
+   - `POST /auto-evaluate/jobs/{job_id}/stop` stops a queued or running job
+     at any time: it is marked `stopped` at once (so the assignment is free
+     for a new run), the submission being graded right now finishes, the
+     rest are not started, and everything done so far is kept. A stopped job
+     can be resumed like an interrupted one; the page's "Run again" button
+     starts a fresh run over every submission.
    - Every run is recorded in the `batch_jobs` table.
+   - Each result row also carries the code / report / video `cross_modal_consistency`
+     (kept for skipped rows too), next to the AI signals. On the page, "Details" on a row
+     opens the full consistency and AI-content panels, and "Set mark" / "Override" saves the
+     instructor's own final mark with the normal `POST /submissions/{id}/grade`
+     (`total_score`), replacing the earlier one; the suggestion itself is not changed.
 
    `POST /subjects/{id}/assignments/{name}/auto-evaluate` runs the same
    job but waits until every submission is done and returns all results

@@ -29,6 +29,7 @@ http://localhost:8000) and sign in.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import tempfile
@@ -43,9 +44,10 @@ from typing import Literal, Optional
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -106,6 +108,7 @@ from . import code_languages as _langs
 from .code_languages import CodeLanguage
 from .similarity import report_similarity as _report_sim
 from . import exports as _exports
+from . import student_import as _student_import
 from .common import (
     ANALYZED_EXTENSIONS as _ANALYZED_EXTENSIONS,
     CODE_EXTENSIONS as _CODE_EXTENSIONS,
@@ -247,6 +250,29 @@ class StudentCreate(BaseModel):
     register_number: str = Field(default="", max_length=50)
 
 
+class ImportRowOut(BaseModel):
+    """One row of a student import: what would be stored, and what stops it being created (nothing: it can be)."""
+    row: int
+    full_name: str
+    email: str
+    batch: str
+    register_number: str
+    problems: list[str]
+
+
+class ImportPreviewOut(BaseModel):
+    rows: list[ImportRowOut]
+    ready: int
+    with_problems: int
+
+
+class ImportResultOut(BaseModel):
+    created: list[ImportRowOut]
+    skipped: list[ImportRowOut]
+    # The list of first passwords, an .xlsx file in base64. Only in this answer: it is kept nowhere. "" if none created.
+    passwords_file: str
+
+
 class UserUpdate(BaseModel):
     """Admin edit of an instructor or student. Fields left out are kept;
     a blank password keeps the current one."""
@@ -289,6 +315,7 @@ class RubricOut(BaseModel):
     name: str
     subject_id: int
     subject_name: str
+    subject_code: str = ""  # the rubric's own subject, shown next to its name in the assignment's rubric list
     criteria: list[dict]  # [{"id", "name", "description", "max_points"}, ...]
     max_total: float
     created_at: UTCDateTime
@@ -298,6 +325,8 @@ class RubricOut(BaseModel):
     locked: bool = False
     assignment_names: list[str] = []
 
+
+_import_log = logging.getLogger("app.student_import")
 
 SubmissionType = Literal["code", "report", "video"]
 _STARTER_CODE_MAX = 200_000
@@ -737,6 +766,9 @@ class BatchEvaluationItemOut(BaseModel):
     # Level, score and method behind ai_flagged, so the table can show which
     # detector ran. None when the submission failed or predates these details.
     ai_signals: Optional[AISignalsOut] = None
+    # The code / report / video consistency behind the row, so the table can show it without opening each
+    # submission. None when the submission failed or was evaluated before this was kept.
+    cross_modal_consistency: Optional[CrossModalConsistencyOut] = None
 
 
 class BatchAutoEvaluateOut(BaseModel):
@@ -1220,6 +1252,93 @@ def create_student(payload: StudentCreate, _admin: User = Depends(require_admin)
     return _user_out(student, db)
 
 
+def _checked_import_rows(file: UploadFile, db: Session) -> list[_student_import.ImportRow]:
+    """The rows of an uploaded class list, each checked against the accounts there are now; or the HTTP error saying
+    why the file can't be used."""
+    content = file.file.read(_student_import.MAX_FILE_BYTES + 1)
+    try:
+        rows = _student_import.read_rows(file.filename or "", content)
+    except _student_import.ImportFileError as exc:
+        raise HTTPException(400, str(exc))
+    emails = {email.lower() for (email,) in db.query(User.email)}
+    numbers = {number.rsplit("/", 1)[-1].lower() for (number,) in
+               db.query(User.register_number).filter(User.role == "student", User.register_number.isnot(None))}
+    return _student_import.check_rows(rows, emails, numbers, REGISTER_PREFIX)
+
+
+def _import_row_out(r: _student_import.ImportRow) -> ImportRowOut:
+    return ImportRowOut(row=r.row, full_name=r.full_name, email=r.email, batch=r.batch,
+                        register_number=r.register_number, problems=r.problems)
+
+
+@app.get("/admin/students/import-template")
+def student_import_template(_admin: User = Depends(require_admin)):
+    return Response(content=_student_import.template_xlsx(), media_type=_exports.XLSX_MEDIA_TYPE, headers={
+        "Content-Disposition": 'attachment; filename="student-import-template.xlsx"'})
+
+
+@app.post("/admin/students/import/preview", response_model=ImportPreviewOut)
+def preview_student_import(
+    file: UploadFile = File(...), _admin: User = Depends(require_admin), db: Session = Depends(get_db)
+):
+    """What an import of this file would do. Nothing is created or kept."""
+    rows = _checked_import_rows(file, db)
+    with_problems = sum(1 for r in rows if r.problems)
+    return ImportPreviewOut(rows=[_import_row_out(r) for r in rows], ready=len(rows) - with_problems,
+                            with_problems=with_problems)
+
+
+@app.post("/admin/students/import", response_model=ImportResultOut)
+def run_student_import(
+    response: Response,
+    file: UploadFile = File(...),
+    subject_ids: str = Form(""),  # the subjects every created student joins: ids separated by commas
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Create the students of the rows with no problems, each with a random first password they must change at first
+    login; the other rows are left out and reported. All or nothing: if the database refuses one, none are created.
+    Every row is checked again here, not trusted from the preview. The answer is the only place the passwords exist."""
+    try:
+        ids = sorted({int(part) for part in subject_ids.split(",") if part.strip()})
+    except ValueError:
+        raise HTTPException(400, "subject_ids must be numbers separated by commas")
+    _require_subjects_exist(db, ids)
+    rows = _checked_import_rows(file, db)
+    ready = [r for r in rows if not r.problems]
+
+    listed = []
+    for r in ready:  # the slow part (about 80 ms a student), before anything is written
+        password = _student_import.make_password()
+        password_hash, salt = hash_password(password)
+        student = User(
+            email=r.email, full_name=r.full_name, role="student", password_hash=password_hash, password_salt=salt,
+            batch=r.batch or None, register_number=r.register_number or None,
+            must_change_password=True,  # they choose their own at first login
+        )
+        db.add(student)
+        listed.append((student, (r.full_name, r.email, r.batch, r.register_number, password)))
+    try:
+        db.flush()  # gives the students their ids, for the enrolments
+        for student, _line in listed:
+            for subject_id in ids:
+                db.add(Enrollment(student_id=student.id, subject_id=subject_id))
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "An account was added while this import ran, so nothing was created. Check the file "
+                                 "again and retry.")
+    # Who imported what and when. Never the passwords.
+    _import_log.warning("Student import by %s: %d created, %d skipped, %d subject(s), file %r", admin.email,
+                        len(ready), len(rows) - len(ready), len(ids), file.filename)
+    response.headers["Cache-Control"] = "no-store"  # the answer holds passwords
+    return ImportResultOut(
+        created=[_import_row_out(r) for r in ready],
+        skipped=[_import_row_out(r) for r in rows if r.problems],
+        passwords_file=_student_import.passwords_xlsx_base64([line for _student, line in listed]) if listed else "",
+    )
+
+
 @app.get("/admin/students", response_model=list[UserOut])
 def list_students(_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     students = db.query(User).filter(User.role == "student").order_by(User.full_name).all()
@@ -1339,7 +1458,7 @@ def _rubric_out(db: Session, rubric: Rubric) -> RubricOut:
     assignments = db.query(Assignment).filter(Assignment.rubric_id == rubric.id).order_by(Assignment.name).all()
     return RubricOut(
         id=rubric.id, name=rubric.name, subject_id=rubric.subject_id, subject_name=rubric.subject_name,
-        criteria=rubric.criteria, max_total=rubric.max_total, created_at=rubric.created_at,
+        subject_code=rubric.subject_code, criteria=rubric.criteria, max_total=rubric.max_total, created_at=rubric.created_at,
         graded_count=graded, locked=graded > 0, assignment_names=[a.name for a in assignments],
     )
 
@@ -1370,6 +1489,30 @@ def list_rubrics(
             raise HTTPException(403, "You are not assigned to this subject")
         query = query.filter(Rubric.subject_id == subject_id)
     return [_rubric_out(db, r) for r in query.order_by(Rubric.created_at.desc()).all()]
+
+
+class SubjectInstructorOut(BaseModel):
+    id: int
+    name: str
+    email: str
+
+
+@app.get("/instructor/subjects/{subject_id}/instructors", response_model=list[SubjectInstructorOut])
+def list_subject_instructors(
+    subject_id: int, instructor: User = Depends(require_instructor), db: Session = Depends(get_db)
+):
+    """Who teaches one of the instructor's subjects (themselves included), so the rubric form can say who will see and
+    use a new rubric: every instructor of that subject, and nobody else. Only the subject's own instructors can ask,
+    and it never tells what other subjects those instructors teach."""
+    subject = _instructor_subject(db, instructor, subject_id)
+    rows = (
+        db.query(User.id, User.full_name, User.email)
+        .join(InstructorAssignment, InstructorAssignment.instructor_id == User.id)
+        .filter(InstructorAssignment.subject_id == subject.id)
+        .order_by(User.full_name)
+        .all()
+    )
+    return [SubjectInstructorOut(id=i, name=name, email=email) for i, name, email in rows]
 
 
 @app.get("/rubrics/{rubric_id}", response_model=RubricOut)
@@ -2799,7 +2942,7 @@ class BatchJobOut(BaseModel):
     subject_id: int
     assignment_name: str
     rubric_id: int
-    status: str  # queued | running | done | failed | interrupted
+    status: str  # queued | running | done | failed | interrupted | stopped
     total: int
     done: int  # finished so far, whatever the outcome
     evaluated: int
@@ -2935,8 +3078,9 @@ def resume_auto_evaluate_job(
         raise HTTPException(404, "Job not found")
     if job.subject_id not in instructor_subject_ids(db, instructor):
         raise HTTPException(403, "You are not assigned to this subject")
-    if job.status not in ("interrupted", "failed"):
-        raise HTTPException(409, f"Only an interrupted or failed run can be resumed; this one is {job.status}.")
+    if job.status not in ("interrupted", "failed", "stopped"):
+        raise HTTPException(
+            409, f"Only an interrupted, failed or stopped run can be resumed; this one is {job.status}.")
     payload = BatchAutoEvaluateIn(
         rubric_id=job.rubric_id,
         use_rubric_model=job.options.get("use_rubric_model", True),
@@ -2946,6 +3090,27 @@ def resume_auto_evaluate_job(
     resumed = _create_batch_job(db, instructor, job.subject_id, job.assignment_name, payload)
     background_tasks.add_task(_run_batch_job, resumed.id)
     return _batch_job_status_out(resumed)
+
+
+@app.post("/auto-evaluate/jobs/{job_id}/stop", response_model=BatchJobOut)
+def stop_auto_evaluate_job(
+    job_id: int, instructor: User = Depends(require_instructor), db: Session = Depends(get_db),
+):
+    """Stop a running batch evaluation at any time. The run is marked "stopped" at once (so the assignment is free
+    for a new run); the worker sees that before it starts the next submission, so the one being graded right now
+    still finishes. Everything evaluated so far is kept: Resume grades the rest, or a new run grades everything."""
+    job = db.get(BatchJob, job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job.subject_id not in instructor_subject_ids(db, instructor):
+        raise HTTPException(403, "You are not assigned to this subject")
+    if job.status not in ("queued", "running"):
+        raise HTTPException(409, f"Only a running evaluation can be stopped; this one is {job.status}.")
+    job.status, job.finished_at = "stopped", _utcnow_naive()
+    job.error = f"Stopped by you after {job.done} of {job.total} submissions."
+    db.commit()
+    db.refresh(job)
+    return _batch_job_status_out(job)
 
 
 @app.get("/auto-evaluate/jobs/{job_id}", response_model=BatchJobOut)
@@ -3008,7 +3173,15 @@ def _run_batch_job(job_id: int) -> None:
     db = SessionLocal()
     try:
         job = db.get(BatchJob, job_id)
+        if job.status == "stopped":  # stopped before the worker even started
+            return
         options = job.options
+
+        def stop_requested() -> bool:
+            """True once the instructor pressed Stop (POST .../stop sets the status)."""
+            db.refresh(job)
+            return job.status == "stopped"
+
         submissions = (
             db.query(Submission)
             .filter(Submission.subject_id == job.subject_id, Submission.assignment_name == job.assignment_name)
@@ -3042,7 +3215,8 @@ def _run_batch_job(job_id: int) -> None:
                     grader=prev.grader, model=prev.model, review_flags=list(prev.review_flags or []),
                     similarity_flagged=prev.similarity_flagged,
                     ai_flagged=_ai_flagged(prev.code_ai_flagged, prev.report_ai_signal),
-                    ai_signals=prev.ai_signals).model_dump(mode="json")
+                    ai_signals=prev.ai_signals,
+                    cross_modal_consistency=prev.cross_modal_consistency).model_dump(mode="json")
             else:
                 to_run.append((position, submission.id))
 
@@ -3074,7 +3248,8 @@ def _run_batch_job(job_id: int) -> None:
                     grader=ev.grader, model=ev.model, review_flags=list(ev.review_flags or []),
                     similarity_flagged=ev.similarity_flagged,
                     ai_flagged=_ai_flagged(ev.code_ai_flagged, ev.report_ai_signal),
-                    ai_signals=ev.ai_signals)
+                    ai_signals=ev.ai_signals,
+                    cross_modal_consistency=ev.cross_modal_consistency)
             finally:
                 worker_db.close()
 
@@ -3091,15 +3266,23 @@ def _run_batch_job(job_id: int) -> None:
         workers = min(AUTO_EVAL_WORKERS, len(to_run))
         if workers <= 1:
             for position, submission_id in to_run:
+                if stop_requested():
+                    break
                 record(position, evaluate(submission_id))
         else:
             with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="auto-eval") as pool:
                 futures = {pool.submit(evaluate, submission_id): position for position, submission_id in to_run}
                 for future in as_completed(futures):  # record each one as soon as it finishes
+                    if future.cancelled():
+                        continue
                     record(futures[future], future.result())
+                    if stop_requested():  # the ones not started yet are dropped; running ones finish
+                        for pending in futures:
+                            pending.cancel()
 
-        job.status, job.finished_at = "done", _utcnow_naive()
-        db.commit()
+        if not stop_requested():  # a stopped job keeps its "stopped" status
+            job.status, job.finished_at = "done", _utcnow_naive()
+            db.commit()
     except Exception as exc:  # the job itself broke (not one submission): record why
         db.rollback()
         job = db.get(BatchJob, job_id)
@@ -3250,3 +3433,8 @@ app.include_router(_subject_access_router)
 from .routers.similarity import router as _similarity_router  # noqa: E402
 
 app.include_router(_similarity_router)
+
+# The instructor's AI-content check of one assignment's submissions.
+from .routers.ai_content import router as _ai_content_router  # noqa: E402
+
+app.include_router(_ai_content_router)

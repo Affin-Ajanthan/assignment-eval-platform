@@ -23,6 +23,13 @@ export function subjectLabel(s: Pick<Subject, "name" | "code" | "batch">): strin
   return `${s.name} (${s.code})${s.batch ? ` · Batch ${s.batch}` : ""}`;
 }
 
+/** One instructor of a subject (GET /instructor/subjects/{id}/instructors). */
+export interface SubjectInstructor {
+  id: number;
+  name: string;
+  email: string;
+}
+
 /** A subject's student access, as the instructor sets it (GET/PUT /instructor/subjects/{id}/access). */
 export interface SubjectAccess {
   /** Registration is open right now (switched on, a password set, and the end date not passed). */
@@ -48,6 +55,29 @@ export interface StudentSubject {
   registration_open: boolean;
   /** When open registration closes by itself; null when it has no end date (or is not open). */
   registration_ends_at: string | null;
+}
+
+/** One row of a student import: what would be stored, and what stops it being created. */
+export interface StudentImportRow {
+  row: number;
+  full_name: string;
+  email: string;
+  batch: string;
+  register_number: string;
+  problems: string[];
+}
+
+export interface StudentImportPreview {
+  rows: StudentImportRow[];
+  ready: number;
+  with_problems: number;
+}
+
+export interface StudentImportResult {
+  created: StudentImportRow[];
+  skipped: StudentImportRow[];
+  /** The list of first passwords: an .xlsx file in base64, "" when nobody was created. Only ever in this answer. */
+  passwords_file: string;
 }
 
 export interface UserInfo {
@@ -98,6 +128,8 @@ export interface Rubric {
   name: string;
   subject_id: number;
   subject_name: string;
+  /** The rubric's own subject, shown with its name in the assignment form's rubric list. */
+  subject_code: string;
   criteria: Criterion[];
   max_total: number;
   created_at: string;
@@ -544,7 +576,9 @@ export interface BatchEvaluationItem {
   /** AI-content review flag (code or report); never changes marks. Null when the submission failed. */
   ai_flagged: boolean | null;
   /** Level, score and method behind ai_flagged; null when failed or stored before these details. */
-  ai_signals?: { report: AISignal | null; code: AISignal | null } | null;
+  ai_signals?: { report: AISignal | null; code: AISignal | null; disabled?: boolean } | null;
+  /** Code / report / video-transcript consistency; null when failed or stored before it was kept. */
+  cross_modal_consistency?: CrossModalConsistency | null;
 }
 
 export interface BatchEvaluationResult {
@@ -564,8 +598,8 @@ export interface BatchJob {
   subject_id: number;
   assignment_name: string;
   rubric_id: number;
-  /** "interrupted": the server stopped mid-run; it can be resumed. */
-  status: "queued" | "running" | "done" | "failed" | "interrupted";
+  /** "interrupted": the server stopped mid-run; "stopped": the instructor pressed Stop. Both can be resumed. */
+  status: "queued" | "running" | "done" | "failed" | "interrupted" | "stopped";
   total: number;
   /** Finished so far, whatever the outcome. */
   done: number;
@@ -621,6 +655,24 @@ export interface AISignal {
   score: number;
   method: string;
   reasons: string[];
+}
+
+/** One submission's row of the instructor's AI-content check; null = no readable report / no code. */
+export interface AiContentRow {
+  submission_id: number;
+  student_name: string;
+  student_email: string;
+  report: AISignal | null;
+  code: AISignal | null;
+}
+
+export interface AiContentCheckResult {
+  subject_id: number;
+  assignment_name: string;
+  checked: number;
+  /** Submissions with a high signal on the report or the code. */
+  flagged: number;
+  rows: AiContentRow[];
 }
 
 export type ConsistencyComponent = "code" | "report" | "transcript";

@@ -524,7 +524,7 @@ export default function AssignmentForm({
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <fieldset>
           <legend className="text-sm font-semibold">Available from</legend>
-          <div className="flex gap-2">
+          <div className="grid gap-2 min-[26rem]:grid-cols-2">
             <input
               type="date"
               aria-label="Available from date"
@@ -543,7 +543,7 @@ export default function AssignmentForm({
         </fieldset>
         <fieldset>
           <legend className="text-sm font-semibold">Submission deadline</legend>
-          <div className="flex gap-2">
+          <div className="grid gap-2 min-[26rem]:grid-cols-2">
             <input
               type="date"
               aria-label="Deadline date"
@@ -587,26 +587,26 @@ export default function AssignmentForm({
           </div>
           <div>
             <span className="block text-xs font-semibold">Late submission deadline (last time late work is taken)</span>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="grid gap-2 min-[26rem]:grid-cols-2">
               <input
                 type="date"
                 aria-label="Accept late until date"
                 value={form.lateDate}
                 onChange={(e) => set("lateDate", e.target.value)}
-                className={`${input} flex-1`}
+                className={input}
               />
               <input
                 type="time"
                 aria-label="Accept late until time"
                 value={form.lateTime}
                 onChange={(e) => set("lateTime", e.target.value)}
-                className={`${input} flex-1`}
+                className={input}
               />
               {(form.lateDate || form.lateTime) && (
                 <button
                   type="button"
                   onClick={() => setForm((f) => ({ ...f, lateDate: "", lateTime: "" }))}
-                  className="btn-secondary mt-1 rounded-md px-3 py-2 text-xs font-semibold"
+                  className="btn-secondary justify-self-start rounded-md px-3 py-2 text-xs font-semibold min-[26rem]:col-span-2"
                 >
                   Clear
                 </button>
@@ -777,7 +777,8 @@ export default function AssignmentForm({
             <option value="">— No rubric yet —</option>
             {rubrics.map((r) => (
               <option key={r.id} value={r.id}>
-                {r.name} ({r.criteria.length} criteria, {r.max_total} pts)
+                {r.name} — {r.subject_name}
+                {r.subject_code ? ` (${r.subject_code})` : ""} · {r.criteria.length} criteria, {r.max_total} pts
               </option>
             ))}
           </select>

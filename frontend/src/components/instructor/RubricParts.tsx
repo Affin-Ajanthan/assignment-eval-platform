@@ -1,6 +1,7 @@
 "use client";
 
 import { Criterion } from "@/lib/api";
+import AutoGrowTextarea from "@/components/AutoGrowTextarea";
 
 /** Pieces shared by the rubric list (RubricsSection), the create form and the editor of one rubric. */
 
@@ -54,9 +55,11 @@ export function CriterionFields({
         <label className="text-xs font-semibold" htmlFor={`${idPrefix}-desc`}>
           Description
         </label>
-        <input
+        {/* At least two lines; a longer text wraps onto more lines and the box grows, with no sideways scrolling. */}
+        <AutoGrowTextarea
           id={`${idPrefix}-desc`}
           value={row.description}
+          rows={2}
           maxLength={2000}
           onChange={(e) => onChange({ description: e.target.value })}
           placeholder="Quality and structure of the submitted code"

@@ -20,10 +20,10 @@ export default function BatchList({
         <li key={g.segment}>
           <Link
             href={`${hrefBase}/${g.segment}`}
-            className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-blue-50"
+            className="flex min-h-12 flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-3 hover:bg-blue-50"
             data-testid="batch-card"
           >
-            <span className="text-base font-semibold">{g.label}</span>
+            <span className="min-w-0 break-words text-base font-semibold">{g.label}</span>
             <span className="flex items-center gap-3 text-sm text-gray-500">
               {g.items.length} subject{g.items.length === 1 ? "" : "s"}
               <span aria-hidden="true" className="text-blue-700">

@@ -22,9 +22,10 @@ export const KIND_LIST_LABEL: Record<AssignmentKind, { title: string; empty: str
 };
 
 /**
- * The existing assignments of one kind in the subject, one box each. A box opens the edit page with its details filled
- * in (/instructor/assignments/<id>); Open on it goes to grading, similarity and batch evaluation, and Delete removes
- * it. New ones are created with "+ New" at the top of the page.
+ * The existing assignments of one kind in the subject, one box each. A box opens the assignment page (grading, similarity,
+ * AI content, batch evaluation, with an Edit button there); Edit on the box goes straight to the edit page with its
+ * details filled in (/instructor/assignments/<id>), and Delete removes it. New ones are created with "+ New" at the top
+ * of the page.
  */
 export default function AssignmentsSection({
   subjectId,
@@ -88,11 +89,11 @@ export default function AssignmentsSection({
               className="relative flex flex-col rounded-lg border border-gray-200 bg-white p-4 shadow-sm hover:border-blue-500 hover:bg-blue-50"
               data-testid="assignment-card"
             >
-              {/* The name is a link stretched over the whole box; Open and Delete sit above it. */}
+              {/* The name is a link stretched over the whole box; Edit and Delete sit above it. */}
               <Link
-                href={`/instructor/assignments/${a.id}`}
-                className="text-base font-bold after:absolute after:inset-0"
-                data-testid="edit-assignment"
+                href={`/instructor/subjects/${subjectId}/assignments/${a.id}`}
+                className="break-words text-base font-bold after:absolute after:inset-0"
+                data-testid="open-assignment"
               >
                 {a.name}
               </Link>
@@ -100,24 +101,24 @@ export default function AssignmentsSection({
                 <Badge tone={STATUS_STYLE[a.status].cls}>{STATUS_STYLE[a.status].text}</Badge>
               </div>
               <dl className="mt-3 space-y-1 text-xs text-gray-600">
-                <div className="flex gap-1">
+                <div className="flex flex-wrap gap-x-1">
                   <dt className="font-semibold">Deadline:</dt>
                   <dd>{formatDateTime(a.deadline)}</dd>
                 </div>
-                <div className="flex gap-1">
+                <div className="flex flex-wrap gap-x-1">
                   <dt className="font-semibold">Submissions:</dt>
                   <dd>
                     {a.submission_count} ({a.graded_count} graded)
                   </dd>
                 </div>
               </dl>
-              <div className="relative z-10 mt-auto flex gap-2 pt-4">
+              <div className="relative z-10 mt-auto flex flex-wrap gap-2 pt-4">
                 <Link
-                  href={`/instructor/subjects/${subjectId}/assignments/${a.id}`}
-                  className="btn-primary rounded-md px-3 py-1.5 text-xs font-semibold"
-                  data-testid="open-assignment"
+                  href={`/instructor/assignments/${a.id}`}
+                  className="btn-secondary rounded-md px-3 py-1.5 text-xs font-semibold"
+                  data-testid="edit-assignment"
                 >
-                  Open
+                  Edit
                 </Link>
                 <button
                   type="button"
