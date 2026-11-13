@@ -48,11 +48,11 @@ export default function InstructorSubjectCard({
   return (
     <Link
       href={`/instructor/subjects/${s.id}`}
-      className="block h-full rounded-lg border border-gray-200 bg-white p-5 shadow-sm hover:border-blue-500 hover:bg-blue-50"
+      className="block h-full rounded-lg border border-gray-200 bg-white p-4 shadow-sm hover:border-blue-500 hover:bg-blue-50 sm:p-5"
       data-testid="subject-card"
     >
-      <span className="block text-lg font-bold">{s.name}</span>
-      <span className="block text-xs text-gray-500">
+      <span className="block break-words text-lg font-bold">{s.name}</span>
+      <span className="block break-words text-xs text-gray-500">
         {s.code}
         {s.batch ? ` · Batch ${s.batch}` : ""}
       </span>

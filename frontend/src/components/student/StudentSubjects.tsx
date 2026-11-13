@@ -5,6 +5,7 @@ import { apiFetch, StudentSubject } from "@/lib/api";
 import { groupByBatch } from "@/lib/batches";
 import { readRecentSubjects } from "@/lib/recentSubjects";
 import BatchList from "@/components/BatchList";
+import DueSoon from "@/components/student/DueSoon";
 import StudentSubjectCard from "@/components/student/StudentSubjectCard";
 
 /** How many "Recently viewed" boxes the home page shows. */
@@ -46,7 +47,7 @@ export default function StudentSubjects({ userId }: { userId: number }) {
       {recent.length > 0 && (
         <div data-testid="recent-subjects">
           <h2 className="text-xl font-semibold">Recently viewed</h2>
-          <ul className="mt-3 grid gap-4 sm:grid-cols-2" data-testid="student-subject-list">
+          <ul className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="student-subject-list">
             {recent.map((s) => (
               <li key={s.id}>
                 <StudentSubjectCard subject={s} />
@@ -56,7 +57,10 @@ export default function StudentSubjects({ userId }: { userId: number }) {
         </div>
       )}
 
-      <h2 className={`text-xl font-semibold ${recent.length > 0 ? "mt-8" : ""}`}>Batches</h2>
+      {/* Under the recently viewed subjects: what is due soon and not handed in. */}
+      <DueSoon />
+
+      <h2 className="mt-8 text-xl font-semibold">Batches</h2>
       <p className="mt-1 text-sm text-gray-600">
         Choose a batch to see all its subjects. Open one you have joined to see its assignments. For any other, open it
         and enter the password your instructor gave you.

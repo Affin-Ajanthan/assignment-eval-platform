@@ -7,6 +7,9 @@ import { lateText, markWithPenalty } from "@/lib/late";
 import Badge from "@/components/Badge";
 import Message, { MessageState } from "@/components/Message";
 
+/** "Graded" only when there is a mark to show; a submission without one is still just "Submitted". */
+const isGraded = (s: Submission) => s.status === "graded" && s.final_mark != null;
+
 /**
  * Every submission the student has made, across subjects -- including ones to
  * assignments that were since deleted, which have no card above. Collapsed by
@@ -80,12 +83,18 @@ export default function SubmissionHistory({ version }: { version: number }) {
                         )}
                       </td>
                       <td className="border-b border-gray-200 px-3 py-2">
-                        <Badge bold={false} tone={s.status === "graded" ? "bg-green-50 text-green-800" : "bg-yellow-50 text-yellow-800"}>
-                          {s.status === "graded" ? "Graded" : "Submitted"}
+                        <Badge bold={false} tone={isGraded(s) ? "bg-green-50 text-green-800" : "bg-yellow-50 text-yellow-800"}>
+                          {isGraded(s) ? "Graded" : "Submitted"}
                         </Badge>
                       </td>
                       <td className="border-b border-gray-200 px-3 py-2">
-                        {markWithPenalty(s.raw_mark, s.final_mark, s.max_mark, s.late_penalty_percent, s.late_penalty_marks)}
+                        {s.final_mark == null ? (
+                          <span className="text-gray-500">
+                            -<span className="sr-only"> not graded yet</span>
+                          </span>
+                        ) : (
+                          markWithPenalty(s.raw_mark, s.final_mark, s.max_mark, s.late_penalty_percent, s.late_penalty_marks)
+                        )}
                       </td>
                     </tr>
                   ))}

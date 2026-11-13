@@ -211,6 +211,7 @@ export default function ManageUsersTable({
           </tbody>
         </table>
       </div>
+      <p className="mt-1 text-xs text-gray-500 sm:hidden">Swipe the table sideways to see every column.</p>
       <Pagination
         page={page}
         total={ordered.length}

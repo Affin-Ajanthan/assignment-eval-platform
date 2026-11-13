@@ -68,7 +68,7 @@ export default function AdminTabs({
             aria-controls={`admin-tabpanel-${t.id}`}
             tabIndex={active ? 0 : -1}
             onClick={() => onChange(t.id)}
-            className={`-mb-px rounded-t-md border px-4 py-2 text-sm font-semibold ${
+            className={`-mb-px flex-1 rounded-t-md border px-3 py-2 text-sm font-semibold sm:flex-none sm:px-4 ${
               active
                 ? "border-gray-200 border-b-white bg-white text-blue-700"
                 : "border-transparent text-gray-600 hover:bg-gray-100 hover:text-gray-900"

@@ -156,6 +156,7 @@ class RubricOut(BaseModel):
     name: str
     subject_id: int
     subject_name: str
+    subject_code: str = ""  # the rubric's own subject, shown next to its name in the assignment's rubric list
     criteria: list[dict]  # [{"id", "name", "description", "max_points"}, ...]
     max_total: float
     created_at: UTCDateTime
@@ -200,6 +201,12 @@ _LATE_MARKS_MAX = 1000  # the most marks a late penalty can take (per day or in 
 
 
 LatePenaltyUnit = Literal["percent", "marks"]  # what a late penalty is counted in
+
+
+class SubjectInstructorOut(BaseModel):
+    id: int
+    name: str
+    email: str
 
 
 class QuestionIn(BaseModel):

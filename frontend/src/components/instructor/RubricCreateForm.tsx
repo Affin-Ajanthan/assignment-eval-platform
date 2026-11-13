@@ -1,20 +1,41 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { apiFetch } from "@/lib/api";
+import { FormEvent, useEffect, useState } from "react";
+import { apiFetch, Subject, SubjectInstructor, subjectLabel } from "@/lib/api";
 import Message, { MessageState } from "@/components/Message";
 import { CriterionFields, emptyRow, errText, grayBtn, Row, toCriterion } from "@/components/instructor/RubricParts";
 
-/** The form for a new rubric: its name and as many criteria rows as needed (POST /rubrics). */
+/**
+ * The form for a new rubric: the subject it is for (one of the instructor's own subjects, with its code), who
+ * teaches that subject, its name and as many criteria rows as needed (POST /rubrics). A rubric belongs to one subject:
+ * every instructor of that subject can see and use it, and instructors of other subjects cannot.
+ */
 export default function RubricCreateForm({
-  subjectId,
+  subjects,
+  subjectId: initialSubjectId,
   onSaved,
   onCancel,
 }: {
+  /** The subjects the instructor teaches. */
+  subjects: Subject[];
+  /** The one chosen to start with (the page the form was opened from). */
   subjectId: number;
-  onSaved: (message: string) => void;
+  onSaved: (message: string, subjectId: number) => void;
   onCancel: () => void;
 }) {
+  const [subjectId, setSubjectId] = useState(initialSubjectId);
+  // Who teaches the chosen subject; null while it loads.
+  const [teachers, setTeachers] = useState<SubjectInstructor[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setTeachers(null);
+    apiFetch<SubjectInstructor[]>(`/instructor/subjects/${subjectId}/instructors`)
+      .then((t) => !cancelled && setTeachers(t))
+      .catch(() => !cancelled && setTeachers([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [subjectId]);
   const [name, setName] = useState("");
   const [rows, setRows] = useState<Row[]>([emptyRow()]);
   const [msg, setMsg] = useState<MessageState>(null);
@@ -37,7 +58,7 @@ export default function RubricCreateForm({
     setSaving(true);
     try {
       await apiFetch("/rubrics", { method: "POST", json: { name: name.trim(), subject_id: subjectId, criteria } });
-      onSaved(`Rubric "${name.trim()}" saved with ${criteria.length} criteria.`);
+      onSaved(`Rubric "${name.trim()}" saved with ${criteria.length} criteria.`, subjectId);
     } catch (err) {
       setMsg({ text: `Failed to save rubric: ${errText(err)}`, kind: "error" });
       setSaving(false);
@@ -46,6 +67,32 @@ export default function RubricCreateForm({
 
   return (
     <form onSubmit={handleCreate}>
+      <label className="block text-sm font-semibold" htmlFor="rubric_subject">
+        Subject
+      </label>
+      <select
+        id="rubric_subject"
+        value={subjectId}
+        onChange={(e) => setSubjectId(Number(e.target.value))}
+        className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+        data-testid="rubric-subject"
+      >
+        {subjects.map((s) => (
+          <option key={s.id} value={s.id}>
+            {subjectLabel(s)}
+          </option>
+        ))}
+      </select>
+      <p className="mb-3 mt-1 text-xs text-gray-600" data-testid="rubric-shared-with">
+        {teachers === null
+          ? "Checking who teaches this subject..."
+          : teachers.length === 0
+            ? "Only the instructors of this subject can see and use this rubric."
+            : `Only the instructors of this subject can see and use this rubric: ${teachers
+                .map((t) => t.name)
+                .join(", ")}. Instructors of other subjects cannot.`}
+      </p>
+
       <label className="block text-sm font-semibold" htmlFor="rubric_name">
         Rubric name
       </label>
@@ -85,7 +132,7 @@ export default function RubricCreateForm({
       <p className="mt-2 text-sm">
         Total maximum points: <strong>{total}</strong>
       </p>
-      <div className="mt-2 flex gap-2">
+      <div className="mt-2 flex flex-wrap gap-2">
         <button disabled={saving} className="btn-primary rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60">
           {saving ? "Saving..." : "Save rubric"}
         </button>

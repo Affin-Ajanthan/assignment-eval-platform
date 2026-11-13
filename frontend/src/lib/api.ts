@@ -23,6 +23,13 @@ export function subjectLabel(s: Pick<Subject, "name" | "code" | "batch">): strin
   return `${s.name} (${s.code})${s.batch ? ` · Batch ${s.batch}` : ""}`;
 }
 
+/** One instructor of a subject (GET /instructor/subjects/{id}/instructors). */
+export interface SubjectInstructor {
+  id: number;
+  name: string;
+  email: string;
+}
+
 /** A subject's student access, as the instructor sets it (GET/PUT /instructor/subjects/{id}/access). */
 export interface SubjectAccess {
   /** Registration is open right now (switched on, a password set, and the end date not passed). */
@@ -121,6 +128,8 @@ export interface Rubric {
   name: string;
   subject_id: number;
   subject_name: string;
+  /** The rubric's own subject, shown with its name in the assignment form's rubric list. */
+  subject_code: string;
   criteria: Criterion[];
   max_total: number;
   created_at: string;

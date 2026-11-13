@@ -58,7 +58,9 @@ export default function ManageSubjectsTable({
         shown={matching.length}
       />
     )}
-    <table className="mt-2 w-full text-sm">
+    {/* Scrolls sideways inside its own box on a phone instead of widening the page. */}
+    <div className="mt-2 overflow-x-auto">
+    <table className="w-full text-sm">
       <thead>
         <tr className="bg-gray-50 text-left">
           <th className={cell}>Name</th>
@@ -97,6 +99,8 @@ export default function ManageSubjectsTable({
         ))}
       </tbody>
     </table>
+    </div>
+    <p className="mt-1 text-xs text-gray-500 sm:hidden">Swipe the table sideways to see every column.</p>
     <Pagination
       page={page}
       total={matching.length}

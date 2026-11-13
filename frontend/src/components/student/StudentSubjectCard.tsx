@@ -6,13 +6,13 @@ export default function StudentSubjectCard({ subject: s }: { subject: StudentSub
   return (
     <Link
       href={`/student/subjects/${s.id}`}
-      className={`block h-full rounded-lg border p-5 shadow-sm hover:border-blue-500 hover:bg-blue-50 ${
+      className={`block h-full rounded-lg border p-4 shadow-sm hover:border-blue-500 hover:bg-blue-50 sm:p-5 ${
         s.joined ? "border-gray-200 bg-white" : "border-gray-200 bg-gray-50"
       }`}
       data-testid={s.joined ? "subject-card" : "locked-subject"}
     >
-      <span className="block text-lg font-bold">{s.name}</span>
-      <span className="block text-xs text-gray-500">
+      <span className="block break-words text-lg font-bold">{s.name}</span>
+      <span className="block break-words text-xs text-gray-500">
         {s.code}
         {s.batch ? ` · Batch ${s.batch}` : ""}
       </span>

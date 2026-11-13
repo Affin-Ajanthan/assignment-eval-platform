@@ -31,7 +31,7 @@ export default function AssignmentKindChooser({
             <Link
               key={o.value}
               href={`/instructor/subjects/${subjectId}/assignments?kind=${o.value}`}
-              className="rounded-md border border-gray-300 p-4 text-left hover:border-blue-500 hover:bg-blue-50"
+              className="min-w-0 break-words rounded-md border border-gray-300 p-4 text-left hover:border-blue-500 hover:bg-blue-50"
               data-testid={`kind-${o.value}`}
             >
               <span className="block font-semibold">{o.title}</span>

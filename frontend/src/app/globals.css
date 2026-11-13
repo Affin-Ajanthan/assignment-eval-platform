@@ -98,6 +98,9 @@
      stops below it instead of under it. */
   html {
     scroll-padding-top: 5rem;
+    /* A phone turned sideways keeps the text size instead of enlarging it. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   body {
@@ -243,6 +246,23 @@
     .btn-secondary,
     .btn-danger {
       min-height: 2.5rem;
+    }
+  }
+
+  /* Touch screens: text boxes, drop-downs, tabs and the tick boxes are big enough to hit with a finger, not only
+     the btn-* buttons above. A mouse keeps the compact sizes. */
+  @media (pointer: coarse) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),
+    select {
+      min-height: 2.5rem;
+    }
+    input[type="checkbox"],
+    input[type="radio"] {
+      width: 1.25rem;
+      height: 1.25rem;
+    }
+    [role="tab"] {
+      min-height: 2.75rem;
     }
   }
 
