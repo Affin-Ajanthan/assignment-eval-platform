@@ -25,9 +25,9 @@ STRONG = "Str0ng!pass"
 
 @pytest.fixture(autouse=True)
 def _no_login_limit(monkeypatch):
-    import app.main as main
+    import app.routers.auth as auth_routes
 
-    monkeypatch.setattr(main, "login_limiter", main._UnlockLimiter(tries=10_000))
+    monkeypatch.setattr(auth_routes, "login_limiter", auth_routes._UnlockLimiter(tries=10_000))
 
 
 def _new_account(role="student", password="abcd"):

@@ -42,7 +42,10 @@ export default function PageTabs<T extends string>({
       role="tablist"
       aria-label={label}
       onKeyDown={onKeyDown}
-      className="mt-4 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-gray-200"
+      // The same folder tabs as the admin dashboard (AdminTabs). The line under them is an inset shadow, not a
+      // border: the bar scrolls sideways on a phone, which clips anything that hangs over its edge, and the
+      // selected tab's white bottom still covers a shadow drawn inside it.
+      className="mt-4 flex gap-1 overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_var(--color-gray-200)]"
     >
       {tabs.map((t) => {
         const active = t.id === tab;
@@ -59,10 +62,10 @@ export default function PageTabs<T extends string>({
             aria-controls={`tabpanel-${t.id}`}
             tabIndex={active ? 0 : -1}
             onClick={() => onChange(t.id)}
-            className={`shrink-0 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-semibold ${
+            className={`shrink-0 whitespace-nowrap rounded-t-md border px-4 py-2 text-sm font-semibold ${
               active
-                ? "border-brand-700 text-brand-700"
-                : "border-transparent text-gray-600 hover:border-gray-300 hover:text-gray-900"
+                ? "border-gray-200 border-b-white bg-white text-blue-700"
+                : "border-transparent text-gray-600 hover:bg-gray-100 hover:text-gray-900"
             }`}
           >
             {t.label}

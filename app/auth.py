@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
+import re
 import secrets
 from datetime import datetime, timedelta
 
@@ -73,15 +74,38 @@ def password_matches(user: User | None, password: str) -> bool:
     return verify_password(password, user.password_hash, user.password_salt)
 
 
+def session_token_hash(token: str) -> str:
+    """What the database keeps of a session token: its SHA-256. The token itself is only ever in the browser, so a
+    copy of the database (a backup, a leaked file) holds nothing that logs anyone in. A token is 32 random bytes, so
+    a plain hash is enough: there is nothing to guess, and no salt is needed."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 def create_session(db: Session, user: User) -> str:
+    """A new login: the token goes back to the browser; only its hash is stored."""
     token = secrets.token_urlsafe(32)
-    db.add(AuthSession(token=token, user_id=user.id, expires_at=_naive_utcnow() + SESSION_LIFETIME))
+    db.add(AuthSession(token=session_token_hash(token), user_id=user.id,
+                       expires_at=_naive_utcnow() + SESSION_LIFETIME))
     db.commit()
     return token
 
 
+# A stored hash: 64 hexadecimal characters. A token from before hashing is 43 characters of letters, digits, - and _.
+_STORED_HASH = re.compile(r"[0-9a-f]{64}")
+
+
+def hash_stored_session_tokens(db: Session) -> int:
+    """Sessions saved before tokens were hashed: each plain token is replaced by its hash, so those users stay logged
+    in. Run at startup; once every token is a hash it changes nothing. Returns how many were hashed."""
+    plain = [s for s in db.query(AuthSession).all() if not _STORED_HASH.fullmatch(s.token)]
+    for session in plain:
+        session.token = session_token_hash(session.token)
+    db.commit()
+    return len(plain)
+
+
 def invalidate_session(db: Session, token: str) -> None:
-    session = db.get(AuthSession, token)
+    session = db.get(AuthSession, session_token_hash(token))
     if session:
         db.delete(session)
         db.commit()
@@ -137,7 +161,7 @@ def _session_user(authorization: str | None, db: Session) -> User:
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(401, "Missing or invalid Authorization header")
     token = authorization.split(" ", 1)[1].strip()
-    session = db.get(AuthSession, token)
+    session = db.get(AuthSession, session_token_hash(token))
     if not session or session.expires_at < _naive_utcnow():
         raise HTTPException(401, "Session expired or invalid -- please log in again")
     user = db.get(User, session.user_id)

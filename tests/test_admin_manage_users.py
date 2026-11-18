@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.db import SessionLocal
-from app.main import BASE_DIR
+from app.db import BASE_DIR
 from app.main import app as fastapi_app
 from app.models import AutoEvaluation, Enrollment, Grade, InstructorAssignment, Submission, User
 from tests.auth_helpers import (

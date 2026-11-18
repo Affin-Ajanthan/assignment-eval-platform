@@ -33,8 +33,9 @@ export function SimilarityResult({ check }: { check: SelfCheck }) {
   return (
     <div className="mt-2 text-sm">
       <p>
-        <Band band={band} />{" "}
-        {r.note ? r.note : `Compared with ${r.compared} other submission(s); ${r.similar_submissions} stand out as similar.`}
+        {/* How many classmates' submissions were compared, and how many stand out, is not shown to the student. */}
+        <Band band={band} />
+        {r.note && <> {r.note}</>}
       </p>
       {!r.note && <p className="mt-1 text-gray-700">{MEANING[band][part]}</p>}
       {r.small_class && !r.note && (

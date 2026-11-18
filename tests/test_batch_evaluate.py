@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from fastapi.testclient import TestClient
 
-import app.main as main
+import app.routers.auto_evaluation as auto_eval
 from app.main import app as fastapi_app
 from tests.auth_helpers import auth_headers, setup_subject_with_users, submit
 
@@ -74,7 +74,7 @@ def test_batch_skip_already_evaluated_only_runs_the_rest():
 
 def test_batch_continues_when_one_submission_fails(monkeypatch):
     subject, tok, rubric, assignment, subs = _setup(3)
-    real = main._run_auto_evaluation
+    real = auto_eval._run_auto_evaluation
     bad_id = subs[1]["id"]
 
     def flaky(db, submission, rubric_, **kwargs):
@@ -82,7 +82,7 @@ def test_batch_continues_when_one_submission_fails(monkeypatch):
             raise RuntimeError("Ollama exploded")
         return real(db, submission, rubric_, **kwargs)
 
-    monkeypatch.setattr(main, "_run_auto_evaluation", flaky)
+    monkeypatch.setattr(auto_eval, "_run_auto_evaluation", flaky)
     body = _batch(subject, assignment, tok, rubric["id"]).json()
 
     assert (body["evaluated"], body["failed"]) == (2, 1)
@@ -159,7 +159,7 @@ def test_rubric_model_switch_on_by_default_and_off_uses_heuristic(monkeypatch):
 
 def _high_ai_signal(monkeypatch):
     from types import SimpleNamespace
-    monkeypatch.setattr(main, "_score_ai_code", lambda sid, src: SimpleNamespace(
+    monkeypatch.setattr(auto_eval, "_score_ai_code", lambda sid, src: SimpleNamespace(
         signal="high", score=90, reasons=["uniform style"]))
 
 
@@ -220,7 +220,7 @@ def test_ai_detection_switch_off_skips_detectors_and_flags(monkeypatch):
     def must_not_run(*args, **kwargs):
         raise AssertionError("AI detection ran although it was switched off")
 
-    monkeypatch.setattr(main, "_score_ai_code", must_not_run)
+    monkeypatch.setattr(auto_eval, "_score_ai_code", must_not_run)
     off = _batch(subject, assignment, tok, rubric["id"], use_ai_detection=False).json()
     assert off["evaluated"] == 2
     assert {item["ai_flagged"] for item in off["results"]} == {False}
@@ -262,7 +262,7 @@ def test_batch_runs_submissions_concurrently_and_keeps_their_order(monkeypatch):
     import threading
 
     subject, tok, rubric, assignment, subs = _setup(2)
-    real = main._run_auto_evaluation
+    real = auto_eval._run_auto_evaluation
     # Both evaluations must be running at the same moment to pass the barrier;
     # run one after another, the first would wait alone and time out.
     both_running = threading.Barrier(2, timeout=10)
@@ -271,8 +271,8 @@ def test_batch_runs_submissions_concurrently_and_keeps_their_order(monkeypatch):
         both_running.wait()
         return real(db, submission, rubric_, **kwargs)
 
-    monkeypatch.setattr(main, "_run_auto_evaluation", together)
-    monkeypatch.setattr(main, "AUTO_EVAL_WORKERS", 3)  # capped at the 2 submissions
+    monkeypatch.setattr(auto_eval, "_run_auto_evaluation", together)
+    monkeypatch.setattr(auto_eval, "AUTO_EVAL_WORKERS", 3)  # capped at the 2 submissions
     body = _batch(subject, assignment, tok, rubric["id"]).json()
 
     assert (body["evaluated"], body["failed"]) == (2, 0), body
@@ -296,7 +296,7 @@ def _job(job_id):
 
 def test_each_batch_run_is_recorded_as_a_job_with_its_progress(monkeypatch):
     subject, tok, rubric, assignment, subs = _setup(3)
-    real = main._run_auto_evaluation
+    real = auto_eval._run_auto_evaluation
     bad_id = subs[1]["id"]
 
     def flaky(db, submission, rubric_, **kwargs):
@@ -304,7 +304,7 @@ def test_each_batch_run_is_recorded_as_a_job_with_its_progress(monkeypatch):
             raise RuntimeError("Ollama exploded")
         return real(db, submission, rubric_, **kwargs)
 
-    monkeypatch.setattr(main, "_run_auto_evaluation", flaky)
+    monkeypatch.setattr(auto_eval, "_run_auto_evaluation", flaky)
     body = _batch(subject, assignment, tok, rubric["id"]).json()
     assert body["job_id"]
 
@@ -328,7 +328,7 @@ def test_a_batch_job_that_breaks_is_marked_failed_with_the_reason(monkeypatch):
     def broken(*args, **kwargs):  # breaks the job itself, not one submission
         raise RuntimeError("disk full")
 
-    monkeypatch.setattr(main, "flag_modified", broken)
+    monkeypatch.setattr(auto_eval, "flag_modified", broken)
     r = _batch(subject, assignment, tok, rubric["id"])
     assert r.status_code == 500 and "disk full" in r.json()["detail"]
 
@@ -399,7 +399,7 @@ def test_progress_part_way_through_a_run(monkeypatch):
     from app.models import BatchJob
 
     subject, tok, rubric, assignment, subs = _setup(3)
-    monkeypatch.setattr(main, "_run_batch_job", lambda job_id: None)  # keep the job from running
+    monkeypatch.setattr(auto_eval, "_run_batch_job", lambda job_id: None)  # keep the job from running
     job_id = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
     assert _progress(job_id, tok).json()["status"] == "queued"
 
@@ -448,7 +448,7 @@ def test_latest_job_lets_the_page_show_a_run_again(monkeypatch):
     assert len([r for r in latest["results"] if r]) == 2
 
     # A job still running (the instructor left the page) is what comes back.
-    monkeypatch.setattr(main, "_run_batch_job", lambda job_id: None)
+    monkeypatch.setattr(auto_eval, "_run_batch_job", lambda job_id: None)
     running = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
     latest = _latest(subject, assignment, tok).json()
     assert (latest["id"], latest["status"]) == (running, "queued")
@@ -468,7 +468,7 @@ def test_a_second_run_of_the_same_assignment_is_refused_while_one_is_running(mon
     from app.models import BatchJob
 
     subject, tok, rubric, assignment, subs = _setup(2)
-    monkeypatch.setattr(main, "_run_batch_job", lambda job_id: None)  # the first run stays queued
+    monkeypatch.setattr(auto_eval, "_run_batch_job", lambda job_id: None)  # the first run stays queued
     first = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
 
     second = _start_job(subject, assignment, tok, rubric["id"])
@@ -492,14 +492,14 @@ def _server_restarted():
 
     db = SessionLocal()
     try:
-        return main._mark_interrupted_batch_jobs(db)
+        return auto_eval._mark_interrupted_batch_jobs(db)
     finally:
         db.close()
 
 
 def test_a_server_restart_marks_running_jobs_interrupted_and_frees_the_assignment(monkeypatch):
     subject, tok, rubric, assignment, subs = _setup(2)
-    monkeypatch.setattr(main, "_run_batch_job", lambda job_id: None)  # "running" when the server stops
+    monkeypatch.setattr(auto_eval, "_run_batch_job", lambda job_id: None)  # "running" when the server stops
     job_id = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
     assert _start_job(subject, assignment, tok, rubric["id"]).status_code == 409  # blocked while running
 
@@ -515,12 +515,12 @@ def test_resuming_grades_only_the_rest_with_the_same_settings(monkeypatch):
     # One submission was evaluated before the server stopped.
     client.post(f"/submissions/{subs[0]['id']}/auto-evaluate", json={"rubric_id": rubric["id"]},
                 headers=auth_headers(tok))
-    real_run = main._run_batch_job
-    monkeypatch.setattr(main, "_run_batch_job", lambda job_id: None)
+    real_run = auto_eval._run_batch_job
+    monkeypatch.setattr(auto_eval, "_run_batch_job", lambda job_id: None)
     interrupted = _start_job(subject, assignment, tok, rubric["id"], use_ai_detection=False).json()["id"]
     _server_restarted()
 
-    monkeypatch.setattr(main, "_run_batch_job", real_run)
+    monkeypatch.setattr(auto_eval, "_run_batch_job", real_run)
     r = client.post(f"/auto-evaluate/jobs/{interrupted}/resume", headers=auth_headers(tok))
     assert r.status_code == 202, r.text
     resumed = r.json()
@@ -541,7 +541,7 @@ def test_only_an_interrupted_or_failed_run_can_be_resumed_by_its_subjects_instru
     assert r.status_code == 409 and "this one is done" in r.json()["detail"]
     assert resume(999999).status_code == 404
 
-    monkeypatch.setattr(main, "_run_batch_job", lambda job_id: None)
+    monkeypatch.setattr(auto_eval, "_run_batch_job", lambda job_id: None)
     stuck = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
     _server_restarted()
     _, other_tok, _ = setup_subject_with_users(client)
@@ -552,7 +552,7 @@ def test_only_an_interrupted_or_failed_run_can_be_resumed_by_its_subjects_instru
 
 def test_a_failing_submission_in_a_background_job_shows_in_its_progress(monkeypatch):
     subject, tok, rubric, assignment, subs = _setup(3)
-    real = main._run_auto_evaluation
+    real = auto_eval._run_auto_evaluation
     bad_id = subs[1]["id"]
 
     def flaky(db, submission, rubric_, **kwargs):
@@ -560,7 +560,7 @@ def test_a_failing_submission_in_a_background_job_shows_in_its_progress(monkeypa
             raise RuntimeError("Ollama exploded")
         return real(db, submission, rubric_, **kwargs)
 
-    monkeypatch.setattr(main, "_run_auto_evaluation", flaky)
+    monkeypatch.setattr(auto_eval, "_run_auto_evaluation", flaky)
     job_id = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
 
     body = _progress(job_id, tok).json()
@@ -577,7 +577,7 @@ def _stop(job_id, tok):
 
 def test_a_running_evaluation_can_be_stopped_and_frees_the_assignment(monkeypatch):
     subject, tok, rubric, assignment, subs = _setup(2)
-    monkeypatch.setattr(main, "_run_batch_job", lambda job_id: None)  # still queued/running
+    monkeypatch.setattr(auto_eval, "_run_batch_job", lambda job_id: None)  # still queued/running
     job_id = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
     assert _start_job(subject, assignment, tok, rubric["id"]).status_code == 409  # blocked while running
 
@@ -601,12 +601,12 @@ def test_a_running_evaluation_can_be_stopped_and_frees_the_assignment(monkeypatc
 
 def test_a_stopped_run_can_be_resumed(monkeypatch):
     subject, tok, rubric, assignment, subs = _setup(2)
-    real_run = main._run_batch_job
-    monkeypatch.setattr(main, "_run_batch_job", lambda job_id: None)
+    real_run = auto_eval._run_batch_job
+    monkeypatch.setattr(auto_eval, "_run_batch_job", lambda job_id: None)
     job_id = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
     assert _stop(job_id, tok).status_code == 200
 
-    monkeypatch.setattr(main, "_run_batch_job", real_run)
+    monkeypatch.setattr(auto_eval, "_run_batch_job", real_run)
     r = client.post(f"/auto-evaluate/jobs/{job_id}/resume", headers=auth_headers(tok))
     assert r.status_code == 202, r.text
     job = _job(r.json()["id"])
@@ -618,7 +618,7 @@ def test_the_worker_stops_before_the_next_submission_once_stop_is_pressed(monkey
     from app.models import BatchJob
 
     subject, tok, rubric, assignment, subs = _setup(3)
-    real = main._run_auto_evaluation
+    real = auto_eval._run_auto_evaluation
     graded = []
 
     def stop_after_first(db, submission, rubric_, **kwargs):
@@ -634,7 +634,7 @@ def test_the_worker_stops_before_the_next_submission_once_stop_is_pressed(monkey
                 other.close()
         return ev
 
-    monkeypatch.setattr(main, "_run_auto_evaluation", stop_after_first)
+    monkeypatch.setattr(auto_eval, "_run_auto_evaluation", stop_after_first)
     job_id = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
 
     job = _job(job_id)
@@ -646,8 +646,8 @@ def test_the_worker_stops_before_the_next_submission_once_stop_is_pressed(monkey
 
 def test_a_job_stopped_before_it_starts_is_not_run(monkeypatch):
     subject, tok, rubric, assignment, subs = _setup(2)
-    real_run = main._run_batch_job
-    monkeypatch.setattr(main, "_run_batch_job", lambda job_id: None)
+    real_run = auto_eval._run_batch_job
+    monkeypatch.setattr(auto_eval, "_run_batch_job", lambda job_id: None)
     job_id = _start_job(subject, assignment, tok, rubric["id"]).json()["id"]
     assert _stop(job_id, tok).status_code == 200
 

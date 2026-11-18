@@ -8,7 +8,7 @@ import zipfile
 
 from fastapi.testclient import TestClient
 
-from app import main
+from app.routers import submissions
 from app.main import app
 from tests.auth_helpers import setup_subject_with_users, submit
 
@@ -36,14 +36,14 @@ def _zip_bytes(entries):
 
 def test_single_code_file_over_the_limit_is_rejected(monkeypatch):
     subject, _itok, _stok = _setup()
-    monkeypatch.setattr(main, "_CODE_MAX_BYTES", 100)
+    monkeypatch.setattr(submissions, "_CODE_MAX_BYTES", 100)
     r = submit(client, subject["id"], "Code limit", {"code": _file("solution.py", b"x" * 500, "text/x-python")})
     assert r.status_code == 413 and "too large" in r.json()["detail"]
 
 
 def test_zip_that_unpacks_over_the_limit_is_rejected(monkeypatch):
     subject, _itok, _stok = _setup()
-    monkeypatch.setattr(main, "_ZIP_MAX_UNCOMPRESSED_BYTES", 1000)
+    monkeypatch.setattr(submissions, "_ZIP_MAX_UNCOMPRESSED_BYTES", 1000)
     # Tiny when compressed, large once unpacked: the unpacked-size rule must catch it.
     bomb = _zip_bytes({"big.txt": b"0" * 5000})
     assert len(bomb) < 1000
@@ -53,15 +53,15 @@ def test_zip_that_unpacks_over_the_limit_is_rejected(monkeypatch):
 
 def test_video_over_the_limit_is_rejected(monkeypatch):
     subject, _itok, _stok = _setup()
-    monkeypatch.setattr(main, "_VIDEO_MAX_BYTES", 100)
+    monkeypatch.setattr(submissions, "_VIDEO_MAX_BYTES", 100)
     r = submit(client, subject["id"], "Video limit", {"video": _file("talk.mp4", b"v" * 500, "video/mp4")})
     assert r.status_code == 413 and "too large" in r.json()["detail"]
 
 
 def test_files_within_the_limits_are_accepted(monkeypatch):
     subject, _itok, _stok = _setup()
-    monkeypatch.setattr(main, "_CODE_MAX_BYTES", 10_000)
-    monkeypatch.setattr(main, "_VIDEO_MAX_BYTES", 10_000)
+    monkeypatch.setattr(submissions, "_CODE_MAX_BYTES", 10_000)
+    monkeypatch.setattr(submissions, "_VIDEO_MAX_BYTES", 10_000)
     r = submit(client, subject["id"], "Within limits", {
         "code": _file("solution.py", b"print('ok')\n", "text/x-python"),
         "video": _file("talk.mp4", b"v" * 500, "video/mp4"),

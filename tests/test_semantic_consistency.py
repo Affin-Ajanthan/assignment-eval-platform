@@ -653,9 +653,9 @@ def test_pipeline_compares_undocumented_code(tmp_path):
 
 
 def test_every_uploadable_code_language_is_read():
-    import app.main as main
+    from app.common import ANALYZED_EXTENSIONS
     from app.evaluator.semantic_consistency import CODE_EXTENSIONS
-    assert set(main._ANALYZED_EXTENSIONS) - {".ipynb"} <= CODE_EXTENSIONS
+    assert set(ANALYZED_EXTENSIONS) - {".ipynb"} <= CODE_EXTENSIONS
 
 
 def test_php_hash_comments_are_comments():
