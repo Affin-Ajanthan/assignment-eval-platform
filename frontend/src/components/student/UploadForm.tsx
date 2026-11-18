@@ -18,7 +18,7 @@ const REPORT_ACCEPT = ".pdf,.docx,application/pdf,application/vnd.openxmlformats
 const VIDEO_ACCEPT = ".mp4,.mov,.avi,.mkv,.webm,.m4v,video/*";
 // Shown under each upload field. These must match the backend limits in app/main.py.
 const UPLOAD_HINTS = {
-  code: "A single source file in one of the languages above, or a .zip. Max 50 MB; a .zip may unpack to at most 200 MB.",
+  code: "A single source file or a .zip. Max 50 MB; a .zip may unpack to at most 200 MB.",
   report: "PDF or DOCX. Max 25 MB.",
   video: "MP4, MOV, AVI, MKV, WEBM or M4V. Max 1 GB.",
 };
@@ -105,7 +105,7 @@ export default function UploadForm({
       const ext = codeFile.name.includes(".") ? codeFile.name.slice(codeFile.name.lastIndexOf(".")).toLowerCase() : "";
       if (!CODE_EXTENSIONS.includes(ext)) {
         setMessage({
-          text: `"${codeFile.name}" can't be checked: ${ext || "files without an extension"} is not a supported language. Upload a .zip or one file in a language listed under the Code field.`,
+          text: `"${codeFile.name}" can't be checked: ${ext || "files without an extension"} is not a supported language. Upload a .zip or one file in one of: ${languageNames(assignment.code_languages)}.`,
           kind: "error",
         });
         return;
@@ -166,29 +166,29 @@ export default function UploadForm({
       )}
       {accepts("code") && (
         <UploadBox number={numberOf("code")} title="Code (zip or single file)" htmlFor={id("code")} chosen={chosen.code}>
-          <div id={id("code-help")} className="mb-3 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-700">
-            <p className="font-semibold">
-              {restricted ? "Required language for this assignment" : "Accepted languages"}
-            </p>
-            <ul className="mt-1 grid gap-x-4 gap-y-0.5 sm:grid-cols-3">
-              {languages.map((l) => (
-                <li key={l.name}>
-                  {l.name} <span className="text-gray-500">({l.extensions.join(", ")})</span>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-1 text-gray-600">
-              {restricted
-                ? "Your instructor requires this language. Code in any other language is refused, including inside a .zip; other files (README, data) are fine."
-                : "A .zip may also contain other files (README, data), but it must include code in one of these languages. Other languages, such as TypeScript, Kotlin, Swift or Rust, are not accepted yet."}
-            </p>
-          </div>
+          {/* Only when the instructor requires a language. Otherwise a file in the wrong language gets an error naming the accepted ones. */}
+          {restricted && (
+            <div id={id("code-help")} className="mb-3 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-700">
+              <p className="font-semibold">Required language for this assignment</p>
+              <ul className="mt-1 grid gap-x-4 gap-y-0.5 sm:grid-cols-3">
+                {languages.map((l) => (
+                  <li key={l.name}>
+                    {l.name} <span className="text-gray-500">({l.extensions.join(", ")})</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 text-gray-600">
+                Your instructor requires this language. Code in any other language is refused, including inside a .zip;
+                other files (README, data) are fine.
+              </p>
+            </div>
+          )}
           <input
             id={id("code")}
             type="file"
             ref={codeRef}
             accept={allowedExtensions.join(",")}
-            aria-describedby={id("code-help")}
+            aria-describedby={restricted ? id("code-help") : undefined}
             onChange={pick("code")}
             className={fileInput}
           />

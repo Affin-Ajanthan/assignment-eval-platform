@@ -172,7 +172,7 @@ export default function RubricEditor({
       <ul className="mt-3 space-y-2">
         {r.criteria.map((c) => (
           <li key={c.id} className="rounded border border-gray-100 bg-gray-50 p-3" data-testid="rubric-criterion">
-            {editing?.criterionId === c.id ? (
+            {editing && editing.criterionId === c.id ? (
               <>
                 <CriterionFields
                   idPrefix={`edit-${r.id}-${c.id}`}

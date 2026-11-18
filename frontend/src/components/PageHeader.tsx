@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { ReactNode } from "react";
+import BackLink from "@/components/BackLink";
 
 /**
  * The heading of every page: an optional way back, the title, a line or two about the page, and on the right
@@ -21,12 +21,8 @@ export default function PageHeader({
 }) {
   return (
     <div className={divider ? "mb-6 border-b border-gray-200 pb-5" : "mb-2"}>
-      {back && (
-        <Link href={back.href} className="inline-block text-sm font-semibold text-blue-700 hover:underline">
-          ← {back.label}
-        </Link>
-      )}
-      <div className={`flex flex-wrap items-end justify-between gap-x-6 gap-y-4 ${back ? "mt-3" : ""}`}>
+      {back && <BackLink href={back.href} label={back.label} />}
+      <div className={`flex flex-wrap items-end justify-between gap-x-6 gap-y-4 ${back ? "mt-4" : ""}`}>
         <div className="min-w-0 max-w-3xl">
           <h1 className="text-2xl font-semibold">{title}</h1>
           {description && <div className="mt-1.5 text-sm text-gray-600">{description}</div>}

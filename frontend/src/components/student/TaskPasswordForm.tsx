@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import Message, { MessageState } from "@/components/Message";
+import PasswordInput from "@/components/PasswordInput";
 
 /**
  * The password the instructor set for a code challenge, asked when the student presses Do task. The server
@@ -40,16 +41,15 @@ export default function TaskPasswordForm({
         Password
       </label>
       <p className="text-xs text-gray-600">Your instructor gives you the password to start the tasks.</p>
-      <input
+      <PasswordInput
         id="task-password-input"
-        type="password"
         autoComplete="off"
         autoFocus
         value={password}
         maxLength={200}
         disabled={busy}
         onChange={(e) => setPassword(e.target.value)}
-        className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+        className="rounded-md border border-gray-300 px-3 py-2 text-sm"
       />
       <button
         type="submit"
